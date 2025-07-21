@@ -451,7 +451,6 @@ krcCheckBusError_KERNEL
     NvU32             clDevCtrlStatus          = 0;
     PcieAerCapability clAer;
 
-
     // PCI-E provides extended error reporting
     if (pKernelBif == NULL || kbifGetBusIntfType_HAL(pKernelBif) !=
                                   NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS)
@@ -506,45 +505,45 @@ krcCheckBusError_KERNEL
         (clAer.UncorrErrStatusReg != 0 || 
          (clAer.RooErrStatus & ~CL_AER_ROOT_ERROR_STATUS_ERR_COR_SUBCLASS_MASK) != 0))
     {
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "PCI-E Advanced Error Reporting Corelogic Info:\n");
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Uncorr Error Status Register    : %08X\n",
                   clAer.UncorrErrStatusReg);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Uncorr Error Mask Register      : %08X\n",
                   clAer.UncorrErrMaskReg);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Uncorr Error Severity Register  : %08X\n",
                   clAer.UncorrErrSeverityReg);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Corr Error Status Register      : %08X\n",
                   clAer.CorrErrStatusReg);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Corr Error Mask Register        : %08X\n",
                   clAer.CorrErrMaskReg);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Advanced Err Cap & Ctrl Register: %08X\n",
                   clAer.AEcapCrtlReg);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Header Log [0-3]                : %08X\n",
                   clAer.HeaderLogReg.Header[0]);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Header Log [4-7]                : %08X\n",
                   clAer.HeaderLogReg.Header[1]);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Header Log [8-B]                : %08X\n",
                   clAer.HeaderLogReg.Header[2]);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Header Log [C-F]                : %08X\n",
                   clAer.HeaderLogReg.Header[3]);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Root Error Command Register     : %08X\n",
                   clAer.RootErrCmd);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Root Error Status               : %08X\n",
                   clAer.RooErrStatus);
-        NV_PRINTF(LEVEL_ERROR,
+        NV_PRINTF(LEVEL_NOTICE,
                   "     Error Source ID Register        : %08X\n",
                   clAer.ErrSrcReg);
 

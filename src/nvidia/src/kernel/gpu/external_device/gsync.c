@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2008-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2008-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -395,7 +395,19 @@ gsyncAttachGpu(PDACEXTERNALDEVICE pExtDev, OBJGPU *pGpu,
 
     pSys->setProperty(pSys, PDB_PROP_SYS_IS_GSYNC_ENABLED, NV_TRUE);
 
-    return gsyncStartupProvider(pGsync, externalDevice);
+    NV_ASSERT_OK_OR_RETURN(gsyncStartupProvider(pGsync, externalDevice));
+
+    if (pGsync->gpuCount == 1)
+    {
+        //
+        // Initialize the RasterSyncDecodeMode here.
+        // The timing source needs to agree with this, but all GPUs on the GSync
+        // should be the same, so we will use the type of the first GPU
+        //
+        NV_ASSERT_OK_OR_RETURN(pGsync->gsyncHal.gsyncSetRasterSyncDecodeMode(pGpu, pGpu, pGsync->pExtDev));
+    }
+
+    return NV_OK;
 }
 
 //
@@ -1178,7 +1190,7 @@ gsyncIsAnyHeadFramelocked(OBJGSYNC *pGsync)
             {
                 // Check if assigned slaves displays are there.
                 if ((NV_OK == pGsync->gsyncHal.gsyncRefSlaves(pGpu,
-                     pGsync->pExtDev, refRead, &assigned, &refresh)) &&
+                     pGsync, refRead, &assigned, &refresh)) &&
                     (assigned != 0))
                 {
                     return NV_TRUE;
@@ -1469,7 +1481,7 @@ gsyncGetControlSync(OBJGSYNC *pGsync,
         }
         else
         {
-            status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync->pExtDev, refFetchGet,
+            status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync, refFetchGet,
                 &pParams->displays, &pParams->refresh);
         }
     }
@@ -1545,10 +1557,10 @@ gsyncSetControlSync(OBJGSYNC *pGsync,
     }
     else
     {
-        status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync->pExtDev,
+        status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync,
             refRead, &assigned, &refresh);
         pParams->displays |= assigned;
-        status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync->pExtDev,
+        status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync,
             refSetCommit, &pParams->displays, &pParams->refresh);
     }
 
@@ -1599,10 +1611,10 @@ gsyncSetControlUnsync(OBJGSYNC *pGsync,
     }
     else
     {
-        status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync->pExtDev,
+        status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync,
             refRead, &assigned, &refresh);
         pParams->displays = assigned & ~pParams->displays;
-        status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync->pExtDev,
+        status |= pGsync->gsyncHal.gsyncRefSlaves(pGpu, pGsync,
             refSetCommit, &pParams->displays, &refresh);
     }
 
@@ -2385,7 +2397,7 @@ static NV_STATUS
 gsyncNullRefSlaves
 (
  OBJGPU       *pGpu,
- PDACEXTERNALDEVICE pExtDev,
+ OBJGSYNC     *pGsync,
  REFTYPE rType,
  NvU32 *pDisplayMasks,
  NvU32 *pRefresh
@@ -2498,6 +2510,7 @@ static NV_STATUS
 gsyncNullSetRasterSyncDecodeMode
 (
     OBJGPU            *pGpu,
+    OBJGPU            *pServerGpu,
     DACEXTERNALDEVICE *pExtDev
 )
 {
@@ -2507,11 +2520,11 @@ gsyncNullSetRasterSyncDecodeMode
     //
     NV2080_CTRL_INTERNAL_GSYNC_GET_RASTER_SYNC_DECODE_MODE_PARAMS
             rasterSyncDecodeModeParams;
-    RM_API *pRmApi = GPU_GET_PHYSICAL_RMAPI(pGpu);
+    RM_API *pRmApi = GPU_GET_PHYSICAL_RMAPI(pServerGpu);
 
     // Pre-3.00 FW can only use NV2080_CTRL_CMD_INTERNAL_GSYNC_GET_RASTER_SYNC_DECODE_MODE
-    NV_ASSERT_OK_OR_RETURN(pRmApi->Control(pRmApi, pGpu->hInternalClient,
-        pGpu->hInternalSubdevice, NV2080_CTRL_CMD_INTERNAL_GSYNC_GET_RASTER_SYNC_DECODE_MODE,
+    NV_ASSERT_OK_OR_RETURN(pRmApi->Control(pRmApi, pServerGpu->hInternalClient,
+        pServerGpu->hInternalSubdevice, NV2080_CTRL_CMD_INTERNAL_GSYNC_GET_RASTER_SYNC_DECODE_MODE,
         &rasterSyncDecodeModeParams, sizeof(rasterSyncDecodeModeParams)));
 
     NV_CHECK_OR_RETURN(LEVEL_WARNING,

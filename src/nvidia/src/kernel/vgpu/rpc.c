@@ -9559,6 +9559,7 @@ NV_STATUS rpcGspSetSystemInfo_v17_00
         rpcInfo->upstreamAddressValid     = pGpu->gpuClData.upstreamPort.addr.valid;
 
         rpcInfo->hypervisorType           = hypervisorGetHypervisorType(pHypervisor);
+        rpcInfo->virtualConfigBits        = pGpu->virtualConfigBits;
         rpcInfo->bIsPassthru              = pGpu->bIsPassthru;
 
         // Fill in VF related GPU flags
@@ -9596,6 +9597,11 @@ NV_STATUS rpcGspSetSystemInfo_v17_00
        {
            rpcInfo->bClockBoostSupported = pKernelFsp->bClockBoostSupported;
        }
+
+        if (RMCFG_FEATURE_PLATFORM_WINDOWS)
+        {
+            rpcInfo->bGspNocatEnabled = NV_TRUE;
+        }
 
         status = _issueRpcAsync(pGpu, pRpc);
     }

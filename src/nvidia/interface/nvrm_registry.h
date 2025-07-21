@@ -2640,6 +2640,19 @@
 #define NV_REG_STR_RM_RUSD_POLLING_INTERVAL_MAX              1000
 
 //
+// Type: DWORD
+// This regkey enables some path to reuse the initially allocated continguous memory
+// instead of freeing it dynamically which causes memory fragmentation and
+// under low available memory configuration the allocation could fail and leads to BSOD
+// Enable the key to reuse the initially allocated mem withoug free and reallocate
+//   - Default for Blackwell and up
+// Disable the key to free and allocate dynamically
+//
+#define NV_REG_STR_RM_INIT_MEM_REUSE                           "RmInitMemReuse"
+#define NV_REG_STR_RM_INIT_MEM_REUSE_ENABLE                     0x00000001
+#define NV_REG_STR_RM_INIT_MEM_REUSE_DISABLE                    0x00000000
+
+//
 // Type DWORD (Boolean)
 // This regkey controls the use of BAR1 SPA instead of GPA for p2p subsystems
 // like dma-buf and nv-p2p for coherent systems with a direct PCIe link between
@@ -2705,5 +2718,15 @@
 #define NV_REG_STR_RM_FB_SANITY_CHECK_ENABLE                      (0x00000001)
 #define NV_REG_STR_RM_FB_SANITY_CHECK_DISABLE                     (0x00000000)
 #define NV_REG_STR_RM_FB_SANITY_CHECK_DEFAULT                     NV_REG_STR_RM_FB_SANITY_CHECK_DISABLE
+
+//
+// Type DWORD
+// Enable GR debug dump for CTXSW timeouts.
+//
+#define NV_REG_STR_RM_CTXSW_TIMEOUT_DEBUG_DUMP                  "RmCtxswTimeoutDebugDump"
+#define NV_REG_STR_RM_CTXSW_TIMEOUT_DEBUG_DUMP_VAL              0:0
+#define NV_REG_STR_RM_CTXSW_TIMEOUT_DEBUG_DUMP_VAL_ENABLE       0x1
+#define NV_REG_STR_RM_CTXSW_TIMEOUT_DEBUG_DUMP_VAL_DISABLE      0x0
+#define NV_REG_STR_RM_CTXSW_TIMEOUT_DEBUG_DUMP_VAL_DEFAULT      NV_REG_STR_RM_CTXSW_TIMEOUT_DEBUG_DUMP_VAL_DISABLE
 
 #endif // NVRM_REGISTRY_H

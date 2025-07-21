@@ -391,6 +391,10 @@ namespace DisplayPort
             return maxModeBwRequired;
         }
 
+        bool getStuffDummySymbolsFor128b132b() const { return processedEdid.WARData.bStuffDummySymbolsFor128b132b; }
+        bool getStuffDummySymbolsFor8b10b() const { return processedEdid.WARData.bStuffDummySymbolsFor8b10b; }
+        bool getApplyStuffDummySymbolsWAR() const { return processedEdid.WARFlags.bApplyStuffDummySymbolsWAR; }
+
         virtual void queryGUID2();
 
         virtual bool getSDPExtnForColorimetrySupported();
@@ -506,6 +510,9 @@ namespace DisplayPort
         unsigned getDscDecoderColorDepthSupportMask();
         void setDscDecompressionDevice(bool bDscCapBasedOnParent);
         virtual bool getDeviceSpecificData(NvU8 *oui, NvU8 *deviceIdString,
+                                           NvU8 *hwRevision, NvU8 *swMajorRevision,
+                                           NvU8 *swMinorRevision);
+        virtual bool getParentSpecificData(NvU8 *oui, NvU8 *deviceIdString,
                                            NvU8 *hwRevision, NvU8 *swMajorRevision,
                                            NvU8 *swMinorRevision);
 

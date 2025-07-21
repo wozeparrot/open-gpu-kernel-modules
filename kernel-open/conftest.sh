@@ -4043,33 +4043,6 @@ compile_test() {
             fi
         ;;
 
-        dma_buf_has_dynamic_attachment)
-            #
-            # Determine if the function dma_buf_attachment_is_dynamic()
-            # is present.
-            #
-            # Added by commit: 15fd552d186c
-            # ("dma-buf: change DMA-buf locking convention v3") in v5.5 (2018-07-03)
-            #
-            echo "$CONFTEST_PREAMBLE
-            #include <linux/dma-buf.h>
-            bool conftest_dma_buf_attachment_is_dynamic(void) {
-                return dma_buf_attachment_is_dynamic(NULL);
-            }" > conftest$$.c
-
-            $CC $CFLAGS -c conftest$$.c > /dev/null 2>&1
-            rm -f conftest$$.c
-
-            if [ -f conftest$$.o ]; then
-                echo "#define NV_DMA_BUF_HAS_DYNAMIC_ATTACHMENT" | append_conftest "functions"
-                rm -f conftest$$.o
-                return
-            else
-                echo "#undef NV_DMA_BUF_HAS_DYNAMIC_ATTACHMENT" | append_conftest "functions"
-                return
-            fi
-        ;;
-
         dma_buf_attachment_has_peer2peer)
             #
             # Determine if peer2peer is present in struct dma_buf_attachment.
@@ -6602,22 +6575,22 @@ compile_test() {
             compile_check_conftest "$CODE" "NV_DRM_DRIVER_HAS_DUMB_DESTROY" "" "types"
         ;;
 
-        memory_failure_has_trapno_arg)
+        memory_failure_queue_has_trapno_arg)
             #
-            # Check if memory_failure() has trapno parameter.
+            # Check if memory_failure_queue() has trapno parameter.
             #
             # Removed by commit 83b57531c58f ("mm/memory_failure: Remove
             # unused trapno from memory_failure") in v4.16.
             #
             CODE="
             #include <linux/mm.h>
-            void conftest_memory_failure_has_trapno_arg(unsigned long pfn,
+            void conftest_memory_failure_queue_has_trapno_arg(unsigned long pfn,
                                                         int trapno,
                                                         int flags) {
-                (void) memory_failure(pfn, trapno, flags);
+                memory_failure_queue(pfn, trapno, flags);
             }"
 
-            compile_check_conftest "$CODE" "NV_MEMORY_FAILURE_HAS_TRAPNO_ARG" "" "types"
+            compile_check_conftest "$CODE" "NV_MEMORY_FAILURE_QUEUE_HAS_TRAPNO_ARG" "" "types"
         ;;
 
         memory_failure_mf_sw_simulated_defined)
@@ -6991,6 +6964,7 @@ compile_test() {
             # This functionality is needed when crypto_akcipher_verify is not present.
             #
             CODE="
+            #include <linux/math.h>
             #include <crypto/internal/ecc.h>
             void conftest_ecc_digits_from_bytes(void) {
                 (void)ecc_digits_from_bytes;
@@ -7559,6 +7533,22 @@ compile_test() {
             }"
 
             compile_check_conftest "$CODE" "NV_STRUCT_PAGE_HAS_ZONE_DEVICE_DATA" "" "types"
+        ;;
+
+        page_pgmap)
+            #
+            # Determine if the page_pgmap() function is present.
+            #
+            # Added by commit 82ba975e4c43 ("mm: allow compound zone device
+            # pages") in v6.14
+            #
+            CODE="
+            #include <linux/mmzone.h>
+            int conftest_page_pgmap(void) {
+                return page_pgmap();
+            }"
+
+            compile_check_conftest "$CODE" "NV_PAGE_PGMAP_PRESENT" "" "functions"
         ;;
 
     folio_test_swapcache)
