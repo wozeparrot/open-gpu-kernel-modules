@@ -99,6 +99,9 @@
 #define NV_DP_REGKEY_DISABLE_FIX_FOR_5019537                      "DP_DISABLE_5019537_FIX"
 #define NV_DP_REGKEY_ENABLE_FIX_FOR_5147205                       "DP_ENABLE_5147205_FIX"
 
+// This regkey forces devID to be exposed to vendors via DPCD 0x309 for DSC-enabled SKUs.
+#define NV_DP_REGKEY_EXPOSE_DSC_DEVID_WAR                         "DP_DSC_DEVID_WAR"
+
 // Bug 5088957 : Force head shutdown in DpLib
 #define NV_DP_REGKEY_FORCE_HEAD_SHUTDOWN                          "DP_WAR_5088957"
 
@@ -107,6 +110,8 @@
 
 #define NV_DP_REGKEY_SKIP_SETTING_LINK_STATE_DURING_UNPLUG        "DP_SKIP_SETTING_LINK_STATE_DURING_UNPLUG"
 
+// This regkey ensures DPLib takes into account Displayport++ supports HDMI.
+#define NV_DP_REGKEY_HDMI_ON_DP_PLUS_PLUS                         "HDMI_ON_DP_PLUS_PLUS"
 
 // Data Base used to store all the regkey values.
 // The actual data base is declared statically in dp_evoadapter.cpp.
@@ -150,6 +155,8 @@ struct DP_REGKEY_DATABASE
     bool  bForceHeadShutdown;
     bool  bEnableLowerBppCheckForDsc;
     bool  bSkipSettingLinkStateDuringUnplug;
+    bool  bEnableDevId;
+    bool  bHDMIOnDPPlusPlus;
 };
 
 extern struct DP_REGKEY_DATABASE dpRegkeyDatabase;

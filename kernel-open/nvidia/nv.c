@@ -1417,16 +1417,16 @@ static int nv_start_device(nv_state_t *nv, nvidia_stack_t *sp)
     {
         rc = os_alloc_mutex(&nvl->isr_bh_unlocked_mutex);
         if (rc != 0)
-            goto failed;
+            goto failed_release_irq;
         nv_kthread_q_item_init(&nvl->bottom_half_q_item, nvidia_isr_bh_unlocked, (void *)nv);
         rc = nv_kthread_q_init(&nvl->bottom_half_q, nv_device_name);
         if (rc != 0)
-            goto failed;
+            goto failed_release_irq;
         kthread_init = NV_TRUE;
 
         rc = nv_kthread_q_init(&nvl->queue.nvk, "nv_queue");
         if (rc)
-            goto failed;
+            goto failed_release_irq;
         nv->queue = &nvl->queue;
 
         if (nv_platform_use_auto_online(nvl))
@@ -1434,33 +1434,18 @@ static int nv_start_device(nv_state_t *nv, nvidia_stack_t *sp)
             rc = nv_kthread_q_init(&nvl->remove_numa_memory_q,
                                    "nv_remove_numa_memory");
             if (rc)
-                goto failed;
+                goto failed_release_irq;
             remove_numa_memory_kthread_init = NV_TRUE;
         }
     }
 
     if (!rm_init_adapter(sp, nv))
     {
-        if (!(nv->flags & NV_FLAG_USES_MSIX) &&
-            !(nv->flags & NV_FLAG_SOC_DISPLAY) &&
-            !(nv->flags & NV_FLAG_SOC_IGPU))
-        {
-            free_irq(nv->interrupt_line, (void *) nvl);
-        }
-        else if (nv->flags & NV_FLAG_SOC_DISPLAY)
-        {
-        }
-#if defined(NV_LINUX_PCIE_MSI_SUPPORTED)
-        else
-        {
-            nv_free_msix_irq(nvl);
-        }
-#endif
         NV_DEV_PRINTF(NV_DBG_ERRORS, nv,
                       "rm_init_adapter failed, device minor number %d\n",
                       nvl->minor_num);
         rc = -EIO;
-        goto failed;
+        goto failed_release_irq;
     }
 
     {
@@ -1493,6 +1478,26 @@ static int nv_start_device(nv_state_t *nv, nvidia_stack_t *sp)
     rm_unref_dynamic_power(sp, nv, NV_DYNAMIC_PM_FINE);
 
     return 0;
+
+failed_release_irq:
+    if (!(nv->flags & NV_FLAG_PERSISTENT_SW_STATE))
+    {
+        if (!(nv->flags & NV_FLAG_USES_MSIX) &&
+            !(nv->flags & NV_FLAG_SOC_DISPLAY) &&
+            !(nv->flags & NV_FLAG_SOC_IGPU))
+        {
+            free_irq(nv->interrupt_line, (void *) nvl);
+        }
+        else if (nv->flags & NV_FLAG_SOC_DISPLAY)
+        {
+        }
+#if defined(NV_LINUX_PCIE_MSI_SUPPORTED)
+        else
+        {
+            nv_free_msix_irq(nvl);
+        }
+#endif
+    }
 
 failed:
 #if defined(NV_LINUX_PCIE_MSI_SUPPORTED)
@@ -2417,6 +2422,13 @@ nvidia_ioctl(
     if (arg_cmd == NV_ESC_WAIT_OPEN_COMPLETE)
     {
         nv_ioctl_wait_open_complete_t *params = arg_copy;
+
+        if (arg_size != sizeof(nv_ioctl_wait_open_complete_t))
+        {
+            status = -EINVAL;
+            goto done_early;
+        }
+
         params->rc = nvlfp->open_rc;
         params->adapterStatus = nvlfp->adapter_status;
         goto done_early;
@@ -2491,9 +2503,18 @@ nvidia_ioctl(
 
             NV_CTL_DEVICE_ONLY(nv);
 
-            if (num_arg_gpus == 0 || nvlfp->num_attached_gpus != 0 ||
-                arg_size % sizeof(NvU32) != 0)
+            if ((num_arg_gpus == 0) || (arg_size % sizeof(NvU32) != 0))
             {
+                status = -EINVAL;
+                goto done;
+            }
+
+            /* atomically check and alloc attached_gpus */
+            down(&nvl->ldata_lock);
+
+            if (nvlfp->num_attached_gpus != 0)
+            {
+                up(&nvl->ldata_lock);
                 status = -EINVAL;
                 goto done;
             }
@@ -2501,11 +2522,14 @@ nvidia_ioctl(
             NV_KMALLOC(nvlfp->attached_gpus, arg_size);
             if (nvlfp->attached_gpus == NULL)
             {
+                up(&nvl->ldata_lock);
                 status = -ENOMEM;
                 goto done;
             }
             memcpy(nvlfp->attached_gpus, arg_copy, arg_size);
             nvlfp->num_attached_gpus = num_arg_gpus;
+
+            up(&nvl->ldata_lock);
 
             for (i = 0; i < nvlfp->num_attached_gpus; i++)
             {
@@ -2521,8 +2545,14 @@ nvidia_ioctl(
                         if (nvlfp->attached_gpus[i] != 0)
                             nvidia_dev_put(nvlfp->attached_gpus[i], sp);
                     }
+
+                    /* atomically free attached_gpus */
+                    down(&nvl->ldata_lock);
+
                     NV_KFREE(nvlfp->attached_gpus, arg_size);
                     nvlfp->num_attached_gpus = 0;
+
+                    up(&nvl->ldata_lock);
 
                     status = -EINVAL;
                     break;

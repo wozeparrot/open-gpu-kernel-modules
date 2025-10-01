@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2004-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2004-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -50,14 +50,15 @@ TYPEDEF_BITVECTOR(MC_ENGINE_BITVECTOR);
 #include "g_rpc_hal.h" // For RPC_HAL_IFACES
 #include "g_rpc_odb.h" // For RPC_HAL_IFACES
 
-#define RPC_TIMEOUT_LIMIT_PRINT_RATE_THRESH 3  // rate limit after 3 prints
-#define RPC_TIMEOUT_LIMIT_PRINT_RATE_SKIP   29 // skip 29 of 30 prints
+#define RPC_TIMEOUT_GPU_RESET_THRESHOLD 3  // Reset GPU after 3 back to back GSP RPC timeout
+#define RPC_TIMEOUT_PRINT_RATE_SKIP   29 // skip 29 of 30 prints
 
 #define RPC_HISTORY_DEPTH 128
 
 typedef struct RpcHistoryEntry
 {
     NvU32 function;
+    NvU32 sequence;
     NvU64 data[2];
     NvU64 ts_start;
     NvU64 ts_end;
@@ -89,6 +90,9 @@ struct OBJRPC{
     NvU32 rpcHistoryCurrent;
     RpcHistoryEntry rpcEventHistory[RPC_HISTORY_DEPTH];
     NvU32 rpcEventHistoryCurrent;
+
+    /* sequence number for RPC */ 
+    NvU32 sequence;
     NvU32 timeoutCount;
     NvBool bQuietPrints;
 

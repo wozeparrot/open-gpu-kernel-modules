@@ -7638,7 +7638,7 @@ static NV_STATUS dupMemory(struct gpuDevice *device,
 {
     NV_STATUS status = NV_OK;
     nvGpuOpsLockSet acquiredLocks;
-    THREAD_STATE_NODE threadState;
+    THREAD_STATE_NODE *pThreadState;
     NvHandle  dupedMemHandle;
     Memory *pMemory =  NULL;
     PMEMORY_DESCRIPTOR pMemDesc = NULL;
@@ -7659,14 +7659,15 @@ static NV_STATUS dupMemory(struct gpuDevice *device,
 
     NV_ASSERT((flags == NV04_DUP_HANDLE_FLAGS_REJECT_KERNEL_DUP_PRIVILEGE) || (flags == NV04_DUP_HANDLE_FLAGS_NONE));
 
-    threadStateInit(&threadState, THREAD_STATE_FLAGS_NONE);
-
+    pThreadState = threadStateAlloc(THREAD_STATE_FLAGS_NONE);
+    if (!pThreadState)
+        return NV_ERR_NO_MEMORY;
     // RS-TODO use dual client locking
     status = _nvGpuOpsLocksAcquireAll(RMAPI_LOCK_FLAGS_NONE, device->session->handle,
         &pSessionClient, &acquiredLocks);
     if (status != NV_OK)
     {
-        threadStateFree(&threadState, THREAD_STATE_FLAGS_NONE);
+        threadStateFree(pThreadState, THREAD_STATE_FLAGS_NONE);
         return status;
     }
 
@@ -7708,15 +7709,23 @@ static NV_STATUS dupMemory(struct gpuDevice *device,
     }
 
     // For SYSMEM or indirect peer mappings
-    bIsIndirectPeer = gpumgrCheckIndirectPeer(pMappingGpu, pAdjustedMemDesc->pGpu);
+    // Deviceless memory (NV01_MEMORY_DEVICELESS) can have a NULL pGpu. Perform targeted
+    // null checks before IOMMU operations that require valid GPU contexts.
+    bIsIndirectPeer = (pAdjustedMemDesc->pGpu != NULL) ?
+                       gpumgrCheckIndirectPeer(pMappingGpu, pAdjustedMemDesc->pGpu) : NV_FALSE;
     if (bIsIndirectPeer ||
         memdescRequiresIommuMapping(pAdjustedMemDesc))
     {
+        if (NV_UNLIKELY(pAdjustedMemDesc->pGpu == NULL))
+        {
+            status = NV_ERR_INVALID_STATE;
+            goto freeGpaMemdesc;
+        }
         // For sysmem allocations, the dup done below is very shallow and in
         // particular doesn't create IOMMU mappings required for the mapped GPU
         // to access the memory. That's a problem if the mapped GPU is different
         // from the GPU that the allocation was created under. Add them
-        // explicitly here and remove them when the memory is freed in n
+        // explicitly here and remove them when the memory is freed in
         // nvGpuOpsFreeDupedHandle(). Notably memdescMapIommu() refcounts the
         // mappings so it's ok to call it if the mappings are already there.
         //
@@ -7800,7 +7809,7 @@ freeGpaMemdesc:
 
 done:
     _nvGpuOpsLocksRelease(&acquiredLocks);
-    threadStateFree(&threadState, THREAD_STATE_FLAGS_NONE);
+    threadStateFree(pThreadState, THREAD_STATE_FLAGS_NONE);
     return status;
 }
 

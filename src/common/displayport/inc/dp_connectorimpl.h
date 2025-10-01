@@ -260,6 +260,12 @@ namespace DisplayPort
         // Flag to check if the system is UEFI.
         bool        bIsUefiSystem;
 
+        //
+        // Flag to ensure we take into account that
+        // Displayport++ supports HDMI as well.
+        //
+        bool        bHDMIOnDPPlusPlus;
+
         bool        bSkipResetLinkStateDuringPlug;
 
         // Flag to check if LT should be skipped.
@@ -387,6 +393,9 @@ namespace DisplayPort
         NvU64       allocatedDpTunnelBw;
         NvU64       allocatedDpTunnelBwShadow;
         bool        bForceDisableTunnelBwAllocation;
+
+        // Use regkey DP_DSC_DEVID_WAR to toggle this flag.
+        bool        bEnableDevId;
 
         Group *perHeadAttachedGroup[NV_MAX_HEADS];
         NvU32 inTransitionHeadMask;
