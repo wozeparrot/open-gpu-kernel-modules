@@ -363,7 +363,8 @@ check_symbol_exists() {
         for KMOD in linuxkpi.ko linuxkpi_gplv2.ko drm.ko dmabuf.ko ; do
             for KMODPATH in $KMODPATHS; do
                 if [ -e "$KMODPATH/$KMOD" ] ; then
-                    if nm "$KMODPATH/$KMOD" | grep "$SYMBOL" >/dev/null 2>&1 ; then
+                    # Search if this symbol is a global text symbol in nm output
+                    if nm "$KMODPATH/$KMOD" | grep "T.*$SYMBOL" >/dev/null 2>&1 ; then
                         return 0
                     fi
                 fi
@@ -5078,6 +5079,22 @@ compile_test() {
             }"
 
             compile_check_conftest "$CODE" "NV_IS_VMA_WRITE_LOCKED_HAS_MM_LOCK_SEQ_ARG" "" "types"
+        ;;
+
+        drm_atomic_commit_struct_present)
+            #
+            # Determine if 'struct drm_atomic_state' has been renamed to
+            # 'struct drm_atomic_commit'.
+            #
+            # Renamed by commit 5164f7e7ff8e ("drm: Rename struct
+            # drm_atomic_state to drm_atomic_commit"), expected in Linux v7.2.
+            #
+            CODE="
+            #include <drm/drm_atomic.h>
+
+            struct drm_atomic_commit state;"
+
+            compile_check_conftest "$CODE" "NV_DRM_ATOMIC_COMMIT_STRUCT_PRESENT" "" "types"
         ;;
 
         # When adding a new conftest entry, please use the correct format for
