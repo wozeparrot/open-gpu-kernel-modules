@@ -1,13 +1,15 @@
 
 #ifndef _G_VIRT_MEM_MGR_NVOC_H_
 #define _G_VIRT_MEM_MGR_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,10 +74,18 @@ typedef struct OBJVMM OBJVMM;
 #endif
 
 
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__OBJVMM;
+struct NVOC_METADATA__Object;
+
+
 struct OBJVMM {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__OBJVMM *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct Object __nvoc_base_Object;
@@ -83,6 +93,13 @@ struct OBJVMM {
     // Ancestor object pointers for `staticCast` feature
     struct Object *__nvoc_pbase_Object;    // obj super
     struct OBJVMM *__nvoc_pbase_OBJVMM;    // vmm
+};
+
+
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__OBJVMM {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__Object metadata__Object;
 };
 
 #ifndef __NVOC_CLASS_OBJVMM_TYPEDEF__
@@ -101,10 +118,10 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_OBJVMM;
     ((pThis)->__nvoc_pbase_OBJVMM)
 
 #ifdef __nvoc_virt_mem_mgr_h_disabled
-#define __dynamicCast_OBJVMM(pThis) ((OBJVMM*)NULL)
+#define __dynamicCast_OBJVMM(pThis) ((OBJVMM*) NULL)
 #else //__nvoc_virt_mem_mgr_h_disabled
 #define __dynamicCast_OBJVMM(pThis) \
-    ((OBJVMM*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJVMM)))
+    ((OBJVMM*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJVMM)))
 #endif //__nvoc_virt_mem_mgr_h_disabled
 
 NV_STATUS __nvoc_objCreateDynamic_OBJVMM(OBJVMM**, Dynamic*, NvU32, va_list);
@@ -114,41 +131,40 @@ NV_STATUS __nvoc_objCreate_OBJVMM(OBJVMM**, Dynamic*, NvU32);
     __nvoc_objCreate_OBJVMM((ppNewObj), staticCast((pParent), Dynamic), (createFlags))
 
 
-// Wrapper macros
-
-// Dispatch functions
+// Wrapper macros for implementation functions
 NV_STATUS vmmCreateVaspace_IMPL(struct OBJVMM *pVmm, NvU32 _class, NvU32 vaspaceId, NvU32 gpuMask, NvU64 vaStart, NvU64 vaLimit, NvU64 vaInternalStart, NvU64 vaInternalEnd, struct OBJVASPACE *pPteSpaceMap, NvU32 flags, struct OBJVASPACE **ppVAS);
-
 #ifdef __nvoc_virt_mem_mgr_h_disabled
 static inline NV_STATUS vmmCreateVaspace(struct OBJVMM *pVmm, NvU32 _class, NvU32 vaspaceId, NvU32 gpuMask, NvU64 vaStart, NvU64 vaLimit, NvU64 vaInternalStart, NvU64 vaInternalEnd, struct OBJVASPACE *pPteSpaceMap, NvU32 flags, struct OBJVASPACE **ppVAS) {
     NV_ASSERT_FAILED_PRECOMP("OBJVMM was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_virt_mem_mgr_h_disabled
+#else // __nvoc_virt_mem_mgr_h_disabled
 #define vmmCreateVaspace(pVmm, _class, vaspaceId, gpuMask, vaStart, vaLimit, vaInternalStart, vaInternalEnd, pPteSpaceMap, flags, ppVAS) vmmCreateVaspace_IMPL(pVmm, _class, vaspaceId, gpuMask, vaStart, vaLimit, vaInternalStart, vaInternalEnd, pPteSpaceMap, flags, ppVAS)
-#endif //__nvoc_virt_mem_mgr_h_disabled
+#endif // __nvoc_virt_mem_mgr_h_disabled
 
 void vmmDestroyVaspace_IMPL(struct OBJVMM *pVmm, struct OBJVASPACE *pVAS);
-
 #ifdef __nvoc_virt_mem_mgr_h_disabled
 static inline void vmmDestroyVaspace(struct OBJVMM *pVmm, struct OBJVASPACE *pVAS) {
     NV_ASSERT_FAILED_PRECOMP("OBJVMM was disabled!");
 }
-#else //__nvoc_virt_mem_mgr_h_disabled
+#else // __nvoc_virt_mem_mgr_h_disabled
 #define vmmDestroyVaspace(pVmm, pVAS) vmmDestroyVaspace_IMPL(pVmm, pVAS)
-#endif //__nvoc_virt_mem_mgr_h_disabled
+#endif // __nvoc_virt_mem_mgr_h_disabled
 
 NV_STATUS vmmGetVaspaceFromId_IMPL(struct OBJVMM *pVmm, NvU32 vaspaceId, NvU32 classId, struct OBJVASPACE **ppVAS);
-
 #ifdef __nvoc_virt_mem_mgr_h_disabled
 static inline NV_STATUS vmmGetVaspaceFromId(struct OBJVMM *pVmm, NvU32 vaspaceId, NvU32 classId, struct OBJVASPACE **ppVAS) {
     NV_ASSERT_FAILED_PRECOMP("OBJVMM was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_virt_mem_mgr_h_disabled
+#else // __nvoc_virt_mem_mgr_h_disabled
 #define vmmGetVaspaceFromId(pVmm, vaspaceId, classId, ppVAS) vmmGetVaspaceFromId_IMPL(pVmm, vaspaceId, classId, ppVAS)
-#endif //__nvoc_virt_mem_mgr_h_disabled
+#endif // __nvoc_virt_mem_mgr_h_disabled
 
+
+// Wrapper macros for halified functions
+
+// Dispatch functions
 #undef PRIVATE_FIELD
 
 

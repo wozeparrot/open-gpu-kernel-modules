@@ -1,20 +1,22 @@
 
 #ifndef _G_CODE_COVERAGE_MGR_NVOC_H_
 #define _G_CODE_COVERAGE_MGR_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -45,10 +47,12 @@ extern "C" {
 #include "gpu/gpu.h"
 #include "core/core.h"
 
-#define GFID_TASK_RM 0
-#define BULLSEYE_TASK_VGPU_COVERAGE_SIZE    (32 << 10)
-#define BULLSEYE_TASK_RM_COVERAGE_SIZE      (3 << 20)
-#define BULLSEYE_GSP_RM_COVERAGE_SIZE       (BULLSEYE_TASK_RM_COVERAGE_SIZE) + (MAX_PARTITIONS_WITH_GFID * BULLSEYE_TASK_VGPU_COVERAGE_SIZE)
+#define GFID_TASK_RM                            0
+#define BULLSEYE_TASK_VGPU_COVERAGE_SIZE        (32 << 10)
+#define BULLSEYE_TASK_RM_COVERAGE_SIZE          (3 << 20)
+#define MAX_PARTITIONS_WITH_CODE_COVERAGE       (32)
+#define BULLSEYE_GSP_RM_COVERAGE_SIZE           \
+            (BULLSEYE_TASK_RM_COVERAGE_SIZE) + (MAX_PARTITIONS_WITH_CODE_COVERAGE * BULLSEYE_TASK_VGPU_COVERAGE_SIZE)
 
 typedef struct
 {
@@ -78,10 +82,18 @@ MAKE_LIST(GSP_BULLSEYE_COVERAGE_DATA_LIST, GSP_BULLSEYE_COVERAGE_DATA);
 #endif
 
 
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__CodeCoverageManager;
+struct NVOC_METADATA__Object;
+
+
 struct CodeCoverageManager {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__CodeCoverageManager *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct Object __nvoc_base_Object;
@@ -93,6 +105,13 @@ struct CodeCoverageManager {
     // Data members
     GSP_BULLSEYE_COVERAGE_DATA_LIST covDataList;
     GSP_BULLSEYE_OUTPUT_BUFFER bullseyeOutputBuffer;
+};
+
+
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__CodeCoverageManager {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__Object metadata__Object;
 };
 
 #ifndef __NVOC_CLASS_CodeCoverageManager_TYPEDEF__
@@ -111,10 +130,10 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_CodeCoverageManager;
     ((pThis)->__nvoc_pbase_CodeCoverageManager)
 
 #ifdef __nvoc_code_coverage_mgr_h_disabled
-#define __dynamicCast_CodeCoverageManager(pThis) ((CodeCoverageManager*)NULL)
+#define __dynamicCast_CodeCoverageManager(pThis) ((CodeCoverageManager*) NULL)
 #else //__nvoc_code_coverage_mgr_h_disabled
 #define __dynamicCast_CodeCoverageManager(pThis) \
-    ((CodeCoverageManager*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(CodeCoverageManager)))
+    ((CodeCoverageManager*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(CodeCoverageManager)))
 #endif //__nvoc_code_coverage_mgr_h_disabled
 
 NV_STATUS __nvoc_objCreateDynamic_CodeCoverageManager(CodeCoverageManager**, Dynamic*, NvU32, va_list);
@@ -124,77 +143,73 @@ NV_STATUS __nvoc_objCreate_CodeCoverageManager(CodeCoverageManager**, Dynamic*, 
     __nvoc_objCreate_CodeCoverageManager((ppNewObj), staticCast((pParent), Dynamic), (createFlags))
 
 
-// Wrapper macros
-
-// Dispatch functions
+// Wrapper macros for implementation functions
 NV_STATUS codecovmgrConstruct_IMPL(struct CodeCoverageManager *arg_pCodeCovMgr);
-
 #define __nvoc_codecovmgrConstruct(arg_pCodeCovMgr) codecovmgrConstruct_IMPL(arg_pCodeCovMgr)
+
 void codecovmgrDestruct_IMPL(struct CodeCoverageManager *pCodeCovMgr);
-
 #define __nvoc_codecovmgrDestruct(pCodeCovMgr) codecovmgrDestruct_IMPL(pCodeCovMgr)
-GSP_BULLSEYE_COVERAGE_DATA *codecovmgrGetCoverageNode_IMPL(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance);
 
+GSP_BULLSEYE_COVERAGE_DATA * codecovmgrGetCoverageNode_IMPL(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance);
 #ifdef __nvoc_code_coverage_mgr_h_disabled
-static inline GSP_BULLSEYE_COVERAGE_DATA *codecovmgrGetCoverageNode(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance) {
+static inline GSP_BULLSEYE_COVERAGE_DATA * codecovmgrGetCoverageNode(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance) {
     NV_ASSERT_FAILED_PRECOMP("CodeCoverageManager was disabled!");
     return NULL;
 }
-#else //__nvoc_code_coverage_mgr_h_disabled
+#else // __nvoc_code_coverage_mgr_h_disabled
 #define codecovmgrGetCoverageNode(pCodeCovMgr, gfid, gpuInstance) codecovmgrGetCoverageNode_IMPL(pCodeCovMgr, gfid, gpuInstance)
-#endif //__nvoc_code_coverage_mgr_h_disabled
+#endif // __nvoc_code_coverage_mgr_h_disabled
 
-NvU8 *codecovmgrGetCoverageBuffer_IMPL(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance);
-
+NvU8 * codecovmgrGetCoverageBuffer_IMPL(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance);
 #ifdef __nvoc_code_coverage_mgr_h_disabled
-static inline NvU8 *codecovmgrGetCoverageBuffer(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance) {
+static inline NvU8 * codecovmgrGetCoverageBuffer(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance) {
     NV_ASSERT_FAILED_PRECOMP("CodeCoverageManager was disabled!");
     return NULL;
 }
-#else //__nvoc_code_coverage_mgr_h_disabled
+#else // __nvoc_code_coverage_mgr_h_disabled
 #define codecovmgrGetCoverageBuffer(pCodeCovMgr, gfid, gpuInstance) codecovmgrGetCoverageBuffer_IMPL(pCodeCovMgr, gfid, gpuInstance)
-#endif //__nvoc_code_coverage_mgr_h_disabled
+#endif // __nvoc_code_coverage_mgr_h_disabled
 
 void codecovmgrMergeCoverage_IMPL(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance, NvU8 *pSysmemBuffer);
-
 #ifdef __nvoc_code_coverage_mgr_h_disabled
 static inline void codecovmgrMergeCoverage(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance, NvU8 *pSysmemBuffer) {
     NV_ASSERT_FAILED_PRECOMP("CodeCoverageManager was disabled!");
 }
-#else //__nvoc_code_coverage_mgr_h_disabled
+#else // __nvoc_code_coverage_mgr_h_disabled
 #define codecovmgrMergeCoverage(pCodeCovMgr, gfid, gpuInstance, pSysmemBuffer) codecovmgrMergeCoverage_IMPL(pCodeCovMgr, gfid, gpuInstance, pSysmemBuffer)
-#endif //__nvoc_code_coverage_mgr_h_disabled
+#endif // __nvoc_code_coverage_mgr_h_disabled
 
 void codecovmgrResetCoverage_IMPL(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance);
-
 #ifdef __nvoc_code_coverage_mgr_h_disabled
 static inline void codecovmgrResetCoverage(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance) {
     NV_ASSERT_FAILED_PRECOMP("CodeCoverageManager was disabled!");
 }
-#else //__nvoc_code_coverage_mgr_h_disabled
+#else // __nvoc_code_coverage_mgr_h_disabled
 #define codecovmgrResetCoverage(pCodeCovMgr, gfid, gpuInstance) codecovmgrResetCoverage_IMPL(pCodeCovMgr, gfid, gpuInstance)
-#endif //__nvoc_code_coverage_mgr_h_disabled
+#endif // __nvoc_code_coverage_mgr_h_disabled
 
 void codecovmgrRegisterCoverageBuffer_IMPL(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance, NvU64 bufferSize);
-
 #ifdef __nvoc_code_coverage_mgr_h_disabled
 static inline void codecovmgrRegisterCoverageBuffer(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance, NvU64 bufferSize) {
     NV_ASSERT_FAILED_PRECOMP("CodeCoverageManager was disabled!");
 }
-#else //__nvoc_code_coverage_mgr_h_disabled
+#else // __nvoc_code_coverage_mgr_h_disabled
 #define codecovmgrRegisterCoverageBuffer(pCodeCovMgr, gfid, gpuInstance, bufferSize) codecovmgrRegisterCoverageBuffer_IMPL(pCodeCovMgr, gfid, gpuInstance, bufferSize)
-#endif //__nvoc_code_coverage_mgr_h_disabled
+#endif // __nvoc_code_coverage_mgr_h_disabled
 
 void codecovmgrDeregisterCoverageBuffer_IMPL(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance);
-
 #ifdef __nvoc_code_coverage_mgr_h_disabled
 static inline void codecovmgrDeregisterCoverageBuffer(struct CodeCoverageManager *pCodeCovMgr, NvU32 gfid, NvU32 gpuInstance) {
     NV_ASSERT_FAILED_PRECOMP("CodeCoverageManager was disabled!");
 }
-#else //__nvoc_code_coverage_mgr_h_disabled
+#else // __nvoc_code_coverage_mgr_h_disabled
 #define codecovmgrDeregisterCoverageBuffer(pCodeCovMgr, gfid, gpuInstance) codecovmgrDeregisterCoverageBuffer_IMPL(pCodeCovMgr, gfid, gpuInstance)
-#endif //__nvoc_code_coverage_mgr_h_disabled
+#endif // __nvoc_code_coverage_mgr_h_disabled
 
+
+// Wrapper macros for halified functions
+
+// Dispatch functions
 #undef PRIVATE_FIELD
 
 

@@ -164,6 +164,8 @@ typedef struct GspStaticConfigInfo_t
     EcidManufacturingInfo ecidInfo[MAX_GROUP_COUNT];
 
     FW_WPR_LAYOUT_OFFSET fwWprLayoutOffset;
+
+    NvBool bSystemRebootRequired;
 } GspStaticConfigInfo;
 
 // Pushed from CPU-RM to GSP-RM
@@ -203,10 +205,12 @@ typedef struct GspSystemInfo
     BUSINFO chipsetIDInfo;
     ACPI_METHOD_DATA acpiMethodData;
     NvU32 hypervisorType;
+    NvU16 virtualConfigBits;
     NvBool bIsPassthru;
     NvU64 sysTimerOffsetNs;
     GSP_VF_INFO gspVFInfo;
     NvBool bIsPrimary;
+    NvBool bIsUnixHdmiFrlComplianceEnabled;
     NvBool isGridBuild;
     GSP_PCIE_CONFIG_REG pcieConfigReg;
     NvU32 gridBuildCsp;
@@ -215,11 +219,11 @@ typedef struct GspSystemInfo
     NvBool bFeatureStretchVblankCapable;
     NvBool bEnableDynamicGranularityPageArrays;
     NvBool bClockBoostSupported;
-    NvBool bRouteDispIntrsToCPU;
     NvU64  hostPageSize;
+    NvBool bIsCmcBasedHws;
     NvBool bGspNocatEnabled;
     NvBool bS0ixSupport;
-    NvU16 virtualConfigBits;
+    NvBool bWindowChannelAlwaysMapped;
 } GspSystemInfo;
 
 

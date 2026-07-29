@@ -38,6 +38,7 @@
 #include "uvm_gpu_access_counters.h"
 #include "uvm_pmm_sysmem.h"
 #include "uvm_migrate_pageable.h"
+#include "uvm_test_file.h"
 
 static NV_STATUS uvm_test_get_gpu_ref_count(UVM_TEST_GET_GPU_REF_COUNT_PARAMS *params, struct file *filp)
 {
@@ -113,7 +114,7 @@ static NV_STATUS uvm_test_verify_bh_affinity(uvm_intr_handler_t *isr, int node)
     // something obviously went wrong. Otherwise, check that the CPUs on which
     // the bottom half was executed is a subset of the NUMA node's cpumask.
     if ((isr->stats.bottom_half_count && cpumask_empty(&isr->stats.cpus_used_mask)) ||
-        !cpumask_subset(&isr->stats.cpus_used_mask, uvm_cpumask_of_node(node))) {
+        !cpumask_subset(&isr->stats.cpus_used_mask, cpumask_of_node(node))) {
         UVM_TEST_PRINT("ISR BH cpu mask check failed! BH ran on CPU cores outside NUMA %u\n",
                        node);
         return NV_ERR_INVALID_STATE;
@@ -353,7 +354,12 @@ long uvm_test_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_TEST_INJECT_TOOLS_EVENT_V2,        uvm_test_inject_tools_event_v2);
         UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_TEST_SET_P2P_SUSPENDED,            uvm_test_set_p2p_suspended);
         UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_TEST_INJECT_NVLINK_ERROR,          uvm_test_inject_nvlink_error);
+        UVM_ROUTE_CMD_STACK_NO_INIT_CHECK(UVM_TEST_FILE_INITIALIZE,           uvm_test_file_initialize);
+        UVM_ROUTE_CMD_STACK_NO_INIT_CHECK(UVM_TEST_FILE_UNMAP,                uvm_test_file_unmap);
         UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_TEST_QUERY_ACCESS_COUNTERS,        uvm_test_query_access_counters);
+        UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_TEST_VA_BLOCK_DISCARD_STATUS,      uvm_test_va_block_discard_status);
+        UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_TEST_VA_BLOCK_DISCARD_CHECK_PMM_STATE,
+                                       uvm_test_va_block_discard_check_pmm_state);
     }
 
     return -EINVAL;

@@ -1,13 +1,15 @@
 
 #ifndef _G_OS_NVOC_H_
 #define _G_OS_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,10 +52,12 @@ extern "C" {
 
 /* ------------------------ Core & Library Includes ------------------------- */
 #include "core/core.h"
+#include "nvoc/object.h"
 #include "containers/btree.h"
 #include "ctrl/ctrl0073/ctrl0073dfp.h"
 #include "kernel/diagnostics/xid_context.h"
-
+#include "utils/nvbitvector.h"
+TYPEDEF_BITVECTOR(MC_ENGINE_BITVECTOR);
 /* ------------------------ SDK & Interface Includes ------------------------ */
 #include "nvsecurityinfo.h"
 #include "nvacpitypes.h"
@@ -211,6 +215,11 @@ typedef struct RM_PAGEABLE_SECTION {
 #define OS_ALLOC_PAGES_NODE_NONE                0x0
 #define OS_ALLOC_PAGES_NODE_SKIP_RECLAIM        0x1
 
+// Flags needed by osGetCurrentProccessFlags
+#define OS_CURRENT_PROCESS_FLAG_NONE            0x0
+#define OS_CURRENT_PROCESS_FLAG_KERNEL_THREAD   0x1
+#define OS_CURRENT_PROCESS_FLAG_EXITING         0x2
+
 //
 // Structures for osPackageRegistry and osUnpackageRegistry
 //
@@ -327,6 +336,7 @@ typedef void       OSAllocReleasePage(NvU64, NvU32);
 typedef NvU32      OSGetPageRefcount(NvU64);
 typedef NvU32      OSCountTailPages(NvU64);
 typedef NvU64      OSGetPageSize(void);
+typedef NvU64      OSGetSupportedSysmemPageSizeMask(void);
 typedef NvU8       OSGetPageShift(void);
 
 typedef NV_STATUS  NV_FORCERESULTCHECK OSAcquireRmSema(void *);
@@ -364,7 +374,7 @@ typedef void       OSUnmapPciMemoryKernelOld(OBJGPU *, void *);
 typedef NV_STATUS  NV_FORCERESULTCHECK OSMapPciMemoryKernel64(OBJGPU *, RmPhysAddr, NvU64, NvU32, NvP64 *, NvU32);
 typedef void       OSUnmapPciMemoryKernel64(OBJGPU *, NvP64);
 typedef NV_STATUS  NV_FORCERESULTCHECK OSMapSystemMemory(MEMORY_DESCRIPTOR *, NvU64, NvU64, NvBool, NvU32, NvP64*, NvP64*);
-typedef void       OSUnmapSystemMemory(MEMORY_DESCRIPTOR *, NvBool, NvU32, NvP64, NvP64);
+typedef void       OSUnmapSystemMemory(MEMORY_DESCRIPTOR *, NvBool, NvP64, NvP64);
 typedef NvBool     OSLockShouldToggleInterrupts(OBJGPU *);
 typedef NV_STATUS  OSGetPerformanceCounter(NvU64 *);
 NvBool  osDbgBreakpointEnabled(void);
@@ -407,12 +417,7 @@ typedef NvBool     OSIsEqualGUID(void *, void *);
 #define OS_QUEUE_WORKITEM_FLAGS_DROP_ON_UNLOAD_QUEUE_FLUSH   NVBIT(16)
 typedef void       OSWorkItemFunction(NvU32 gpuInstance, void *);
 typedef void       OSSystemWorkItemFunction(void *);
-NV_STATUS  osQueueWorkItemWithFlags(OBJGPU *, OSWorkItemFunction, void *, NvU32);
-
-static NV_INLINE NV_STATUS osQueueWorkItem(OBJGPU *pGpu, OSWorkItemFunction pFunction, void *pParams)
-{
-    return osQueueWorkItemWithFlags(pGpu, pFunction, pParams, OS_QUEUE_WORKITEM_FLAGS_NONE);
-}
+NV_STATUS  osQueueWorkItem(OBJGPU *pGpu, OSWorkItemFunction pFunction, void *pParams, NvU32 flags);
 
 NV_STATUS  osQueueSystemWorkItem(OSSystemWorkItemFunction, void *);
 
@@ -537,10 +542,18 @@ typedef NV_STATUS       OSReadPFPciConfigInVF(NvU32, NvU32*);
 #endif
 
 
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__OBJOS;
+struct NVOC_METADATA__Object;
+
+
 struct OBJOS {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__OBJOS *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct Object __nvoc_base_Object;
@@ -549,7 +562,7 @@ struct OBJOS {
     struct Object *__nvoc_pbase_Object;    // obj super
     struct OBJOS *__nvoc_pbase_OBJOS;    // os
 
-    // 13 PDB properties
+    // 12 PDB properties
     NvBool PDB_PROP_OS_PAT_UNSUPPORTED;
     NvBool PDB_PROP_OS_SLI_ALLOWED;
     NvBool PDB_PROP_OS_SYSTEM_EVENTS_SUPPORTED;
@@ -559,15 +572,19 @@ struct OBJOS {
     NvBool PDB_PROP_OS_CACHED_MEMORY_MAPPINGS_FOR_ACPI_TABLE;
     NvBool PDB_PROP_OS_LIMIT_GPU_RESET;
     NvBool PDB_PROP_OS_SUPPORTS_TDR;
-    NvBool PDB_PROP_OS_GET_ACPI_TABLE_FROM_UEFI;
     NvBool PDB_PROP_OS_SUPPORTS_DISPLAY_REMAPPER;
     NvBool PDB_PROP_OS_DOES_NOT_ALLOW_DIRECT_PCIE_MAPPINGS;
     NvBool PDB_PROP_OS_NO_PAGED_SEGMENT_ACCESS;
 
     // Data members
-    NvU32 dynamicPowerSupportGpuMask;
     NvBool bIsSimMods;
-    NvBool bMuxUnsupportedOnOS;
+};
+
+
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__OBJOS {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__Object metadata__Object;
 };
 
 #ifndef __NVOC_CLASS_OBJOS_TYPEDEF__
@@ -586,39 +603,38 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_OBJOS;
     ((pThis)->__nvoc_pbase_OBJOS)
 
 #ifdef __nvoc_os_h_disabled
-#define __dynamicCast_OBJOS(pThis) ((OBJOS*)NULL)
+#define __dynamicCast_OBJOS(pThis) ((OBJOS*) NULL)
 #else //__nvoc_os_h_disabled
 #define __dynamicCast_OBJOS(pThis) \
-    ((OBJOS*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJOS)))
+    ((OBJOS*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJOS)))
 #endif //__nvoc_os_h_disabled
 
 // Property macros
-#define PDB_PROP_OS_SUPPORTS_DISPLAY_REMAPPER_BASE_CAST
-#define PDB_PROP_OS_SUPPORTS_DISPLAY_REMAPPER_BASE_NAME PDB_PROP_OS_SUPPORTS_DISPLAY_REMAPPER
-#define PDB_PROP_OS_NO_PAGED_SEGMENT_ACCESS_BASE_CAST
-#define PDB_PROP_OS_NO_PAGED_SEGMENT_ACCESS_BASE_NAME PDB_PROP_OS_NO_PAGED_SEGMENT_ACCESS
-#define PDB_PROP_OS_WAIT_FOR_ACPI_SUBSYSTEM_BASE_CAST
-#define PDB_PROP_OS_WAIT_FOR_ACPI_SUBSYSTEM_BASE_NAME PDB_PROP_OS_WAIT_FOR_ACPI_SUBSYSTEM
-#define PDB_PROP_OS_UNCACHED_MEMORY_MAPPINGS_NOT_SUPPORTED_BASE_CAST
-#define PDB_PROP_OS_UNCACHED_MEMORY_MAPPINGS_NOT_SUPPORTED_BASE_NAME PDB_PROP_OS_UNCACHED_MEMORY_MAPPINGS_NOT_SUPPORTED
-#define PDB_PROP_OS_LIMIT_GPU_RESET_BASE_CAST
-#define PDB_PROP_OS_LIMIT_GPU_RESET_BASE_NAME PDB_PROP_OS_LIMIT_GPU_RESET
-#define PDB_PROP_OS_ONDEMAND_VBLANK_CONTROL_ENABLE_DEFAULT_BASE_CAST
-#define PDB_PROP_OS_ONDEMAND_VBLANK_CONTROL_ENABLE_DEFAULT_BASE_NAME PDB_PROP_OS_ONDEMAND_VBLANK_CONTROL_ENABLE_DEFAULT
 #define PDB_PROP_OS_PAT_UNSUPPORTED_BASE_CAST
 #define PDB_PROP_OS_PAT_UNSUPPORTED_BASE_NAME PDB_PROP_OS_PAT_UNSUPPORTED
 #define PDB_PROP_OS_SLI_ALLOWED_BASE_CAST
 #define PDB_PROP_OS_SLI_ALLOWED_BASE_NAME PDB_PROP_OS_SLI_ALLOWED
-#define PDB_PROP_OS_DOES_NOT_ALLOW_DIRECT_PCIE_MAPPINGS_BASE_CAST
-#define PDB_PROP_OS_DOES_NOT_ALLOW_DIRECT_PCIE_MAPPINGS_BASE_NAME PDB_PROP_OS_DOES_NOT_ALLOW_DIRECT_PCIE_MAPPINGS
-#define PDB_PROP_OS_CACHED_MEMORY_MAPPINGS_FOR_ACPI_TABLE_BASE_CAST
-#define PDB_PROP_OS_CACHED_MEMORY_MAPPINGS_FOR_ACPI_TABLE_BASE_NAME PDB_PROP_OS_CACHED_MEMORY_MAPPINGS_FOR_ACPI_TABLE
-#define PDB_PROP_OS_SUPPORTS_TDR_BASE_CAST
-#define PDB_PROP_OS_SUPPORTS_TDR_BASE_NAME PDB_PROP_OS_SUPPORTS_TDR
-#define PDB_PROP_OS_GET_ACPI_TABLE_FROM_UEFI_BASE_CAST
-#define PDB_PROP_OS_GET_ACPI_TABLE_FROM_UEFI_BASE_NAME PDB_PROP_OS_GET_ACPI_TABLE_FROM_UEFI
 #define PDB_PROP_OS_SYSTEM_EVENTS_SUPPORTED_BASE_CAST
 #define PDB_PROP_OS_SYSTEM_EVENTS_SUPPORTED_BASE_NAME PDB_PROP_OS_SYSTEM_EVENTS_SUPPORTED
+#define PDB_PROP_OS_ONDEMAND_VBLANK_CONTROL_ENABLE_DEFAULT_BASE_CAST
+#define PDB_PROP_OS_ONDEMAND_VBLANK_CONTROL_ENABLE_DEFAULT_BASE_NAME PDB_PROP_OS_ONDEMAND_VBLANK_CONTROL_ENABLE_DEFAULT
+#define PDB_PROP_OS_WAIT_FOR_ACPI_SUBSYSTEM_BASE_CAST
+#define PDB_PROP_OS_WAIT_FOR_ACPI_SUBSYSTEM_BASE_NAME PDB_PROP_OS_WAIT_FOR_ACPI_SUBSYSTEM
+#define PDB_PROP_OS_UNCACHED_MEMORY_MAPPINGS_NOT_SUPPORTED_BASE_CAST
+#define PDB_PROP_OS_UNCACHED_MEMORY_MAPPINGS_NOT_SUPPORTED_BASE_NAME PDB_PROP_OS_UNCACHED_MEMORY_MAPPINGS_NOT_SUPPORTED
+#define PDB_PROP_OS_CACHED_MEMORY_MAPPINGS_FOR_ACPI_TABLE_BASE_CAST
+#define PDB_PROP_OS_CACHED_MEMORY_MAPPINGS_FOR_ACPI_TABLE_BASE_NAME PDB_PROP_OS_CACHED_MEMORY_MAPPINGS_FOR_ACPI_TABLE
+#define PDB_PROP_OS_LIMIT_GPU_RESET_BASE_CAST
+#define PDB_PROP_OS_LIMIT_GPU_RESET_BASE_NAME PDB_PROP_OS_LIMIT_GPU_RESET
+#define PDB_PROP_OS_SUPPORTS_TDR_BASE_CAST
+#define PDB_PROP_OS_SUPPORTS_TDR_BASE_NAME PDB_PROP_OS_SUPPORTS_TDR
+#define PDB_PROP_OS_SUPPORTS_DISPLAY_REMAPPER_BASE_CAST
+#define PDB_PROP_OS_SUPPORTS_DISPLAY_REMAPPER_BASE_NAME PDB_PROP_OS_SUPPORTS_DISPLAY_REMAPPER
+#define PDB_PROP_OS_DOES_NOT_ALLOW_DIRECT_PCIE_MAPPINGS_BASE_CAST
+#define PDB_PROP_OS_DOES_NOT_ALLOW_DIRECT_PCIE_MAPPINGS_BASE_NAME PDB_PROP_OS_DOES_NOT_ALLOW_DIRECT_PCIE_MAPPINGS
+#define PDB_PROP_OS_NO_PAGED_SEGMENT_ACCESS_BASE_CAST
+#define PDB_PROP_OS_NO_PAGED_SEGMENT_ACCESS_BASE_NAME PDB_PROP_OS_NO_PAGED_SEGMENT_ACCESS
+
 
 NV_STATUS __nvoc_objCreateDynamic_OBJOS(OBJOS**, Dynamic*, NvU32, va_list);
 
@@ -627,7 +643,9 @@ NV_STATUS __nvoc_objCreate_OBJOS(OBJOS**, Dynamic*, NvU32);
     __nvoc_objCreate_OBJOS((ppNewObj), staticCast((pParent), Dynamic), (createFlags))
 
 
-// Wrapper macros
+// Wrapper macros for implementation functions
+
+// Wrapper macros for halified functions
 
 // Dispatch functions
 #undef PRIVATE_FIELD
@@ -637,6 +655,7 @@ NV_STATUS       addProbe(OBJGPU *, NvU32);
 
 
 typedef NV_STATUS  OSFlushCpuCache(void);
+
 typedef void       OSAddRecordForCrashLog(void *, NvU32);
 typedef void       OSDeleteRecordForCrashLog(void *);
 
@@ -664,7 +683,7 @@ NV_STATUS osTegraSocBpmpSendMrq(OBJGPU      *pGpu,
                                 NvS32       *pRet,
                                 NvS32       *pApiRet);
 NV_STATUS osMapGsc(NvU64 gsc_base, NvU64 *va);
-NV_STATUS osTegraSocGetImpImportData(TEGRA_IMP_IMPORT_DATA *pTegraImpImportData);
+NV_STATUS osTegraSocGetImpImportData(OBJGPU *pGpu, TEGRA_IMP_IMPORT_DATA *pTegraImpImportData);
 NV_STATUS osTegraSocEnableDisableRfl(OS_GPU_INFO *pOsGpuInfo, NvBool bEnable);
 NV_STATUS osTegraAllocateDisplayBandwidth(OS_GPU_INFO *pOsGpuInfo,
                                           NvU32 averageBandwidthKBPS,
@@ -673,9 +692,9 @@ NV_STATUS osTegraAllocateDisplayBandwidth(OS_GPU_INFO *pOsGpuInfo,
 NV_STATUS osGetCurrentProcessGfid(NvU32 *pGfid);
 NvBool osIsAdministrator(void);
 NvBool osCheckAccess(RsAccessRight accessRight);
-NV_STATUS osGetCurrentTime(NvU32 *pSec,NvU32 *puSec);
-NV_STATUS osGetCurrentTick(NvU64 *pTimeInNs);
-NvU64 osGetTickResolution(void);
+NV_STATUS osGetSystemTime(NvU32 *pSec,NvU32 *puSec);
+NvU64 osGetMonotonicTimeNs(void);
+NvU64 osGetMonotonicTickResolutionNs(void);
 NvU64 osGetTimestamp(void);
 NvU64 osGetTimestampFreq(void);
 
@@ -723,6 +742,8 @@ NvS32 osImexChannelCount(void);
 
 NV_STATUS osGetRandomBytes(NvU8 *pBytes, NvU16 numBytes);
 
+NvU32 osGetCurrentProcessFlags(void);
+
 NV_STATUS osAllocWaitQueue(OS_WAIT_QUEUE **ppWq);
 void      osFreeWaitQueue(OS_WAIT_QUEUE *pWq);
 void      osWaitUninterruptible(OS_WAIT_QUEUE *pWq);
@@ -747,6 +768,7 @@ NV_STATUS osGetAtsTargetAddressRange(OBJGPU *pGpu,
                                      NvU32   peerIndex);
 NV_STATUS osGetFbNumaInfo(OBJGPU *pGpu,
                           NvU64  *pAddrPhys,
+                          NvU64  *pSizePhys,
                           NvU64  *pAddrRsvdPhys,
                           NvS32  *pNodeId);
 NV_STATUS osGetEgmInfo(OBJGPU *pGpu,
@@ -867,8 +889,6 @@ NV_STATUS osTegraSocParseFixedModeTimings(OS_GPU_INFO *pOsGpuInfo,
                                           NvU32 dcbIndex,
                                           NV0073_CTRL_DFP_GET_FIXED_MODE_TIMING_PARAMS *pTimingsPerStream,
                                           NvU8 *pNumTimings);
-
-NV_STATUS osTegraSocGetScanoutCarveout(OS_GPU_INFO *pOsGpuInfo, NvU64 *pBase, NvU64 *pSize);
 
 NV_STATUS osGetVersion(NvU32 *pMajorVer,
                        NvU32 *pMinorVer,
@@ -1026,21 +1046,21 @@ NV_STATUS osTegraSocResetMipiCal(OS_GPU_INFO *pArg1);
 NV_STATUS osGetTegraNumDpAuxInstances(OS_GPU_INFO *pArg1,
                                  NvU32 *pArg2);
 
-NvU32     osTegraSocFuseRegRead(NvU32 addr);
+NvU32     osTegraSocFuseRegRead(OBJGPU *pGpu, NvU32 addr);
 
 typedef void (*osTegraTsecCbFunc)(void*, void*);
 
-NvU32 osTegraSocTsecSendCmd(void* cmd, osTegraTsecCbFunc cbFunc, void* cbContext);
+NvU32 osTegraSocTsecSendCmd(OBJGPU *pGpu, void* cmd, osTegraTsecCbFunc cbFunc, void* cbContext);
 
-NvU32 osTegraSocTsecEventRegister(osTegraTsecCbFunc cbFunc, void* cbContext, NvBool isInitEvent);
+NvU32 osTegraSocTsecEventRegister(OBJGPU *pGpu, osTegraTsecCbFunc cbFunc, void* cbContext, NvBool isInitEvent);
 
-NvU32 osTegraSocTsecEventUnRegister(NvBool isInitEvent);
+NvU32 osTegraSocTsecEventUnRegister(OBJGPU *pGpu, NvBool isInitEvent);
 
-void* osTegraSocTsecAllocMemDesc(NvU32 numBytes, NvU32 *flcnAddr);
+void* osTegraSocTsecAllocMemDesc(OBJGPU *pGpu, NvU32 numBytes, NvU32 *flcnAddr);
 
-void  osTegraSocTsecFreeMemDesc(void *memDesc);
+void  osTegraSocTsecFreeMemDesc(OBJGPU *pGpu, void *memDesc);
 
-NV_STATUS osTegraSocHspSemaphoreAcquire(NvU32 ownerId, NvBool bAcquire, NvU64 timeout);
+NV_STATUS osTegraSocHspSemaphoreAcquire(OBJGPU *pGpu, NvU32 ownerId, NvBool bAcquire, NvU64 timeout);
 
 NV_STATUS osTegraSocDpUphyPllInit(OS_GPU_INFO *pArg1, NvU32, NvU32);
 
@@ -1269,6 +1289,7 @@ OSAllocPagesInternal             osAllocPagesInternal;
 OSFreePagesInternal              osFreePagesInternal;
 
 OSGetPageSize                    osGetPageSize;
+OSGetSupportedSysmemPageSizeMask osGetSupportedSysmemPageSizeMask;
 OSGetPageShift                   osGetPageShift;
 OSNumaMemblockSize               osNumaMemblockSize;
 OSNumaOnliningEnabled            osNumaOnliningEnabled;
@@ -1433,6 +1454,57 @@ extern OSGetTimeoutParams   osGetTimeoutParams;
 #define NV_SEMA_RELEASE_DPC_FAILED      4   // lock released, but failed to queue a DPC to notify waiting thread
 
     #define ADD_PROBE(pGpu, probeId)
+
+    // Define dummy enum values so macro arguments compile in non-MODS builds
+    #define MODSDRV_ERROR_SEVERITY_UNKNOWN         0
+    #define MODSDRV_ERROR_SEVERITY_INFORMATIONAL   1
+    #define MODSDRV_ERROR_SEVERITY_CORRECTED       2
+    #define MODSDRV_ERROR_SEVERITY_RECOVERABLE     3
+    #define MODSDRV_ERROR_SEVERITY_FATAL           4
+    #define MODSDRV_NVLINK_ERROR_SOURCE_UNKNOWN     0
+    #define MODSDRV_NVLINK_ERROR_SOURCE_RLW         1
+    #define MODSDRV_NVLINK_ERROR_SOURCE_TLW         2
+    #define MODSDRV_NVLINK_ERROR_SOURCE_TREX        3
+    #define MODSDRV_NVLINK_ERROR_SOURCE_NVLPW_CTRL  4
+    #define MODSDRV_NVLINK_ERROR_SOURCE_NETIR       5
+    #define MODSDRV_NVLINK_ERROR_SOURCE_MSEFW       6
+    #define MODSDRV_NVLINK_ERROR_SOURCE_NVLINK_SW   7
+    #define MODSDRV_NVLINK_ERROR_CODE_INVALID              0
+    #define MODSDRV_NVLINK_ERROR_CODE_SAW_MVB              1
+    #define MODSDRV_NVLINK_ERROR_CODE_SAW_MSEFW            2
+    #define MODSDRV_NVLINK_ERROR_CODE_RLW_CTRL             3
+    #define MODSDRV_NVLINK_ERROR_CODE_RLW_REMAP            4
+    #define MODSDRV_NVLINK_ERROR_CODE_RLW_RSPCOL           5
+    #define MODSDRV_NVLINK_ERROR_CODE_RLW_RXPIPE           6
+    #define MODSDRV_NVLINK_ERROR_CODE_RLW_SRC_TRACK        7
+    #define MODSDRV_NVLINK_ERROR_CODE_RLW_TAGSTATE         8
+    #define MODSDRV_NVLINK_ERROR_CODE_TLW_CTRL             9
+    #define MODSDRV_NVLINK_ERROR_CODE_TLW_RX_PIPE0         10
+    #define MODSDRV_NVLINK_ERROR_CODE_TLW_RX_PIPE1         11
+    #define MODSDRV_NVLINK_ERROR_CODE_TLW_TX_PIPE0         12
+    #define MODSDRV_NVLINK_ERROR_CODE_TLW_TX_PIPE1         13
+    #define MODSDRV_NVLINK_ERROR_CODE_TREX                 14
+    #define MODSDRV_NVLINK_ERROR_CODE_NVLPW                15
+    #define MODSDRV_NVLINK_ERROR_CODE_NETIR_PMPE           16
+    #define MODSDRV_NVLINK_ERROR_CODE_NETIR_LINK_DOWN      17
+    #define MODSDRV_NVLINK_ERROR_CODE_NETIR_THERMAL_EVENT  18
+    #define MODSDRV_NVLINK_ERROR_CODE_NETIR_BER_EVENT      19
+    #define MODSDRV_NVLINK_ERROR_CODE_NETIR_MFDE_EVENT     20
+    #define MODSDRV_NVLINK_ERROR_CODE_MVB_CTRL             21
+    #define MODSDRV_NVLINK_ERROR_CODE_MVB_RX               22
+    #define MODSDRV_NVLINK_ERROR_CODE_MVB_TX               23
+    #define MODSDRV_NVLINK_ERROR_CODE_NETIR_INT            24
+    #define MODSDRV_NVLINK_ERROR_CODE_MSE_WATCHDOG         25
+    #define MODSDRV_NVLINK_ERROR_CODE_MSE_FALCON_IRQSTAT   26
+    #define MODSDRV_NVLINK_ERROR_CODE_MSE_DEGRADED         27
+    #define MODSDRV_NVLINK_ERROR_CODE_SW_DEFINED           28
+    #define MODS_REPORT_NVLINK_ERROR(pGpu_, sev_, src_, ecode_, xcon_, inj_, link_, lane_, intr_, estat_, dsize_, dptr_) \
+        do { (void)(pGpu_); (void)(sev_); (void)(src_); (void)(ecode_); (void)(xcon_); (void)(inj_); (void)(link_); \
+             (void)(lane_); (void)(intr_); (void)(estat_); (void)(dsize_); (void)(dptr_); } while(0)
+    #define MODS_REPORT_GENERIC_ERROR(sev_, str_) \
+        do { (void)(sev_); (void)(str_); } while(0)
+    typedef NvU32 ModsDrvNvlinkErrorCode;
+    typedef NvU32 ModsDrvNvlinkErrorSource;
 
 #define IS_SIM_MODS(pOS)            (pOS->bIsSimMods)
 

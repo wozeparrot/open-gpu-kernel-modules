@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2018-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2018-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -37,6 +37,8 @@
 
 #include "published/ampere/ga100/dev_mmu.h"
 #include "published/ampere/ga100/dev_fb.h"
+
+#include "kernel/virtualization/common_vgpu_mgr.h"
 
 #define NV_CBC_MAX_SIZE_BUG_2509894_WAR   ((3 * NVBIT64(30)) / 2) // 1.5GBs
 
@@ -124,7 +126,7 @@ memmgrScrubRegistryOverrides_GA100
          pGpu->getProperty(pGpu, PDB_PROP_GPU_IS_VIRTUALIZATION_MODE_HOST_VGPU) ||
          IS_VIRTUAL_WITHOUT_SRIOV(pGpu) ||
          RMCFG_FEATURE_PLATFORM_GSP ||
-         pGpu->getProperty(pGpu, PDB_PROP_GPU_BROKEN_FB) ||
+         (pGpu->getProperty(pGpu, PDB_PROP_GPU_BROKEN_FB) && !pMemoryManager->bSysmemCompressionSupportDef) ||
          IsSLIEnabled(pGpu))
     {
         pMemoryManager->bScrubOnFreeEnabled = NV_FALSE;

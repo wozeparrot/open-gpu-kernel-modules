@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -105,15 +105,13 @@ timeoutRegistryOverride
 {
     NvU32 data32 = 0;
 
-    pGpu->bBug5203024OverrideTimeoutsRegkeySet =
-        (osReadRegistryDword(pGpu,
-                             NV_REG_STR_RM_BUG5203024_OVERRIDE_TIMEOUT,
-                             &data32) == NV_OK);
+    NvU32 bug5203024OverrideTimeouts = (
+        (osReadRegistryDword(pGpu, NV_REG_STR_RM_BUG5203024_OVERRIDE_TIMEOUT,
+                             &data32) == NV_OK) ?
+        data32 :
+        0);
 
-    pGpu->bug5203024OverrideTimeouts =
-        pGpu->bBug5203024OverrideTimeoutsRegkeySet ? data32 : 0;
-
-    NvU32 bug5203024OverrideTimeouts = pGpu->bug5203024OverrideTimeouts;
+    pGpu->bug5203024OverrideTimeouts = bug5203024OverrideTimeouts;
 
     NvBool bOverrideDefaultTimeout = (DRF_VAL(_REG_STR,
                                               _RM_BUG5203024_OVERRIDE_TIMEOUT,
@@ -263,9 +261,9 @@ timeoutSet
         // by the start of the tick. Mitigate this by always padding the
         // timeout using the OS tick resolution, to bump us to the next tick.
         //
-        timeoutNs += osGetTickResolution();
+        timeoutNs += osGetMonotonicTickResolutionNs();
 
-        osGetCurrentTick(&timeInNs);
+        timeInNs = osGetMonotonicTimeNs();
 
         pTimeout->pTmrGpu = NULL;
         pTimeout->timeout = timeInNs + timeoutNs;
@@ -336,7 +334,7 @@ _checkTimeout
 
     if (pTimeout->flags & GPU_TIMEOUT_FLAGS_OSTIMER)
     {
-        osGetCurrentTick(&timeInNs);
+        timeInNs = osGetMonotonicTimeNs();
         if (timeInNs >= pTimeout->timeout)
         {
             if (!(pTimeout->flags & GPU_TIMEOUT_FLAGS_BYPASS_JOURNAL_LOG))

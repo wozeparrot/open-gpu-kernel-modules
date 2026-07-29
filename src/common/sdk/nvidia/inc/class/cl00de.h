@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -30,6 +30,7 @@ extern "C" {
 
 #include "nvmisc.h"
 #include "nvfixedtypes.h"
+#include "ctrl/ctrl2080/ctrl2080ecc.h"
 
 #define RM_USER_SHARED_DATA                      (0x000000de)
 
@@ -52,10 +53,11 @@ extern "C" {
     if (!RUSD_SEQ_DATA_VALID(RUSD_SEQ))                      \
          continue;
 
-#define RUSD_SEQ_CHECK2(dataField)                           \
-    portAtomicMemoryFenceLoad();                             \
-    if (RUSD_SEQ == (dataField)->lastModifiedTimestamp)      \
-         break;
+// Clear lastModifiedTimestamp on failure in case of reaching loop limit
+#define RUSD_SEQ_CHECK2(dataField)                              \
+    portAtomicMemoryFenceLoad();                                \
+    if (RUSD_SEQ == (dataField)->lastModifiedTimestamp)         \
+         break;                                                 \
 
 //
 // Read RUSD data field `dataField` from NV00DE_SHARED_DATA struct `pSharedData` into destination pointer `pDst`
@@ -70,6 +72,7 @@ do {                                                                            
         RUSD_SEQ_CHECK1(&((pSharedData)->dataField));                                     \
         portMemCopy((pDst), sizeof(*pDst), &((pSharedData)->dataField), sizeof(*pDst));   \
         RUSD_SEQ_CHECK2(&((pSharedData)->dataField));                                     \
+        (pDst)->lastModifiedTimestamp = RUSD_TIMESTAMP_INVALID;                           \
     }                                                                                     \
 } while(0);
 
@@ -84,16 +87,6 @@ do {                                                                            
        (((currentTime) - (timestamp)) > (staleThreshold)))) ||          \
      (((timestamp) >= (RUSD_SEQ_START)) &&      /* Non-Polled Data */   \
       (((timestamp) & (0x1LLU)) == 1LLU)))
-
-enum {
-    RUSD_CLK_PUBLIC_DOMAIN_GRAPHICS = 0,
-    RUSD_CLK_PUBLIC_DOMAIN_MEMORY,
-    RUSD_CLK_PUBLIC_DOMAIN_VIDEO,
-
-    // Put at the end. See bug 1000230 NVML doesn't report SM frequency on Kepler
-    RUSD_CLK_PUBLIC_DOMAIN_SM,
-    RUSD_CLK_PUBLIC_DOMAIN_MAX_TYPE,
-};
 
 enum {
     RUSD_CLK_THROTTLE_REASON_GPU_IDLE                         = NVBIT(0),
@@ -126,6 +119,16 @@ typedef struct RUSD_PMA_MEMORY_INFO {
     NvU64 totalPmaMemory;
     NvU64 freePmaMemory;
 } RUSD_PMA_MEMORY_INFO;
+
+enum {
+    RUSD_CLK_PUBLIC_DOMAIN_GRAPHICS = 0,
+    RUSD_CLK_PUBLIC_DOMAIN_MEMORY,
+    RUSD_CLK_PUBLIC_DOMAIN_VIDEO,
+
+    // Put at the end. See bug 1000230 NVML doesn't report SM frequency on Kepler
+    RUSD_CLK_PUBLIC_DOMAIN_SM,
+    RUSD_CLK_PUBLIC_DOMAIN_MAX_TYPE,
+};
 
 typedef struct RUSD_CLK_PUBLIC_DOMAIN_INFO {
     NvU32 targetClkMHz;
@@ -164,10 +167,32 @@ typedef struct RUSD_PERF_CURRENT_PSTATE {
     NvU32 currentPstate;
 } RUSD_PERF_CURRENT_PSTATE;
 
-typedef struct RUSD_CLK_THROTTLE_REASON {
+#define RUSD_CLK_VIOLATION_NUM 32
+
+#define RUSD_PERF_POINT_MAX_CLOCK                     0
+#define RUSD_PERF_POINT_TURBO_BOOST                   1
+#define RUSD_PERF_POINT_3D_BOOST                      2
+#define RUSD_PERF_POINT_RATED_TDP                     3
+#define RUSD_PERF_POINT_MAX_CUSTOMER_BOOST            4
+#define RUSD_PERF_POINT_DISPLAY_CLOCK_INTERSECT       5
+#define RUSD_PERF_POINT_NUM                           6
+
+typedef struct RUSD_CLK_VIOLATION_STATUS {
+    NvU32 perfPointMask;
+    NvU64 timeNs[RUSD_PERF_POINT_NUM];
+} RUSD_CLK_VIOLATION_STATUS;
+
+typedef struct RUSD_CLK_THROTTLE_INFO {
     volatile NvU64 lastModifiedTimestamp;
     NvU32 reasonMask; // Bitmask of RUSD_CLK_THROTTLE_REASON_*
-} RUSD_CLK_THROTTLE_REASON;
+
+    NvU64 referenceTimeNs;
+    NvU32 supportedViolationTimeMask;
+    RUSD_CLK_VIOLATION_STATUS violation[RUSD_CLK_VIOLATION_NUM];
+    RUSD_CLK_VIOLATION_STATUS globalViolation;
+} RUSD_CLK_THROTTLE_INFO;
+
+typedef struct RUSD_CLK_THROTTLE_INFO RUSD_CLK_THROTTLE_REASON;
 
 typedef struct RUSD_MEM_ERROR_COUNTS {
     NvU64 correctedVolatile;
@@ -181,10 +206,18 @@ typedef struct RUSD_MEM_ERROR_COUNTS {
 #define RUSD_MEMORY_ERROR_TYPE_SRAM  2
 #define RUSD_MEMORY_ERROR_TYPE_COUNT 3
 
+typedef struct RUSD_ECC_COUNTS {
+    NV2080_CTRL_ECC_GET_VOLATILE_COUNTS_PARAMS volatileCounts;
+    NV2080_CTRL_ECC_GET_CLIENT_EXPOSED_COUNTERS_PARAMS clientExposedCounts;
+} RUSD_ECC_INFO;
+
 typedef struct RUSD_MEM_ECC {
     volatile NvU64 lastModifiedTimestamp;
-    // Provided from NV2080_CTRL_CMD_GPU_QUERY_ECC_STATUS
     RUSD_MEM_ERROR_COUNTS count[RUSD_MEMORY_ERROR_TYPE_COUNT];
+    // TODO: Due to incapability of getting voteup for X driver update with
+    // existing RM APIs, need to resolve bug 5138911 before fully updating
+    // RUSD_MEM_ECC and removing deprecated RUSD_MEM_ERROR_COUNTS.
+    RUSD_ECC_INFO info;
 } RUSD_MEM_ECC;
 
 typedef struct RUSD_POWER_LIMIT_INFO {
@@ -197,8 +230,21 @@ typedef struct RUSD_POWER_LIMITS {
     RUSD_POWER_LIMIT_INFO info;
 } RUSD_POWER_LIMITS;
 
+typedef enum RUSD_TEMPERATURE_SENSOR {
+    RUSD_TEMPERATURE_SENSOR_GPU,
+    RUSD_TEMPERATURE_SENSOR_MEMORY,
+    RUSD_TEMPERATURE_SENSOR_BOARD,
+    RUSD_TEMPERATURE_SENSOR_POWER_SUPPLY,
+
+    // Should always be last entry
+    RUSD_TEMPERATURE_SENSOR_MAX
+} RUSD_TEMPERATURE_SENSOR;
+
 typedef enum RUSD_TEMPERATURE_TYPE {
     RUSD_TEMPERATURE_TYPE_GPU,
+    RUSD_TEMPERATURE_TYPE_MEMORY,
+    RUSD_TEMPERATURE_TYPE_BOARD,
+    RUSD_TEMPERATURE_TYPE_POWER_SUPPLY,
     RUSD_TEMPERATURE_TYPE_HBM,
     RUSD_TEMPERATURE_TYPE_MAX
 } RUSD_TEMPERATURE_TYPE;
@@ -207,9 +253,6 @@ typedef struct RUSD_TEMPERATURE {
     volatile NvU64 lastModifiedTimestamp;
     NvTemp temperature;
 } RUSD_TEMPERATURE;
-
-// Temporary until clients can migrate to using RUSD_TEMPERATURE type name
-typedef RUSD_TEMPERATURE RUSD_TEMPERATURE_GENERIC;
 
 typedef struct RUSD_MEM_ROW_REMAP_INFO {
     // Provided from NV2080_CTRL_CMD_FB_GET_ROW_REMAPPER_HISTOGRAM
@@ -221,6 +264,8 @@ typedef struct RUSD_MEM_ROW_REMAP_INFO {
 
     NvU32 correctableRows;
     NvU32 uncorrectableRows;
+    NvU32 correctableRowsInactive;
+    NvU32 uncorrectableRowsInactive;
     NvBool isPending;
     NvBool hasFailureOccurred;
 } RUSD_MEM_ROW_REMAP_INFO;
@@ -251,6 +296,26 @@ typedef struct RUSD_INST_POWER_USAGE {
     volatile NvU64 lastModifiedTimestamp;
     RUSD_INST_POWER_INFO info;
 } RUSD_INST_POWER_USAGE;
+
+typedef struct RUSD_POWER_POLICY_STATUS_INFO {
+    NvU32 tgpmW;         // Total GPU power in mW
+} RUSD_POWER_POLICY_STATUS_INFO;
+
+typedef struct RUSD_POWER_POLICY_STATUS {
+    volatile NvU64 lastModifiedTimestamp;
+    RUSD_POWER_POLICY_STATUS_INFO info;
+} RUSD_POWER_POLICY_STATUS;
+
+#define RUSD_FAN_COOLER_MAX_COOLERS 16U
+
+typedef struct RUSD_FAN_COOLER_INFO {
+    NvU32 rpmCurr[RUSD_FAN_COOLER_MAX_COOLERS];
+} RUSD_FAN_COOLER_INFO;
+
+typedef struct RUSD_FAN_COOLER_STATUS {
+    volatile NvU64 lastModifiedTimestamp;
+    RUSD_FAN_COOLER_INFO info;
+} RUSD_FAN_COOLER_STATUS;
 
 typedef struct RUSD_SHADOW_ERR_CONT {
     volatile NvU64 lastModifiedTimestamp;
@@ -313,7 +378,7 @@ typedef struct NV00DE_SHARED_DATA {
     NV_DECLARE_ALIGNED(RUSD_CLK_PUBLIC_DOMAIN_INFOS clkPublicDomainInfos, 8);
 
     // POLL_PERF
-    NV_DECLARE_ALIGNED(RUSD_CLK_THROTTLE_REASON clkThrottleReason, 8);
+    NV_DECLARE_ALIGNED(RUSD_CLK_THROTTLE_INFO clkThrottleInfo, 8);
 
     // POLL_PERF
     NV_DECLARE_ALIGNED(RUSD_PERF_DEVICE_UTILIZATION perfDevUtil, 8);
@@ -340,8 +405,14 @@ typedef struct NV00DE_SHARED_DATA {
     // POLL_POWER
     NV_DECLARE_ALIGNED(RUSD_INST_POWER_USAGE instPowerUsage, 8);
 
+    // POLL_POWER
+    NV_DECLARE_ALIGNED(RUSD_POWER_POLICY_STATUS powerPolicyStatus, 8);
+
     // POLL_PCI
     NV_DECLARE_ALIGNED(RUSD_PCIE_DATA pciBusData, 8);
+
+    // POLL_FAN
+    NV_DECLARE_ALIGNED(RUSD_FAN_COOLER_STATUS fanCoolerStatus, 8);
 } NV00DE_SHARED_DATA;
 
 //
@@ -354,6 +425,7 @@ typedef struct NV00DE_SHARED_DATA {
 #define NV00DE_RUSD_POLL_POWER     0x8
 #define NV00DE_RUSD_POLL_THERMAL   0x10
 #define NV00DE_RUSD_POLL_PCI       0x20
+#define NV00DE_RUSD_POLL_FAN       0x40
 
 typedef struct NV00DE_ALLOC_PARAMETERS {
     NvU64 polledDataMask; // Bitmask of data to request polling at alloc time, 0 if not needed

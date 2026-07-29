@@ -268,7 +268,7 @@ fbsrDestroy_GM107(OBJGPU *pGpu, OBJFBSR *pFbsr)
     {
         if (pFbsr->pSysMemDesc)
         {
-            memdescUnmapOld(pFbsr->pSysMemDesc, 1 /*kernel*/, 0,
+            memdescUnmapOld(pFbsr->pSysMemDesc, 1 /*kernel*/,
                             (pFbsr->type == FBSR_TYPE_FILE) ? (void*)pFbsr->pDmaBuffer :
                                                               (void*)pFbsr->pPinnedBuffer,
                             pFbsr->pMapCookie);
@@ -298,6 +298,7 @@ NV_STATUS
 fbsrBegin_GM107(OBJGPU *pGpu, OBJFBSR *pFbsr, FBSR_OP_TYPE op)
 {
     NV_STATUS status = NV_OK;
+    NvBool bVirtualMode;
     MemoryManager *pMemoryManager = GPU_GET_MEMORY_MANAGER(pGpu);
 
     pFbsr->op = op;
@@ -308,7 +309,8 @@ fbsrBegin_GM107(OBJGPU *pGpu, OBJFBSR *pFbsr, FBSR_OP_TYPE op)
         if (IS_GSP_CLIENT(pGpu) || IS_VIRTUAL(pGpu))
         {
             pFbsr->pCe = NULL;
-            NV_ASSERT_OK_OR_RETURN(memmgrInitCeUtils(pMemoryManager, NV_FALSE));
+            bVirtualMode = pMemoryManager->bUseVirtualCopyOnSuspend;
+            NV_ASSERT_OK_OR_RETURN(memmgrInitCeUtils(pMemoryManager, NV_FALSE, bVirtualMode));
         }
 
         NV_PRINTF(LEVEL_INFO, "%s %lld bytes of data\n",

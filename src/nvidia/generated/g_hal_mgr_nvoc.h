@@ -1,20 +1,22 @@
 
 #ifndef _G_HAL_MGR_NVOC_H_
 #define _G_HAL_MGR_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2019 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2019-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -44,6 +46,7 @@ extern "C" {
 
 #include "core/core.h"
 #include "core/hal.h"
+#include "nvoc/object.h"
 
 #define HALMGR_GET_HAL(p, halid)     halmgrGetHal((p), halid)
 
@@ -58,10 +61,18 @@ extern "C" {
 #endif
 
 
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__OBJHALMGR;
+struct NVOC_METADATA__Object;
+
+
 struct OBJHALMGR {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__OBJHALMGR *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct Object __nvoc_base_Object;
@@ -71,7 +82,14 @@ struct OBJHALMGR {
     struct OBJHALMGR *__nvoc_pbase_OBJHALMGR;    // halmgr
 
     // Data members
-    struct OBJHAL *pHalList[77];
+    struct OBJHAL *pHalList[81];
+};
+
+
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__OBJHALMGR {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__Object metadata__Object;
 };
 
 #ifndef __NVOC_CLASS_OBJHALMGR_TYPEDEF__
@@ -90,10 +108,10 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_OBJHALMGR;
     ((pThis)->__nvoc_pbase_OBJHALMGR)
 
 #ifdef __nvoc_hal_mgr_h_disabled
-#define __dynamicCast_OBJHALMGR(pThis) ((OBJHALMGR*)NULL)
+#define __dynamicCast_OBJHALMGR(pThis) ((OBJHALMGR*) NULL)
 #else //__nvoc_hal_mgr_h_disabled
 #define __dynamicCast_OBJHALMGR(pThis) \
-    ((OBJHALMGR*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJHALMGR)))
+    ((OBJHALMGR*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJHALMGR)))
 #endif //__nvoc_hal_mgr_h_disabled
 
 NV_STATUS __nvoc_objCreateDynamic_OBJHALMGR(OBJHALMGR**, Dynamic*, NvU32, va_list);
@@ -103,48 +121,47 @@ NV_STATUS __nvoc_objCreate_OBJHALMGR(OBJHALMGR**, Dynamic*, NvU32);
     __nvoc_objCreate_OBJHALMGR((ppNewObj), staticCast((pParent), Dynamic), (createFlags))
 
 
-// Wrapper macros
-
-// Dispatch functions
+// Wrapper macros for implementation functions
 NV_STATUS halmgrConstruct_IMPL(struct OBJHALMGR *arg_);
-
 #define __nvoc_halmgrConstruct(arg_) halmgrConstruct_IMPL(arg_)
-void halmgrDestruct_IMPL(struct OBJHALMGR *arg1);
 
-#define __nvoc_halmgrDestruct(arg1) halmgrDestruct_IMPL(arg1)
-NV_STATUS halmgrCreateHal_IMPL(struct OBJHALMGR *arg1, NvU32 arg2);
+void halmgrDestruct_IMPL(struct OBJHALMGR *arg_this);
+#define __nvoc_halmgrDestruct(arg_this) halmgrDestruct_IMPL(arg_this)
 
+NV_STATUS halmgrCreateHal_IMPL(struct OBJHALMGR *arg_this, NvU32 arg2);
 #ifdef __nvoc_hal_mgr_h_disabled
-static inline NV_STATUS halmgrCreateHal(struct OBJHALMGR *arg1, NvU32 arg2) {
+static inline NV_STATUS halmgrCreateHal(struct OBJHALMGR *arg_this, NvU32 arg2) {
     NV_ASSERT_FAILED_PRECOMP("OBJHALMGR was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_hal_mgr_h_disabled
-#define halmgrCreateHal(arg1, arg2) halmgrCreateHal_IMPL(arg1, arg2)
-#endif //__nvoc_hal_mgr_h_disabled
+#else // __nvoc_hal_mgr_h_disabled
+#define halmgrCreateHal(arg_this, arg2) halmgrCreateHal_IMPL(arg_this, arg2)
+#endif // __nvoc_hal_mgr_h_disabled
 
-NV_STATUS halmgrGetHalForGpu_IMPL(struct OBJHALMGR *arg1, NvU32 arg2, NvU32 arg3, NvU32 *arg4);
-
+NV_STATUS halmgrGetHalForGpu_IMPL(struct OBJHALMGR *arg_this, NvU32 arg2, NvU32 arg3, NvU32 *arg4);
 #ifdef __nvoc_hal_mgr_h_disabled
-static inline NV_STATUS halmgrGetHalForGpu(struct OBJHALMGR *arg1, NvU32 arg2, NvU32 arg3, NvU32 *arg4) {
+static inline NV_STATUS halmgrGetHalForGpu(struct OBJHALMGR *arg_this, NvU32 arg2, NvU32 arg3, NvU32 *arg4) {
     NV_ASSERT_FAILED_PRECOMP("OBJHALMGR was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_hal_mgr_h_disabled
-#define halmgrGetHalForGpu(arg1, arg2, arg3, arg4) halmgrGetHalForGpu_IMPL(arg1, arg2, arg3, arg4)
-#endif //__nvoc_hal_mgr_h_disabled
+#else // __nvoc_hal_mgr_h_disabled
+#define halmgrGetHalForGpu(arg_this, arg2, arg3, arg4) halmgrGetHalForGpu_IMPL(arg_this, arg2, arg3, arg4)
+#endif // __nvoc_hal_mgr_h_disabled
 
-struct OBJHAL *halmgrGetHal_IMPL(struct OBJHALMGR *arg1, NvU32 arg2);
-
+struct OBJHAL * halmgrGetHal_IMPL(struct OBJHALMGR *arg_this, NvU32 arg2);
 #ifdef __nvoc_hal_mgr_h_disabled
-static inline struct OBJHAL *halmgrGetHal(struct OBJHALMGR *arg1, NvU32 arg2) {
+static inline struct OBJHAL * halmgrGetHal(struct OBJHALMGR *arg_this, NvU32 arg2) {
     NV_ASSERT_FAILED_PRECOMP("OBJHALMGR was disabled!");
     return NULL;
 }
-#else //__nvoc_hal_mgr_h_disabled
-#define halmgrGetHal(arg1, arg2) halmgrGetHal_IMPL(arg1, arg2)
-#endif //__nvoc_hal_mgr_h_disabled
+#else // __nvoc_hal_mgr_h_disabled
+#define halmgrGetHal(arg_this, arg2) halmgrGetHal_IMPL(arg_this, arg2)
+#endif // __nvoc_hal_mgr_h_disabled
 
+
+// Wrapper macros for halified functions
+
+// Dispatch functions
 #undef PRIVATE_FIELD
 
 

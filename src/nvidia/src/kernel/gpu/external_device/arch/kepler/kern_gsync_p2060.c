@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -700,7 +700,7 @@ gsyncAttachExternalDevice_P2060
                               &pExtdev->WatchdogControl.pTimerEvents[gpuInstance],
                               extdevServiceWatchdog,
                               pExtdev,
-                              TMR_FLAG_RECUR);
+                              TMR_FLAGS_NONE);
     if (rmStatus != NV_OK)
     {
         NV_PRINTF(LEVEL_ERROR, "failed to create P2060 watchdog timer event.\n");
@@ -711,7 +711,7 @@ gsyncAttachExternalDevice_P2060
                               &pThis->FrameCountData.pTimerEvents[gpuInstance],
                               gsyncFrameCountTimerService_P2060,
                               pThis,
-                              TMR_FLAG_RECUR);
+                              TMR_FLAGS_NONE);
     if (rmStatus != NV_OK)
     {
         NV_PRINTF(LEVEL_ERROR, "failed to create P2060 frame count timer event.\n");
@@ -912,10 +912,11 @@ extdevService_P2060
         }
 
         // Attempt to queue a work item.
-        if (NV_OK != osQueueWorkItemWithFlags(pGpu,
-                                              _extdevService,
-                                              (void *)workerThreadData,
-                                              OS_QUEUE_WORKITEM_FLAGS_LOCK_GPU_GROUP_SUBDEVICE))
+        if (osQueueWorkItem(pGpu,
+                            _extdevService,
+                            (void *)workerThreadData,
+                            OS_QUEUE_WORKITEM_FLAGS_LOCK_GPU_GROUP_SUBDEVICE) !=
+            NV_OK)
         {
             portMemFree((void *)workerThreadData);
         }
@@ -1213,6 +1214,26 @@ gsyncReadUniversalFrameCount_P2060
     OBJTMR *pTmpTmr = NULL;
     OBJTMR *pTmr = GPU_GET_TIMER(pGpu);
 
+    //
+    // We do this loop to determine if framelock is enabled or not, instead of calling
+    // gsyncIsFrameLocked_P2060, which goes through i2c and is more expensive.
+    //
+    NvBool isFramelocked = NV_FALSE;
+    for (NvU32 iface = 0; !isFramelocked && iface < NV_P2060_MAX_IFACES_PER_GSYNC; iface++) 
+    {
+        for (NvU32 head = 0; !isFramelocked && head < OBJ_MAX_HEADS; head++) 
+        {
+            if (pThis->Iface[iface].Sync.Master[head] ||
+                pThis->Iface[iface].Sync.Slaved[head] ||
+                pThis->Iface[iface].Sync.LocalSlave[head]) 
+            {
+                isFramelocked = NV_TRUE;
+            }
+        }
+    }
+
+    NV_CHECK_OR_RETURN(LEVEL_INFO, isFramelocked, NV_ERR_INVALID_STATE);
+
     if (!(pThis->FrameCountData.iface == NV_P2060_MAX_IFACES_PER_GSYNC))
     {
         //
@@ -1257,7 +1278,8 @@ gsyncReadUniversalFrameCount_P2060
         // P2060 refreshrate is in 0.00001 Hz, so divide by 10000 to get Hz.
         // divide 1000000 by refreshRate to get the frame time in us.
         //
-        pThis->FrameCountData.frameTime = 1000000 / (pThis->RefreshRate/10000); //in us
+        NV_CHECK_OR_RETURN(LEVEL_INFO, pThis->RefreshRate >= 10, NV_ERR_INVALID_STATE);
+        pThis->FrameCountData.frameTime = 1000*1000*1000 / (pThis->RefreshRate/10); //in us
 
         //
         // Enable FrameCountTimerService to verify FrameCountData.initialDifference.
@@ -5069,9 +5091,6 @@ NV_STATUS gsyncFrameCountTimerService_P2060
     NV_ASSERT_OR_RETURN((pGsync && pGsync->pExtDev), NV_ERR_INVALID_DEVICE);
 
     pThis = (PDACP2060EXTERNALDEVICE)pGsync->pExtDev;
-
-    // disable the timer callback
-    tmrEventCancel(pTmr, pThis->FrameCountData.pTimerEvents[gpuGetInstance(pGpu)]);
 
     //
     // read the gsync and gpu frame count values.Cache the difference between them.

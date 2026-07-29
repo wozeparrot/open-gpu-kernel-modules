@@ -77,6 +77,7 @@
 #include <class/cl0004.h>               // NV01_TIMER
 #include <class/cl0090.h>               // KERNEL_GRAPHICS_CONTEXT
 #include <class/cl0100.h>               // LOCK_STRESS_OBJECT
+#include <class/cl0101.h>               // LOCK_TEST_RELAXED_DUP_OBJECT
 #include <class/cl506f.h>               // NV50_CHANNEL_GPFIFO
 #include <class/cl906f.h>               // GF100_CHANNEL_GPFIFO
 #include <class/cla06f.h>               // KEPLER_CHANNEL_GPFIFO_A
@@ -104,6 +105,8 @@
 #include <class/clc773.h>               // NVC773_DISP_CAPABILITIES
 #include <class/clc973.h>               // NVC973_DISP_CAPABILITIES
 #include <class/clca73.h>               // NVCA73_DISP_CAPABILITIES
+#include <class/clcb73.h>               // NVCB73_DISP_CAPABILITIES
+#include <class/clcc73.h>               // NVCC73_DISP_CAPABILITIES
 #include <class/cl0073.h>               // NV04_DISPLAY_COMMON
 #include <class/cl5080.h>               // NV50_DEFERRED_API_CLASS
 #include <class/cl900e.h>               // MPS_COMPUTE
@@ -134,6 +137,18 @@
 #include <class/clca7b.h>               // NVCA7B_WINDOW_IMM_CHANNEL_DMA
 #include <class/clca7d.h>               // NVCA7D_CORE_CHANNEL_DMA
 #include <class/clca7e.h>               // NVCA7E_WINDOW_CHANNEL_DMA
+#include <class/clcb70.h>               // NVCB70_DISPLAY
+#include <class/clcb71.h>               // NVCB71_DISP_SF_USER
+#include <class/clcb7a.h>               // NVCB7A_CURSOR_IMM_CHANNEL_PIO
+#include <class/clcb7b.h>               // NVCB7B_WINDOW_IMM_CHANNEL_DMA
+#include <class/clcb7d.h>               // NVCB7D_CORE_CHANNEL_DMA
+#include <class/clcb7e.h>               // NVCB7E_WINDOW_CHANNEL_DMA
+#include <class/clcc70.h>               // NVCC70_DISPLAY
+#include <class/clcc71.h>               // NVCC71_DISP_SF_USER
+#include <class/clcc7a.h>               // NVCC7A_CURSOR_IMM_CHANNEL_PIO
+#include <class/clcc7b.h>               // NVCC7B_WINDOW_IMM_CHANNEL_DMA
+#include <class/clcc7d.h>               // NVCC7D_CORE_CHANNEL_DMA
+#include <class/clcc7e.h>               // NVCC7E_WINDOW_CHANNEL_DMA
 #include <class/cl9010.h>               // NV9010_VBLANK_CALLBACK
 #include <class/cl90cc.h>               // GF100_PROFILER
 #include <class/clb0cc.h>               // MAXWELL_PROFILER
@@ -158,15 +173,20 @@
 #include <class/clc7b0.h>               // NVC7B0_VIDEO_DECODER
 #include <class/clc9b0.h>               // NVC9B0_VIDEO_DECODER
 #include <class/clcdb0.h>               // NVCDB0_VIDEO_DECODER
+#include <class/clceb0.h>               // NVCEB0_VIDEO_DECODER
 #include <class/clcfb0.h>               // NVCFB0_VIDEO_DECODER
+#include <class/cld1b0.h>               // NVD1B0_VIDEO_DECODER
 #include <class/clc4b7.h>               // NVC4B7_VIDEO_ENCODER
 #include <class/clb4b7.h>               // NVB4B7_VIDEO_ENCODER
 #include <class/clc7b7.h>               // NVC7B7_VIDEO_ENCODER
 #include <class/clc9b7.h>               // NVC9B7_VIDEO_ENCODER
+#include <class/clceb7.h>               // NVCEB7_VIDEO_ENCODER
 #include <class/clcfb7.h>               // NVCFB7_VIDEO_ENCODER
+#include <class/cld1b7.h>               // NVD1B7_VIDEO_ENCODER
 #include <class/clb8d1.h>               // NVB8D1_VIDEO_NVJPG
 #include <class/clc4d1.h>               // NVC4D1_VIDEO_NVJPG
 #include <class/clc9d1.h>               // NVC9D1_VIDEO_NVJPG
+#include <class/clced0.h>               // NVCED0_VIDEO_NVJPG
 #include <class/clcdd1.h>               // NVCDD1_VIDEO_NVJPG
 #include <class/clcfd1.h>               // NVCFD1_VIDEO_NVJPG
 #include <class/clb8fa.h>               // NVB8FA_VIDEO_OFA
@@ -174,7 +194,9 @@
 #include <class/clc7fa.h>               // NVC7FA_VIDEO_OFA
 #include <class/clc9fa.h>               // NVC9FA_VIDEO_OFA
 #include <class/clcdfa.h>               // NVCDFA_VIDEO_OFA
+#include <class/clcefa.h>               // NVCEFA_VIDEO_OFA
 #include <class/clcffa.h>               // NVCFFA_VIDEO_OFA
+#include <class/cld1fa.h>               // NVD1FA_VIDEO_OFA
 #include <class/cla140.h>               // KEPLER_INLINE_TO_MEMORY_B
 #include <class/cl9067.h>               // FERMI_CONTEXT_SHARE_A
 #include <class/cla06c.h>               // KEPLER_CHANNEL_GROUP_A
@@ -189,6 +211,7 @@
 #include <class/clc365.h>               // ACCESS_COUNTER_NOTIFY_BUFFER
 #include <class/clc369.h>               // MMU_FAULT_BUFFER
 #include <class/clc763.h>               // MMU_VIDMEM_ACCESS_BIT_BUFFER
+#include <class/clc863.h>               // HOPPER_MMU_VIDMEM_ACCESS_BIT_BUFFER
 #include <class/clc597.h>               // TURING_A
 #include <class/clc5c0.h>               // TURING_COMPUTE_A
 #include <class/clc697.h>               // AMPERE_A
@@ -468,6 +491,10 @@
 #define LOCK_STRESS_OBJECT                       (0x00000100)
 #endif
 
+#ifndef LOCK_TEST_RELAXED_DUP_OBJECT
+#define LOCK_TEST_RELAXED_DUP_OBJECT             (0x00000101)
+#endif
+
 #ifndef NV50_CHANNEL_GPFIFO
 #define NV50_CHANNEL_GPFIFO                      (0x0000506f)
 #endif
@@ -577,6 +604,14 @@
 
 #ifndef NVCA73_DISP_CAPABILITIES
 #define NVCA73_DISP_CAPABILITIES                 (0x0000ca73)
+#endif
+
+#ifndef NVCB73_DISP_CAPABILITIES
+#define NVCB73_DISP_CAPABILITIES                 (0x0000cb73)
+#endif
+
+#ifndef NVCC73_DISP_CAPABILITIES
+#define NVCC73_DISP_CAPABILITIES                 (0x0000cc73)
 #endif
 
 #ifndef NV04_DISPLAY_COMMON
@@ -699,6 +734,54 @@
 #define NVCA7E_WINDOW_CHANNEL_DMA                (0x0000ca7e)
 #endif
 
+#ifndef NVCB70_DISPLAY
+#define NVCB70_DISPLAY                           (0x0000cb70)
+#endif
+
+#ifndef NVCB71_DISP_SF_USER
+#define NVCB71_DISP_SF_USER                      (0x0000cb71)
+#endif
+
+#ifndef NVCB7A_CURSOR_IMM_CHANNEL_PIO
+#define NVCB7A_CURSOR_IMM_CHANNEL_PIO            (0x0000cb7a)
+#endif
+
+#ifndef NVCB7B_WINDOW_IMM_CHANNEL_DMA
+#define NVCB7B_WINDOW_IMM_CHANNEL_DMA            (0x0000cb7b)
+#endif
+
+#ifndef NVCB7D_CORE_CHANNEL_DMA
+#define NVCB7D_CORE_CHANNEL_DMA                  (0x0000cb7d)
+#endif
+
+#ifndef NVCB7E_WINDOW_CHANNEL_DMA
+#define NVCB7E_WINDOW_CHANNEL_DMA                (0x0000cb7e)
+#endif
+
+#ifndef NVCC70_DISPLAY
+#define NVCC70_DISPLAY                           (0x0000cc70)
+#endif
+
+#ifndef NVCC71_DISP_SF_USER
+#define NVCC71_DISP_SF_USER                      (0x0000cc71)
+#endif
+
+#ifndef NVCC7A_CURSOR_IMM_CHANNEL_PIO
+#define NVCC7A_CURSOR_IMM_CHANNEL_PIO            (0x0000cc7a)
+#endif
+
+#ifndef NVCC7B_WINDOW_IMM_CHANNEL_DMA
+#define NVCC7B_WINDOW_IMM_CHANNEL_DMA            (0x0000cc7b)
+#endif
+
+#ifndef NVCC7D_CORE_CHANNEL_DMA
+#define NVCC7D_CORE_CHANNEL_DMA                  (0x0000cc7d)
+#endif
+
+#ifndef NVCC7E_WINDOW_CHANNEL_DMA
+#define NVCC7E_WINDOW_CHANNEL_DMA                (0x0000cc7e)
+#endif
+
 #ifndef NV9010_VBLANK_CALLBACK
 #define NV9010_VBLANK_CALLBACK                   (0x00009010)
 #endif
@@ -795,8 +878,16 @@
 #define NVCDB0_VIDEO_DECODER                     (0x0000cdb0)
 #endif
 
+#ifndef NVCEB0_VIDEO_DECODER
+#define NVCEB0_VIDEO_DECODER                     (0x0000ceb0)
+#endif
+
 #ifndef NVCFB0_VIDEO_DECODER
 #define NVCFB0_VIDEO_DECODER                     (0x0000cfb0)
+#endif
+
+#ifndef NVD1B0_VIDEO_DECODER
+#define NVD1B0_VIDEO_DECODER                     (0x0000d1b0)
 #endif
 
 #ifndef NVC4B7_VIDEO_ENCODER
@@ -815,8 +906,16 @@
 #define NVC9B7_VIDEO_ENCODER                     (0x0000c9b7)
 #endif
 
+#ifndef NVCEB7_VIDEO_ENCODER
+#define NVCEB7_VIDEO_ENCODER                     (0x0000ceb7)
+#endif
+
 #ifndef NVCFB7_VIDEO_ENCODER
 #define NVCFB7_VIDEO_ENCODER                     (0x0000cfb7)
+#endif
+
+#ifndef NVD1B7_VIDEO_ENCODER
+#define NVD1B7_VIDEO_ENCODER                     (0x0000d1b7)
 #endif
 
 #ifndef NVB8D1_VIDEO_NVJPG
@@ -829,6 +928,10 @@
 
 #ifndef NVC9D1_VIDEO_NVJPG
 #define NVC9D1_VIDEO_NVJPG                       (0x0000c9d1)
+#endif
+
+#ifndef NVCED0_VIDEO_NVJPG
+#define NVCED0_VIDEO_NVJPG                       (0x0000ced0)
 #endif
 
 #ifndef NVCDD1_VIDEO_NVJPG
@@ -859,8 +962,16 @@
 #define NVCDFA_VIDEO_OFA                         (0x0000cdfa)
 #endif
 
+#ifndef NVCEFA_VIDEO_OFA
+#define NVCEFA_VIDEO_OFA                         (0x0000cefa)
+#endif
+
 #ifndef NVCFFA_VIDEO_OFA
 #define NVCFFA_VIDEO_OFA                         (0x0000cffa)
+#endif
+
+#ifndef NVD1FA_VIDEO_OFA
+#define NVD1FA_VIDEO_OFA                         (0x0000d1fa)
 #endif
 
 #ifndef KEPLER_INLINE_TO_MEMORY_B
@@ -917,6 +1028,10 @@
 
 #ifndef MMU_VIDMEM_ACCESS_BIT_BUFFER
 #define MMU_VIDMEM_ACCESS_BIT_BUFFER             (0x0000c763)
+#endif
+
+#ifndef HOPPER_MMU_VIDMEM_ACCESS_BIT_BUFFER
+#define HOPPER_MMU_VIDMEM_ACCESS_BIT_BUFFER      (0x0000c863)
 #endif
 
 #ifndef TURING_A

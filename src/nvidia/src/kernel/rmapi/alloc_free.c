@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -41,6 +41,7 @@
 
 #include "gpu/device/device.h"
 #include "class/cl0080.h"
+#include "class/clc372sw.h"
 
 #include "class/cl83de.h" // GT200_DEBUGGER
 #include "gpu/gr/kernel_sm_debugger_session.h"
@@ -761,7 +762,7 @@ serverAllocResourceUnderLock
     tmpStatus = gpuGetByRef(pParentRef, NULL, &pGpu);
 
     // Override locking flags if we'll need to RPC to GSP
-    if (pGpu != NULL && IS_GSP_CLIENT(pGpu) &&
+    if (pGpu != NULL && IS_FW_CLIENT(pGpu) &&
         (pResDesc->flags & RS_FLAGS_ALLOC_RPC_TO_PHYS_RM))
     {
         resLockAccess = LOCK_ACCESS_WRITE; // always write as we're RPCing to GSP
@@ -774,7 +775,6 @@ serverAllocResourceUnderLock
         {
             NV_PRINTF(LEVEL_INFO, "Overriding flags for alloc of class %04x\n",
                 pRmAllocParams->externalClassId);
-            pLockInfo->flags &= ~RM_LOCK_FLAGS_NO_GPUS_LOCK;
             pLockInfo->flags |= RM_LOCK_FLAGS_GPU_GROUP_LOCK;
             if ((pLockInfo->state & RM_LOCK_STATES_ALLOW_RECURSIVE_LOCKS) == 0)
             {
@@ -882,7 +882,7 @@ serverAllocResourceUnderLock
                 goto done;
             }
 
-            if (!IS_VIRTUAL(pGpu) && !IS_GSP_CLIENT(pGpu))
+            if (!IS_VIRTUAL(pGpu) && !IS_FW_CLIENT(pGpu))
             {
                 status = NV_OK;
                 goto done;
@@ -890,7 +890,7 @@ serverAllocResourceUnderLock
 
             // if physical RM RPC make sure we're a GSP client otherwise skip
             if (((pResDesc->flags & (RS_FLAGS_ALLOC_RPC_TO_VGPU_HOST | RS_FLAGS_ALLOC_RPC_TO_PHYS_RM)) == RS_FLAGS_ALLOC_RPC_TO_PHYS_RM) &&
-                (!IS_GSP_CLIENT(pGpu)))
+                (!IS_FW_CLIENT(pGpu)))
             {
                 status = NV_OK;
                 goto done;
@@ -973,7 +973,7 @@ serverFreeResourceRpcUnderLock
     pRmResource = dynamicCast(pResourceRef->pResource, RmResource);
     status = gpuGetByRef(pResourceRef, &bBcResource, &pGpu);
     if ((status != NV_OK) ||
-        (!IS_VIRTUAL(pGpu) && !IS_GSP_CLIENT(pGpu)) ||
+        (!IS_VIRTUAL(pGpu) && !IS_FW_CLIENT(pGpu)) ||
         (pRmResource == NULL) ||
         (pRmResource->bRpcFree == NV_FALSE))
     {
@@ -1085,7 +1085,7 @@ serverUpdateLockFlagsForFree
     if (gpuGetByRef(pLockInfo->pContextRef, NULL, &pGpu) == NV_OK)
     {
         RmResource *pRmResource = dynamicCast(pRmFreeParams->pResourceRef->pResource, RmResource);
-        if (pGpu != NULL && IS_GSP_CLIENT(pGpu) && pRmResource != NULL && pRmResource->bRpcFree)
+        if (pGpu != NULL && IS_FW_CLIENT(pGpu) && pRmResource != NULL && pRmResource->bRpcFree)
         {
             //
             // If the resource desc says no need for GPU locks, we still need to lock
@@ -1095,7 +1095,6 @@ serverUpdateLockFlagsForFree
             {
                 NV_PRINTF(LEVEL_INFO, "Overriding flags for free of class %04x\n",
                     pRmFreeParams->pResourceRef->externalClassId);
-                pLockInfo->flags &= ~RM_LOCK_FLAGS_NO_GPUS_LOCK;
                 pLockInfo->flags |= RM_LOCK_FLAGS_GPU_GROUP_LOCK;
                 pLockInfo->state |= RM_LOCK_STATES_ALLOW_RECURSIVE_LOCKS;
             }
@@ -1381,6 +1380,18 @@ resservResourceFactory
         }
     }
 
+    if (pGpu != NULL &&
+        !RMCFG_FEATURE_PLATFORM_MODS &&
+        !gpuIsClassSupported(pGpu, pParams->externalClassId))
+    {
+        if (!IsGM107(pGpu) || // Allow unsupported classes on GM107 on VGPU: bug 5354490 WAR
+            !hypervisorIsVgxHyper())
+        {
+            NV_PRINTF(LEVEL_INFO, "Skipping unsupported class 0x%x\n", pParams->externalClassId);
+            return NV_ERR_NOT_SUPPORTED;
+        }
+    }
+
     status = objCreateDynamicWithFlags(&pDynamic,
                                        (Object*)pGpu,
                                        pResDesc->pClassInfo,
@@ -1395,8 +1406,14 @@ resservResourceFactory
     if (pResource == NULL)
         return NV_ERR_INSUFFICIENT_RESOURCES;
 
-    if (pResDesc->internalClassId == classId(Subdevice) || pResDesc->internalClassId == classId(Device))
+    if (pResDesc->internalClassId == classId(Subdevice)  || pResDesc->internalClassId == classId(Device) ||
+        pResDesc->internalClassId == classId(DispCommon))
     {
+        //
+        // DispCommon and DispSwObj's pGpu will be retrieved at the beginning of the function,
+        // since their parent is Device.
+        //
+        if (!(pResDesc->internalClassId == classId(DispCommon)) && !(pResDesc->internalClassId == classId(DispSwObj)))
         {
             pGpu = GPU_RES_GET_GPU(dynamicCast(pDynamic, GpuResource));
         }
@@ -1519,11 +1536,12 @@ rmapiFreeWithSecInfo
     }
     else
     {
-        NV_PRINTF(LEVEL_INFO,
-                  "Nv01Free: free failed; status: %s (0x%08x)\n",
-                  nvstatusToString(status), status);
-        NV_PRINTF(LEVEL_INFO, "Nv01Free:  client:0x%x object:0x%x\n",
-                  hClient, hObject);
+       NV_PRINTF_COND(status == NV_ERR_GPU_IN_FULLCHIP_RESET, LEVEL_INFO, LEVEL_WARNING,
+                "Nv01Free: free failed; status: %s (0x%08x)\n",
+                nvstatusToString(status), status);
+       NV_PRINTF_COND(status == NV_ERR_GPU_IN_FULLCHIP_RESET, LEVEL_INFO, LEVEL_WARNING,
+                "Nv01Free:  client:0x%x object:0x%x\n",
+                hClient, hObject);
     }
 
     return status;

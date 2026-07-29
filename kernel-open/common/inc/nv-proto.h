@@ -25,6 +25,7 @@
 #define _NV_PROTO_H_
 
 #include "nv-pci.h"
+#include "nv-platform.h"
 
 extern const char *nv_device_name;
 
@@ -41,7 +42,7 @@ void        nv_procfs_remove_gpu        (nv_linux_state_t *);
 
 int         nvidia_mmap                 (struct file *, struct vm_area_struct *);
 int         nvidia_mmap_helper          (nv_state_t *, nv_linux_file_private_t *, nvidia_stack_t *, struct vm_area_struct *, void *);
-int         nv_encode_caching           (pgprot_t *, NvU32, NvU32);
+int         nv_encode_caching           (pgprot_t *, NvU32, nv_memory_type_t);
 void        nv_revoke_gpu_mappings_locked(nv_state_t *);
 
 NvUPtr      nv_vm_map_pages             (struct page **, NvU32, NvBool, NvBool);
@@ -77,6 +78,8 @@ NV_STATUS     nv_set_system_power_state (nv_power_state_t, nv_pm_action_depth_t)
 
 void          nvidia_modeset_suspend           (NvU32 gpuId);
 void          nvidia_modeset_resume            (NvU32 gpuId);
+void          nvidia_modeset_remove            (NvU32 gpuId);
+void          nvidia_modeset_probe             (const nv_linux_state_t *nvl);
 NvBool        nv_is_uuid_in_gpu_exclusion_list (const char *);
 
 NV_STATUS     nv_parse_per_device_option_string(nvidia_stack_t *sp);

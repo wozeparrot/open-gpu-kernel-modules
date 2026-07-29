@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1999-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1999-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -187,7 +187,7 @@ static inline void nv_set_memory_type(nv_alloc_t *at, NvU32 type)
     {
         for (i = 0; i < at->num_pages; i++)
         {
-            page_ptr = at->page_table[i];
+            page_ptr = &at->page_table[i];
             page = NV_GET_PAGE_STRUCT(page_ptr->phys_addr);
 #if defined(NV_SET_MEMORY_ARRAY_UC_PRESENT)
             pages[i] = (unsigned long)page_address(page);
@@ -211,7 +211,7 @@ static inline void nv_set_memory_type(nv_alloc_t *at, NvU32 type)
     else
     {
         for (i = 0; i < at->num_pages; i++)
-            nv_set_contig_memory_type(at->page_table[i], 1, type);
+            nv_set_contig_memory_type(&at->page_table[i], 1, type);
     }
 }
 
@@ -294,7 +294,6 @@ static NV_STATUS nv_alloc_coherent_pages(
     NvU32 i;
     unsigned int gfp_mask;
     unsigned long virt_addr = 0;
-    dma_addr_t bus_addr;
     nv_linux_state_t *nvl;
     struct device *dev;
 
@@ -312,7 +311,7 @@ static NV_STATUS nv_alloc_coherent_pages(
 
     virt_addr = (unsigned long)dma_alloc_coherent(dev,
                                                   at->num_pages * PAGE_SIZE,
-                                                  &bus_addr,
+                                                  &at->dma_handle,
                                                   gfp_mask);
     if (!virt_addr)
     {
@@ -323,18 +322,15 @@ static NV_STATUS nv_alloc_coherent_pages(
 
     for (i = 0; i < at->num_pages; i++)
     {
-        page_ptr = at->page_table[i];
+        page_ptr = &at->page_table[i];
 
         page_ptr->virt_addr = virt_addr + i * PAGE_SIZE;
         page_ptr->phys_addr = virt_to_phys((void *)page_ptr->virt_addr);
-        page_ptr->dma_addr  = bus_addr + i * PAGE_SIZE;
     }
 
     if (at->cache_type != NV_MEMORY_CACHED)
     {
-        nv_set_contig_memory_type(at->page_table[0],
-                                  at->num_pages,
-                                  NV_MEMORY_UNCACHED);
+        nv_set_contig_memory_type(&at->page_table[0], at->num_pages, NV_MEMORY_UNCACHED);
     }
 
     at->flags.coherent = NV_TRUE;
@@ -348,17 +344,15 @@ static void nv_free_coherent_pages(
     nvidia_pte_t *page_ptr;
     struct device *dev = at->dev;
 
-    page_ptr = at->page_table[0];
+    page_ptr = &at->page_table[0];
 
     if (at->cache_type != NV_MEMORY_CACHED)
     {
-        nv_set_contig_memory_type(at->page_table[0],
-                                  at->num_pages,
-                                  NV_MEMORY_WRITEBACK);
+        nv_set_contig_memory_type(page_ptr, at->num_pages, NV_MEMORY_WRITEBACK);
     }
 
     dma_free_coherent(dev, at->num_pages * PAGE_SIZE,
-                      (void *)page_ptr->virt_addr, page_ptr->dma_addr);
+                      (void *)page_ptr->virt_addr, at->dma_handle);
 }
 
 NV_STATUS nv_alloc_contig_pages(
@@ -368,17 +362,16 @@ NV_STATUS nv_alloc_contig_pages(
 {
     NV_STATUS status;
     nvidia_pte_t *page_ptr;
-    NvU32 i, j;
+    NvU32 i;
     unsigned int gfp_mask;
     unsigned long virt_addr = 0;
     NvU64 phys_addr;
-    struct device *dev = at->dev;
 
     nv_printf(NV_DBG_MEMINFO,
             "NVRM: VM: %s: %u pages\n", __FUNCTION__, at->num_pages);
 
     // TODO: This is a temporary WAR, and will be removed after fixing bug 200732409.
-    if (os_is_xen_dom0() || at->flags.unencrypted)
+    if (os_is_xen_dom0())
         return nv_alloc_coherent_pages(nv, at);
 
     at->order = get_order(at->num_pages * PAGE_SIZE);
@@ -396,6 +389,11 @@ NV_STATUS nv_alloc_contig_pages(
     else
     {
         NV_GET_FREE_PAGES(virt_addr, at->order, gfp_mask);
+
+        // In CC, NV_GET_FREE_PAGES only allocates protected sysmem.
+        // To get unprotected sysmem, this memory is marked as unencrypted.
+        nv_set_memory_decrypted_zeroed(at->flags.unencrypted, virt_addr, 1 << at->order,
+                                       at->num_pages * PAGE_SIZE);
     }
     if (virt_addr == 0)
     {
@@ -429,19 +427,14 @@ NV_STATUS nv_alloc_contig_pages(
             goto failed;
         }
 
-        page_ptr = at->page_table[i];
+        page_ptr = &at->page_table[i];
         page_ptr->phys_addr = phys_addr;
         page_ptr->virt_addr = virt_addr;
-        page_ptr->dma_addr = nv_phys_to_dma(dev, page_ptr->phys_addr);
-
-        NV_MAYBE_RESERVE_PAGE(page_ptr);
     }
 
     if (at->cache_type != NV_MEMORY_CACHED)
     {
-        nv_set_contig_memory_type(at->page_table[0],
-                                  at->num_pages,
-                                  NV_MEMORY_UNCACHED);
+        nv_set_contig_memory_type(&at->page_table[0], at->num_pages, NV_MEMORY_UNCACHED);
     }
 
     at->flags.coherent = NV_FALSE;
@@ -449,13 +442,12 @@ NV_STATUS nv_alloc_contig_pages(
     return NV_OK;
 
 failed:
-    if (i > 0)
-    {
-        for (j = 0; j < i; j++)
-            NV_MAYBE_UNRESERVE_PAGE(at->page_table[j]);
-    }
+    page_ptr = &at->page_table[0];
 
-    page_ptr = at->page_table[0];
+    // For unprotected sysmem in CC, memory is marked as unencrypted during allocation.
+    // NV_FREE_PAGES only deals with protected sysmem. Mark memory as encrypted and protected before free.
+    nv_set_memory_encrypted(at->flags.unencrypted, page_ptr->virt_addr, 1 << at->order);
+
     NV_FREE_PAGES(page_ptr->virt_addr, at->order);
 
     return status;
@@ -466,7 +458,6 @@ void nv_free_contig_pages(
 )
 {
     nvidia_pte_t *page_ptr;
-    unsigned int i;
 
     nv_printf(NV_DBG_MEMINFO,
             "NVRM: VM: %s: %u pages\n", __FUNCTION__, at->num_pages);
@@ -476,19 +467,14 @@ void nv_free_contig_pages(
 
     if (at->cache_type != NV_MEMORY_CACHED)
     {
-        nv_set_contig_memory_type(at->page_table[0],
-                                  at->num_pages,
-                                  NV_MEMORY_WRITEBACK);
+        nv_set_contig_memory_type(&at->page_table[0], at->num_pages, NV_MEMORY_WRITEBACK);
     }
 
-    for (i = 0; i < at->num_pages; i++)
-    {
-        page_ptr = at->page_table[i];
+    page_ptr = &at->page_table[0];
 
-        NV_MAYBE_UNRESERVE_PAGE(page_ptr);
-    }
-
-    page_ptr = at->page_table[0];
+    // For unprotected sysmem in CC, memory is marked as unencrypted during allocation.
+    // NV_FREE_PAGES only deals with protected sysmem. Mark memory as encrypted and protected before free.
+    nv_set_memory_encrypted(at->flags.unencrypted, page_ptr->virt_addr, 1 << at->order);
 
     NV_FREE_PAGES(page_ptr->virt_addr, at->order);
 }
@@ -504,8 +490,6 @@ NV_STATUS nv_alloc_system_pages(
     unsigned int gfp_mask;
     unsigned long virt_addr = 0;
     NvU64 phys_addr;
-    struct device *dev = at->dev;
-    dma_addr_t bus_addr;
 
     unsigned int alloc_page_size = PAGE_SIZE << at->order;
     unsigned int alloc_num_pages = NV_CEIL(at->num_pages * PAGE_SIZE, alloc_page_size);
@@ -521,15 +505,7 @@ NV_STATUS nv_alloc_system_pages(
 
     for (i = 0; i < alloc_num_pages; i++)
     {
-        if (at->flags.unencrypted && (dev != NULL))
-        {
-            virt_addr = (unsigned long)dma_alloc_coherent(dev,
-                                                          alloc_page_size,
-                                                          &bus_addr,
-                                                          gfp_mask);
-            at->flags.coherent = NV_TRUE;
-        }
-        else if (at->flags.node)
+        if (at->flags.node)
         {
             unsigned long ptr = 0ULL;
             NV_ALLOC_PAGES_NODE(ptr, at->node_id, at->order, gfp_mask);
@@ -545,6 +521,11 @@ NV_STATUS nv_alloc_system_pages(
         else
         {
             NV_GET_FREE_PAGES(virt_addr, at->order, gfp_mask);
+
+            // In CC, NV_GET_FREE_PAGES only allocates protected sysmem.
+            // To get unprotected sysmem, this memory is marked as unencrypted.
+            nv_set_memory_decrypted_zeroed(at->flags.unencrypted, virt_addr, 1 << at->order,
+                                           alloc_page_size);
         }
 
         if (virt_addr == 0)
@@ -563,6 +544,11 @@ NV_STATUS nv_alloc_system_pages(
         for (sub_page_idx = 0; sub_page_idx < os_pages_in_page; sub_page_idx++)
         {
             unsigned long sub_page_virt_addr = virt_addr + sub_page_offset;
+            unsigned int base_page_idx = (i * os_pages_in_page) + sub_page_idx;
+
+            if (base_page_idx >= at->num_pages)
+                break;
+
             phys_addr = nv_get_kern_phys_address(sub_page_virt_addr);
             if (phys_addr == 0)
             {
@@ -586,22 +572,10 @@ NV_STATUS nv_alloc_system_pages(
             }
 #endif
 
-            page_ptr = at->page_table[(i * os_pages_in_page) + sub_page_idx];
+            page_ptr = &at->page_table[base_page_idx];
             page_ptr->phys_addr = phys_addr;
             page_ptr->virt_addr = sub_page_virt_addr;
 
-            //
-            // Use unencrypted dma_addr returned by dma_alloc_coherent() as
-            // nv_phys_to_dma() returns encrypted dma_addr when AMD SEV is enabled.
-            //
-            if (at->flags.coherent)
-                page_ptr->dma_addr = bus_addr;
-            else if (dev != NULL)
-                page_ptr->dma_addr = nv_phys_to_dma(dev, page_ptr->phys_addr);
-            else
-                page_ptr->dma_addr = page_ptr->phys_addr;
-
-            NV_MAYBE_RESERVE_PAGE(page_ptr);
             sub_page_offset += PAGE_SIZE;
         }
     }
@@ -616,17 +590,13 @@ failed:
     {
         for (j = 0; j < i; j++)
         {
-            page_ptr = at->page_table[j * os_pages_in_page];
-            NV_MAYBE_UNRESERVE_PAGE(page_ptr);
-            if (at->flags.coherent)
-            {
-                dma_free_coherent(dev, alloc_page_size, (void *)page_ptr->virt_addr,
-                                  page_ptr->dma_addr);
-            }
-            else
-            {
-                NV_FREE_PAGES(page_ptr->virt_addr, at->order);
-            }
+            page_ptr = &at->page_table[j * os_pages_in_page];
+
+            // For unprotected sysmem in CC, memory is marked as unencrypted during allocation.
+            // NV_FREE_PAGES only deals with protected sysmem. Mark memory as encrypted and protected before free.
+            nv_set_memory_encrypted(at->flags.unencrypted, page_ptr->virt_addr, 1 << at->order);
+
+            NV_FREE_PAGES(page_ptr->virt_addr, at->order);
         }
     }
 
@@ -639,7 +609,6 @@ void nv_free_system_pages(
 {
     nvidia_pte_t *page_ptr;
     unsigned int i;
-    struct device *dev = at->dev;
 
     unsigned int alloc_page_size = PAGE_SIZE << at->order;
     unsigned int os_pages_in_page = alloc_page_size / PAGE_SIZE;
@@ -650,27 +619,46 @@ void nv_free_system_pages(
     if (at->cache_type != NV_MEMORY_CACHED)
         nv_set_memory_type(at, NV_MEMORY_WRITEBACK);
 
-    for (i = 0; i < at->num_pages; i++)
-    {
-        page_ptr = at->page_table[i];
-
-        NV_MAYBE_UNRESERVE_PAGE(page_ptr);
-    }
-
     for (i = 0; i < at->num_pages; i += os_pages_in_page)
     {
-        page_ptr = at->page_table[i];
+        page_ptr = &at->page_table[i];
 
-        if (at->flags.coherent)
-        {
-            dma_free_coherent(dev, alloc_page_size, (void *)page_ptr->virt_addr,
-                              page_ptr->dma_addr);
-        }
-        else
-        {
-            NV_FREE_PAGES(page_ptr->virt_addr, at->order);
-        }
+        // For unprotected sysmem in CC, memory is marked as unencrypted during allocation.
+        // NV_FREE_PAGES only deals with protected sysmem. Mark memory as encrypted and protected before free.
+        nv_set_memory_encrypted(at->flags.unencrypted, page_ptr->virt_addr, 1 << at->order);
+
+        NV_FREE_PAGES(page_ptr->virt_addr, at->order);
     }
+}
+
+static NvUPtr nv_vmap(struct page **pages, NvU32 page_count,
+                      NvBool cached, NvBool unencrypted)
+{
+    void *ptr;
+    pgprot_t prot = PAGE_KERNEL;
+#if defined(NVCPU_X86_64)
+    if (unencrypted)
+    {
+        prot = cached ? nv_adjust_pgprot(PAGE_KERNEL_NOENC) :
+                        nv_adjust_pgprot(NV_PAGE_KERNEL_NOCACHE_NOENC);
+    }
+    else
+    {
+        prot = cached ? PAGE_KERNEL : PAGE_KERNEL_NOCACHE;
+    }
+#elif defined(NVCPU_AARCH64)
+    prot = cached ? PAGE_KERNEL : NV_PGPROT_UNCACHED(PAGE_KERNEL);
+#endif
+    ptr = vmap(pages, page_count, VM_MAP, prot);
+    NV_MEMDBG_ADD(ptr, page_count * PAGE_SIZE);
+
+    return (NvUPtr)ptr;
+}
+
+static void nv_vunmap(NvUPtr vaddr, NvU32 page_count)
+{
+    vunmap((void *)vaddr);
+    NV_MEMDBG_REMOVE((void *)vaddr, page_count * PAGE_SIZE);
 }
 
 NvUPtr nv_vm_map_pages(

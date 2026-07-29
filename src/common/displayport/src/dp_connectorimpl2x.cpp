@@ -36,6 +36,19 @@
 #include "ctrl/ctrl0073/ctrl0073dp.h"
 #include "dp_printf.h"
 
+
+#define LOGICAL_LANES          4U
+#define EFF_BPP_NON_DSC_SCALER 256U
+#define EFF_BPP_DSC_SCALER     16U
+//
+// DP1: 8b/10b,    1 symbol is 8 bits.
+// DP2: 128b/132b, 1 symbol is 32 bits.
+//
+#define DP1_SYMBOL_SIZE       8U
+#define DP2_SYMBOL_SIZE      32U
+
+#define GET_SYMBOL_SIZE(bIsDp2xChannelCoding) ((bIsDp2xChannelCoding) ? DP2_SYMBOL_SIZE : DP1_SYMBOL_SIZE)
+
 using namespace DisplayPort;
 //
 // The regkey value is available in connector, so using a global variable
@@ -63,6 +76,47 @@ void ConnectorImpl2x::applyDP2xRegkeyOverrides()
     {
         hal->setIgnoreCableIdCaps(true);
     }
+    if (dpRegkeyDatabase.bCableVconnSourceUnknownWar)
+    {
+        hal->setCableVconnSourceUnknown();
+    }
+}
+
+bool ConnectorImpl2x::getValidLowestLinkConfig
+(
+    LinkConfiguration      &lConfig,
+    LinkConfiguration      &lowestSelected,
+    ModesetInfo             modesetInfo,
+    const DscParams        *pDscParams
+)
+{
+    bool bIsModeSupported = ConnectorImpl::getValidLowestLinkConfig(lConfig, lowestSelected, modesetInfo, pDscParams);
+    bool bAvoidHBR3       = main->isAvoidHBR3WAREnabled() && (lowestSelected.peakRate == dp2LinkRate_8_10Gbps);
+    unsigned i = 0;
+    if (!bIsModeSupported || !bAvoidHBR3)
+    {
+        return bIsModeSupported;
+    }
+    for (i = 0; i < numPossibleLnkCfg; i++)
+    {
+        if ((this->allPossibleLinkCfgs[i].lanes     != lowestSelected.lanes) ||
+            (this->allPossibleLinkCfgs[i].peakRate  != lowestSelected.peakRate))
+        {
+            continue;
+        }
+        // check if it's the max possible link
+        if ((this->allPossibleLinkCfgs[i].lanes     != highestAssessedLC.lanes) ||
+            (this->allPossibleLinkCfgs[i].peakRate  != highestAssessedLC.peakRate))
+        {
+            // Get next entry.
+            lowestSelected = this->allPossibleLinkCfgs[i+1];
+            // Update enhancedFraming/bDisableDownspread/bEnableFEC for target config
+            lowestSelected.enhancedFraming = lConfig.enhancedFraming;
+            lowestSelected.bDisableDownspread = lConfig.bDisableDownspread;
+            lowestSelected.enableFEC(lConfig.bEnableFEC);
+        }
+    }
+    return bIsModeSupported;
 }
 
 bool ConnectorImpl2x::willLinkSupportModeSST
@@ -72,11 +126,23 @@ bool ConnectorImpl2x::willLinkSupportModeSST
     const DscParams *pDscParams
 )
 {
+    NvBool result = false;
     LinkConfiguration lc = linkConfig;
     if (!main->isSupportedDPLinkConfig(lc))
         return false;
+
     // no headIndex (default 0) for mode enumeration.
-    return willLinkSupportMode(linkConfig, modesetInfo, 0, NULL, pDscParams);
+    result = willLinkSupportMode(linkConfig, modesetInfo, 0, NULL, pDscParams);
+    if (result && linkConfig.bIs128b132bChannelCoding)
+    {
+        unsigned base_pbn, slots, slots_pbn;
+        lc.pbnRequired(modesetInfo, base_pbn, slots, slots_pbn);
+        if (slots_pbn > lc.pbnTotal())
+        {
+            result = false;
+        }
+    }
+    return result;
 }
 
 bool ConnectorImpl2x::willLinkSupportMode
@@ -130,6 +196,7 @@ bool ConnectorImpl2x::willLinkSupportMode
     impParams.linkConfig.bDp2xChannelCoding     = linkConfig.bIs128b132bChannelCoding;
     impParams.linkConfig.bFECEnabled            = linkConfig.bEnableFEC;
     impParams.linkConfig.bMultiStreamTopology   = linkConfig.multistream;
+    impParams.linkConfig.bDisableEffBppSST8b10b = this->bDisableEffBppSST8b10b;
 
     if (pDscParams != NULL && pDscParams->forcedParams != NULL)
     {
@@ -183,13 +250,13 @@ bool ConnectorImpl2x::validateLinkConfiguration(const LinkConfiguration &lConfig
     {
         if (!IS_VALID_DP2_X_LINKBW(linkRate10M))
         {
-            DP_PRINTF(DP_ERROR, "DP2xCONN> Requested link rate=%d is not valid", linkRate10M);
+            DP_PRINTF(DP_ERROR, "DP2xCONN> Requested link rate=%" NvU64_fmtu " is not valid", linkRate10M);
             return false;
         }
 
         if (lConfig.peakRate > hal->getMaxLinkRate())
         {
-            DP_PRINTF(DP_ERROR, "DP2xCONN> Requested link rate=%d is larger than sinkMaxLinkRate=%d",
+            DP_PRINTF(DP_ERROR, "DP2xCONN> Requested link rate=%" NvU64_fmtu " is larger than sinkMaxLinkRate=%" LinkRate_fmtu,
                       linkRate10M, hal->getMaxLinkRate());
             return false;
         }
@@ -200,7 +267,7 @@ bool ConnectorImpl2x::validateLinkConfiguration(const LinkConfiguration &lConfig
             NvU32 i;
             if (!hal->isIndexedLinkrateEnabled())
             {
-                DP_PRINTF(DP_ERROR, "DP2xCONN> Indexed Link Rate=%d is Not Enabled in Sink", linkRate10M);
+                DP_PRINTF(DP_ERROR, "DP2xCONN> Indexed Link Rate=%" NvU64_fmtu " is Not Enabled in Sink", linkRate10M);
                 return false;
             }
 
@@ -215,13 +282,13 @@ bool ConnectorImpl2x::validateLinkConfiguration(const LinkConfiguration &lConfig
                     break;
                 if (ilrTable[i] == 0)
                 {
-                    DP_PRINTF(DP_ERROR, "DP2xCONN> Indexed Link Rate=%d is Not Found", linkRate10M);
+                    DP_PRINTF(DP_ERROR, "DP2xCONN> Indexed Link Rate=%" NvU64_fmtu " is Not Found", linkRate10M);
                     return false;
                 }
             }
             if (i == NV0073_CTRL_DP_MAX_INDEXED_LINK_RATES)
             {
-                DP_PRINTF(DP_ERROR, "DP2xCONN> Indexed Link Rate=%d is Not Found", linkRate10M);
+                DP_PRINTF(DP_ERROR, "DP2xCONN> Indexed Link Rate=%" NvU64_fmtu " is Not Found", linkRate10M);
                 return false;
             }
         }
@@ -444,6 +511,26 @@ bool ConnectorImpl2x::compoundQueryAttachMSTGeneric(Group * target,
                                                     DscParams *pDscParams,                        // DSC parameters
                                                     DP_IMP_ERROR *pErrorCode)
 {
+    if (!pDscParams || (pDscParams && !pDscParams->bEnableDsc))
+    {
+        NvU32 symbolSize = GET_SYMBOL_SIZE(activeLinkConfig.bIs128b132bChannelCoding);
+        NvU32 hActive = localInfo->localModesetInfo.surfaceWidth;
+        NvU32 bpp = localInfo->localModesetInfo.depth;
+
+        NvU32 bitsPerLane                   = (NvU32)NV_CEIL(hActive, LOGICAL_LANES) * bpp;
+        NvU32 totalSymbolsPerLane           = (NvU32)NV_CEIL(bitsPerLane, symbolSize);
+        NvU32 totalSymbols                  = totalSymbolsPerLane * LOGICAL_LANES;
+        localInfo->localModesetInfo.depth   = (NvU32)NV_CEIL((totalSymbols * symbolSize * EFF_BPP_NON_DSC_SCALER), hActive);
+    }
+    else
+    {
+        //
+        // If DSC is enabled bpp will already be multiplied by 16, we need to mulitply by another 16
+        // to match scalar of 256 which is used in non-DSC case.
+        //
+        localInfo->localModesetInfo.depth = localInfo->localModesetInfo.depth * EFF_BPP_DSC_SCALER;
+    }
+
     // I. Evaluate use of local link bandwidth
 
     //      Calculate the PBN required
@@ -490,21 +577,11 @@ bool ConnectorImpl2x::compoundQueryAttachMSTGeneric(Group * target,
                         tail->bandwidth.compound_query_state.totalTimeSlots)
                     {
                         compoundQueryResult = false;
-                        if(this->bEnableLowerBppCheckForDsc)
-                        {
-                            tail->bandwidth.compound_query_state.timeslots_used_by_query -= linkConfig->slotsForPBN(base_pbn);
-                            tail->bandwidth.compound_query_state.bandwidthAllocatedForIndex &= ~(1 << compoundQueryCount);
-                        }
                         SET_DP_IMP_ERROR(pErrorCode, DP_IMP_ERROR_INSUFFICIENT_BANDWIDTH)
                     }
                 }
                 tail = (DeviceImpl*)tail->getParent();
             }
-        }
-        // If the compoundQueryResult is false, we need to reset the compoundQueryLocalLinkPBN
-        if (!compoundQueryResult && this->bEnableLowerBppCheckForDsc)   
-        {
-            compoundQueryLocalLinkPBN -= slots_pbn;
         }
     }
     else
@@ -583,7 +660,7 @@ bool ConnectorImpl2x::notifyAttachBegin(Group *target, const DpModesetParams &mo
         }
     }
 
-    DP_PRINTF(DP_NOTICE, "DP2xCONN> Notify Attach Begin (Head %d, pclk %d (KHz) raster %d x %d  %d bpp)",
+    DP_PRINTF(DP_NOTICE, "DP2xCONN> Notify Attach Begin (Head %d, pclk %" NvU64_fmtu " (KHz) raster %d x %d  %d bpp)",
               modesetParams.headIndex, (pixelClockHz/1000), rasterWidth, rasterHeight, depth);
     NV_DPTRACE_INFO(NOTIFY_ATTACH_BEGIN, modesetParams.headIndex, pixelClockHz, rasterWidth, rasterHeight,
                     depth, bEnableDsc, bEnableFEC);
@@ -602,7 +679,7 @@ bool ConnectorImpl2x::notifyAttachBegin(Group *target, const DpModesetParams &mo
                   dev->isVideoSink() ? "VIDEO" : "BRANCH");
 
         //
-        // Note: This makes an assumption that all devices in the group have the same values for 
+        // Note: This makes an assumption that all devices in the group have the same values for
         //       bApplyStuffDummySymbolsWAR, bStuffDummySymbolsFor8b10b and bStuffDummySymbolsFor128b132b
         //
         bApplyStuffDummySymbolsWAR |= ((DeviceImpl *)dev)->getApplyStuffDummySymbolsWAR();
@@ -661,15 +738,14 @@ bool ConnectorImpl2x::notifyAttachBegin(Group *target, const DpModesetParams &mo
                                       pixelClockHz, rasterWidth, rasterHeight,
                                       (rasterBlankStartX - rasterBlankEndX), modesetParams.modesetInfo.surfaceHeight,
                                       depth, rasterBlankStartX, rasterBlankEndX, bEnableDsc, modesetParams.modesetInfo.mode,
-                                      false, dpColorFormat_YCbCr422_Native);
+                                      false, modesetParams.colorFormat);
     }
     else
     {
         targetImpl->lastModesetInfo = ModesetInfo(twoChannelAudioHz, eightChannelAudioHz,
                                       pixelClockHz, rasterWidth, rasterHeight,
                                       (rasterBlankStartX - rasterBlankEndX), modesetParams.modesetInfo.surfaceHeight,
-                                      depth, rasterBlankStartX, rasterBlankEndX, bEnableDsc, modesetParams.modesetInfo.mode,
-                                      false, modesetParams.colorFormat);
+                                      depth, rasterBlankStartX, rasterBlankEndX, bEnableDsc, modesetParams.modesetInfo.mode);
     }
 
     targetImpl->headIndex = modesetParams.headIndex;
@@ -728,6 +804,24 @@ bool ConnectorImpl2x::notifyAttachBegin(Group *target, const DpModesetParams &mo
         }
     }
 
+    if (linkUseMultistream())
+    {
+        unsigned symbolSize = GET_SYMBOL_SIZE(activeLinkConfig.bIs128b132bChannelCoding);
+
+        if (bEnableDsc)
+        {
+            targetImpl->lastModesetInfo.depth *= EFF_BPP_DSC_SCALER;
+        }
+        else
+        {
+            NvU32 bitsPerLane                   = (NvU32)NV_CEIL(modesetParams.modesetInfo.surfaceWidth, LOGICAL_LANES) * depth;
+            NvU32 totalSymbolsPerLane           = (NvU32)NV_CEIL(bitsPerLane, symbolSize);
+            NvU32 totalSymbols                  = totalSymbolsPerLane * LOGICAL_LANES;
+            targetImpl->lastModesetInfo.depth   = (NvU32)NV_CEIL((totalSymbols * symbolSize * EFF_BPP_NON_DSC_SCALER),
+                                                                  modesetParams.modesetInfo.surfaceWidth);
+        }
+    }
+
     beforeAddStream(targetImpl);
 
     if (!linkUseMultistream() || main->supportMSAOverMST())
@@ -758,6 +852,14 @@ bool ConnectorImpl2x::notifyAttachBegin(Group *target, const DpModesetParams &mo
         main->setDpStereoMSAParameters(!enableInbandStereoSignaling, modesetParams.msaparams);
         main->setDpMSAParameters(!enableInbandStereoSignaling, modesetParams.msaparams);
     }
+    else
+    {
+        // CLear MSA parameters for MST topology
+        NV0073_CTRL_CMD_DP_SET_MSA_PROPERTIES_PARAMS msaParams = modesetParams.msaparams;
+        msaParams.bEnableMSA        = false;
+        main->setDpStereoMSAParameters(false, msaParams);
+        main->setDpMSAParameters(false, msaParams);
+    }
 
     NV_DPTRACE_INFO(NOTIFY_ATTACH_BEGIN_STATUS, bLinkTrainingStatus);
 
@@ -781,8 +883,8 @@ bool ConnectorImpl2x::notifyAttachBegin(Group *target, const DpModesetParams &mo
 
     // Apply dummy symbol WAR if link training succeeded and device requires dummy symbols
     // for the channel coding mode as per the device's WAR flags
-    if (bLinkTrainingStatus && 
-        bApplyStuffDummySymbolsWAR && 
+    if (bLinkTrainingStatus &&
+        bApplyStuffDummySymbolsWAR &&
         ((activeLinkConfig.bIs128b132bChannelCoding && bStuffDummySymbolsFor128b132b) ||
          ((!activeLinkConfig.bIs128b132bChannelCoding) && bStuffDummySymbolsFor8b10b)))
     {
@@ -1179,12 +1281,15 @@ bool ConnectorImpl2x::train(const LinkConfiguration &lConfig, bool force, LinkTr
         firstFreeSlot = 0;
     }
 
-    // Invalidate the UHBR if the connector is a USB-C to DP/USB-C.
+    // Invalidate the UHBR if the connector is a USB-C to DP/USB-C
+    // and VCONN source is unknown.
     if (!trainResult && main->isConnectorUSBTypeC() &&
-        lConfig.bIs128b132bChannelCoding && lConfig.peakRate > dp2LinkRate_10_0Gbps)
+        lConfig.bIs128b132bChannelCoding && lConfig.peakRate > dp2LinkRate_10_0Gbps &&
+        main->isCableVconnSourceUnknown())
     {
         hal->overrideCableIdCap(lConfig.peakRate, false);
     }
+
     return trainResult;
 }
 
@@ -1202,14 +1307,14 @@ void ConnectorImpl2x::notifyDetachBegin(Group *target)
 
     Device     *newDev  = target->enumDevices(0);
     DeviceImpl *dev     = (DeviceImpl *)newDev;
-    GroupImpl  *group   = (GroupImpl*)target; 
+    GroupImpl  *group   = (GroupImpl*)target;
 
     for (Device * d = target->enumDevices(0); d; d = target->enumDevices(d))
     {
         DeviceImpl * dev = (DeviceImpl *)d;
         bApplyStuffDummySymbolsWAR |= dev->getApplyStuffDummySymbolsWAR();
     }
-    
+
     if (bApplyStuffDummySymbolsWAR)
     {
         main->applyStuffDummySymbolWAR(group->headIndex, false);
@@ -1442,10 +1547,7 @@ bool ConnectorImpl2x::enableFlush()
     }
 
     // Reset activeLinkConfig to indicate the link is now lost
-    if (!this->bDisable5019537Fix)
-    {
-        activeLinkConfig = LinkConfiguration();
-    }
+    activeLinkConfig = LinkConfiguration();
 
     return true;
 }
@@ -1672,7 +1774,7 @@ bool ConnectorImpl2x::handleTestLinkTrainRequest()
                 DP_ASSERT(0 && "Compliance: no group attached");
             }
 
-            DP_PRINTF(DP_NOTICE, "DP> Compliance: LT on IRQ request: 0x%x, %d.", requestedRate, requestedLanes);
+            DP_PRINTF(DP_NOTICE, "DP> Compliance: LT on IRQ request: 0x%" LinkRate_fmtx ", %d.", requestedRate, requestedLanes);
             // now see whether the current resolution is supported on the requested link config
             LinkConfiguration lc(&linkPolicy, requestedLanes, requestedRate, hal->getEnhancedFraming(),
                                  false, // MST
@@ -1685,7 +1787,7 @@ bool ConnectorImpl2x::handleTestLinkTrainRequest()
             {
                 if (willLinkSupportMode(lc, groupAttached->lastModesetInfo, groupAttached->headIndex, NULL, NULL))
                 {
-                    DP_PRINTF(DP_NOTICE, "DP> Compliance: Executing LT on IRQ: 0x%x, %d.", requestedRate, requestedLanes);
+                    DP_PRINTF(DP_NOTICE, "DP> Compliance: Executing LT on IRQ: 0x%" LinkRate_fmtx ", %d.", requestedRate, requestedLanes);
                     // we need to force the requirement irrespective of whether is supported or not.
                     if (!enableFlush())
                     {
@@ -1710,7 +1812,7 @@ bool ConnectorImpl2x::handleTestLinkTrainRequest()
                 }
                 else // linkconfig is not supporting bandwidth. Simply return NACK
                 {
-                    DP_PRINTF(DP_ERROR, "DP> Compliance: IMP failed with requested link configuration: 0x%x, %d.",
+                    DP_PRINTF(DP_ERROR, "DP> Compliance: IMP failed with requested link configuration: 0x%" LinkRate_fmtx ", %d.",
                               requestedRate, requestedLanes);
                     hal->setTestResponse(false);
                     return false;
@@ -1778,7 +1880,6 @@ void ConnectorImpl2x::handleEdidWARs(Edid & edid, DiscoveryManager::Device & dev
         {
             // Samsung G9 Monitor is behind internal branch, allocate one more timeslot
             bApplyManualTimeslotBug4968411 = true;
-            bDP2XPreferNonDSCForLowPClk = true;
         }
     }
 
@@ -1795,5 +1896,18 @@ void ConnectorImpl2x::handleEdidWARs(Edid & edid, DiscoveryManager::Device & dev
     {
         bDisableDscMaxBppLimit = true;
     }
-}
 
+    if (edid.WARFlags.bDP2XPreferNonDSCForLowPClk)
+    {
+        bDP2XPreferNonDSCForLowPClk = true;
+    }
+
+    if (edid.WARFlags.bForceHeadShutdownOnModeTransition)
+    {
+        bForceHeadShutdownOnModeTransition = true;
+    }
+    if (edid.WARFlags.bDisableDownspread)
+    {
+        setDisableDownspread(true);
+    }
+}

@@ -110,6 +110,7 @@ namespace DisplayPort
         bool    bEnable5147205Fix;              // Enable 5147205 fix.
 
         bool    bConnectorIsUSBTypeC;
+        bool    bCableVconnSourceUnknown;
 
         // Start time of DP2.x LT Channel Eqaulization phase.
         NvU64   channelEqualizationStartTimeUs;
@@ -148,7 +149,7 @@ namespace DisplayPort
         virtual bool clearFlushMode(FlushModePhase phase, NvU32 attachFailedHeadMask = 0, NvU32 headIndex = 0);
         virtual bool isRgFlushSequenceUsed() {return bUseRgFlushSequence;}
         void applyDP2xRegkeyOverrides();
-        virtual NvU32 headToStream(NvU32 head, bool bSidebandMessageSupported,
+        virtual NvU32 headToStream(NvU32 head, bool bSidebandMessageSupported, 
                                    DP_SINGLE_HEAD_MULTI_STREAM_PIPELINE_ID streamIdentifier = DP_SINGLE_HEAD_MULTI_STREAM_PIPELINE_ID_PRIMARY);
 
         // Link Rate will return the value with 10M convention!
@@ -180,7 +181,13 @@ namespace DisplayPort
         {
             return bConnectorIsUSBTypeC;
         }
+        virtual bool isCableVconnSourceUnknown()
+        {
+            return bCableVconnSourceUnknown;
+        }
         virtual void invalidateLinkRatesInFallbackTable(const LinkRate linkRate);
+
+        virtual bool getUSBCCableIDInfo(NV0073_CTRL_DP_USBC_CABLEID_INFO *cableIDInfo);
     };
 
 }

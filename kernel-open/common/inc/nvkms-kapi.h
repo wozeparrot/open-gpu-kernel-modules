@@ -24,8 +24,10 @@
 #if !defined(__NVKMS_KAPI_H__)
 
 #include "nvtypes.h"
+#include "nv_mig_types.h"
 
 #include "nv-gpu-info.h"
+#include "nv_dpy_id.h"
 #include "nvkms-api-types.h"
 #include "nvkms-format.h"
 
@@ -173,12 +175,18 @@ struct NvKmsKapiDeviceResourcesInfo {
         NvBool  supportsSyncpts;
 
         NvBool requiresVrrSemaphores;
+
+        NvBool  supportsInputColorRange;
+        NvBool  supportsInputColorSpace;
     } caps;
 
     NvU64 supportedSurfaceMemoryFormats[NVKMS_KAPI_LAYER_MAX];
     NvBool supportsICtCp[NVKMS_KAPI_LAYER_MAX];
 
     struct NvKmsKapiLutCaps lutCaps;
+
+    NvU64 vtFbBaseAddress;
+    NvU64 vtFbSize;
 };
 
 #define NVKMS_KAPI_LAYER_MASK(layerType) (1 << (layerType))
@@ -204,6 +212,8 @@ struct NvKmsKapiConnectorInfo {
     NvU32        numIncompatibleConnectors;
     NvKmsKapiConnector incompatibleConnectorHandles[NVKMS_KAPI_MAX_CONNECTORS];
 
+    NvBool dynamicDpyIdListValid;
+    NVDpyIdList dynamicDpyIdList;
 };
 
 struct NvKmsKapiStaticDisplayInfo {
@@ -222,6 +232,8 @@ struct NvKmsKapiStaticDisplayInfo {
     NvKmsKapiDisplay possibleCloneHandles[NVKMS_KAPI_MAX_CLONE_DISPLAYS];
 
     NvU32 headMask;
+
+    NvBool isDpMST;
 };
 
 struct NvKmsKapiSyncParams {
@@ -260,7 +272,8 @@ struct NvKmsKapiLayerConfig {
         NvBool enabled;
     } hdrMetadata;
 
-    enum NvKmsOutputTf tf;
+    enum NvKmsInputTf inputTf;
+    enum NvKmsOutputTf outputTf;
 
     NvU8 minPresentInterval;
     NvBool tearing;
@@ -272,6 +285,7 @@ struct NvKmsKapiLayerConfig {
     NvU16 dstWidth, dstHeight;
 
     enum NvKmsInputColorSpace inputColorSpace;
+    enum NvKmsInputColorRange inputColorRange;
 
     struct {
         NvBool enabled;
@@ -315,7 +329,10 @@ struct NvKmsKapiLayerRequestedConfig {
         NvBool dstXYChanged            : 1;
         NvBool dstWHChanged            : 1;
         NvBool cscChanged              : 1;
-        NvBool tfChanged               : 1;
+        NvBool inputTfChanged          : 1;
+        NvBool outputTfChanged         : 1;
+        NvBool inputColorSpaceChanged  : 1;
+        NvBool inputColorRangeChanged  : 1;
         NvBool hdrMetadataChanged      : 1;
         NvBool matrixOverridesChanged  : 1;
         NvBool ilutChanged             : 1;
@@ -481,6 +498,8 @@ struct NvKmsKapiEvent {
 struct NvKmsKapiAllocateDeviceParams {
     /* [IN] GPU ID obtained from enumerateGpus() */
     NvU32 gpuId;
+    /* [IN] MIG device if requested */
+    MIGDeviceId migDevice;
 
     /* [IN] Private data of device allocator */
     void *privateData;
@@ -544,9 +563,6 @@ struct NvKmsKapiCreateSurfaceParams {
      *      explicit_layout is NV_TRUE and layout is
      *      NvKmsSurfaceMemoryLayoutBlockLinear */
     NvU8 log2GobsPerBlockY;
-
-    /* [IN] Whether a surface can be updated directly on the screen */
-    NvBool noDisplayCaching;
 };
 
 enum NvKmsKapiAllocationType {
@@ -555,13 +571,54 @@ enum NvKmsKapiAllocationType {
     NVKMS_KAPI_ALLOCATION_TYPE_OFFSCREEN = 2,
 };
 
+struct NvKmsKapiAllocateMemoryParams {
+    /* [IN] BlockLinear or Pitch */
+    enum NvKmsSurfaceMemoryLayout layout;
+
+    /* [IN] Allocation type */
+    enum NvKmsKapiAllocationType type;
+
+    /* [IN] Size, in bytes, of the memory to allocate */
+    NvU64 size;
+
+    /* [IN] Whether memory can be updated directly on the screen */
+    NvBool noDisplayCaching;
+
+    /* [IN] Whether to allocate memory from video memory or system memory */
+    NvBool useVideoMemory;
+
+    /* [IN/OUT] For input, non-zero if compression backing store should be
+     * allocated for the memory, for output, non-zero if compression backing
+     * store was allocated for the memory */
+    NvU8 *compressible;
+};
+
 typedef enum NvKmsKapiRegisterWaiterResultRec {
     NVKMS_KAPI_REG_WAITER_FAILED,
     NVKMS_KAPI_REG_WAITER_SUCCESS,
     NVKMS_KAPI_REG_WAITER_ALREADY_SIGNALLED,
 } NvKmsKapiRegisterWaiterResult;
 
-typedef void NvKmsKapiSuspendResumeCallbackFunc(NvBool suspend);
+struct NvKmsKapiGpuInfo {
+    nv_gpu_info_t gpuInfo;
+    MIGDeviceId   migDevice;
+};
+
+/*
+ * Linux kernel options CONFIG_RANDSTRUCT_* randomize structs that are composed
+ * entirely of function pointers, but can only control struct layout for sources
+ * built by kbuild. NvKmsKapiCallbacks is shared between kbuild-built
+ * nvidia-drm.ko, and the "OS-agnostic" portions of nvidia-modeset.ko (not built
+ * by kbuild). Add a _padding member to disable struct randomization.
+ *
+ * Refer to https://github.com/NVIDIA/open-gpu-kernel-modules/issues/1033
+ */
+struct NvKmsKapiCallbacks {
+    int  _padding;
+    void (*suspendResume)(NvBool suspend);
+    void (*remove)(NvU32 gpuId);
+    void (*probe)(const struct NvKmsKapiGpuInfo *gpu_info);
+};
 
 struct NvKmsKapiFunctionsTable {
 
@@ -579,14 +636,19 @@ struct NvKmsKapiFunctionsTable {
     } systemInfo;
 
     /*!
-     * Enumerate the available physical GPUs that can be used with NVKMS.
+     * Enumerate the available GPUs that can be used with NVKMS.
      *
-     * \param [out]  gpuInfo  The information of the enumerated GPUs.
-     *                        It is an array of NVIDIA_MAX_GPUS elements.
+     * The gpuCallback will be called with a NvKmsKapiGpuInfo for each
+     * physical and MIG GPU currently available in the system.
+     *
+     * \param [in] gpuCallback          Client function to handle each GPU.
      *
      * \return  Count of enumerated gpus.
      */
-    NvU32 (*enumerateGpus)(nv_gpu_info_t *gpuInfo);
+    NvU32 (*enumerateGpus)
+    (
+        void (*gpuCallback)(const struct NvKmsKapiGpuInfo *info)
+    );
 
     /*!
      * Allocate an NVK device using which you can query/allocate resources on
@@ -816,66 +878,22 @@ struct NvKmsKapiFunctionsTable {
     );
 
     /*!
-     * Allocate some unformatted video memory of the specified size.
+     * Allocate some unformatted video or system memory of the specified size.
      *
-     * This function allocates video memory on the specified GPU.
-     * It should be suitable for mapping on the CPU as a pitch
-     * linear or block-linear surface.
+     * This function allocates video or system memory on the specified GPU. It
+     * should be suitable for mapping on the CPU as a pitch linear or
+     * block-linear surface.
      *
-     * \param [in] device  A device allocated using allocateDevice().
+     * \param [in]     device  A device allocated using allocateDevice().
      *
-     * \param [in] layout  BlockLinear or Pitch.
-     * 
-     * \param [in] type    Allocation type.
-     *
-     * \param [in] size    Size, in bytes, of the memory to allocate.
-     *
-     * \param [in/out] compressible For input, non-zero if compression
-     *                              backing store should be allocated for
-     *                              the memory, for output, non-zero if
-     *                              compression backing store was
-     *                              allocated for the memory.
+     * \param [in/out] params  Parameters required for memory allocation.
      *
      * \return An valid memory handle on success, NULL on failure.
      */
-    struct NvKmsKapiMemory* (*allocateVideoMemory)
+    struct NvKmsKapiMemory* (*allocateMemory)
     (
         struct NvKmsKapiDevice *device,
-        enum NvKmsSurfaceMemoryLayout layout,
-        enum NvKmsKapiAllocationType type,
-        NvU64 size,
-        NvU8 *compressible
-    );
-
-    /*!
-     * Allocate some unformatted system memory of the specified size.
-     *
-     * This function allocates system memory . It should be suitable
-     * for mapping on the CPU as a pitch linear or block-linear surface.
-     *
-     * \param [in] device  A device allocated using allocateDevice().
-     *
-     * \param [in] layout  BlockLinear or Pitch.
-     * 
-     * \param [in] type    Allocation type.
-     *
-     * \param [in] size    Size, in bytes, of the memory to allocate.
-     *
-     * \param [in/out] compressible For input, non-zero if compression
-     *                              backing store should be allocated for
-     *                              the memory, for output, non-zero if
-     *                              compression backing store was
-     *                              allocated for the memory.
-     *
-     * \return An valid memory handle on success, NULL on failure.
-     */
-    struct NvKmsKapiMemory* (*allocateSystemMemory)
-    (
-        struct NvKmsKapiDevice *device,
-        enum NvKmsSurfaceMemoryLayout layout,
-        enum NvKmsKapiAllocationType type,
-        NvU64 size,
-        NvU8 *compressible
+        struct NvKmsKapiAllocateMemoryParams *params
     );
 
     /*!
@@ -1470,12 +1488,12 @@ struct NvKmsKapiFunctionsTable {
     );
 
     /*!
-     * Set the callback function for suspending and resuming the display system.
+     * Set the pointer to the callback function table.
      */
     void
-    (*setSuspendResumeCallback)
+    (*setCallbacks)
     (
-        NvKmsKapiSuspendResumeCallbackFunc *function
+        const struct NvKmsKapiCallbacks *callbacks
     );
 
     /*!
@@ -1557,6 +1575,26 @@ struct NvKmsKapiFunctionsTable {
     (
         struct NvKmsKapiDevice *device,
         NvS32 index
+    );
+
+    /*!
+     * Check or wait on a head's LUT notifier.
+     *
+     * \param [in]  device              A device allocated using allocateDevice().
+     *
+     * \param [in]  head                The head to check for LUT completion.
+     *
+     * \param [in]  waitForCompletion   If true, wait for the notifier in NvKms
+     *                                  before returning.
+     *
+     * \param [out] complete            Returns whether the notifier has completed.
+     */
+    NvBool
+    (*checkLutNotifier)
+    (
+        struct NvKmsKapiDevice *device,
+        NvU32 head,
+        NvBool waitForCompletion
     );
 
     /*

@@ -437,6 +437,8 @@ namespace DisplayPort
         virtual bool    isMarkedForDeletion() {return bisMarkedForDeletion;};
         virtual bool    getRawDscCaps(NvU8 *buffer, NvU32 bufferSize);
         virtual bool    setRawDscCaps(const NvU8 *buffer, NvU32 bufferSize);
+        virtual bool    setValidatedRawDscCaps(NvU8 *buffer, NvU32 bufferSize);
+        virtual bool    validatePPSData(DSCPPSDATA *pPps);
 
         virtual AuxBus::status dscCrcControl(NvBool bEnable, gpuDscCrc *dataGpu, sinkDscCrc *dataSink);
 

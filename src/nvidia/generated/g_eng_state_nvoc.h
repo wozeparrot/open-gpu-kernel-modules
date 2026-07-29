@@ -1,13 +1,15 @@
 
 #ifndef _G_ENG_STATE_NVOC_H_
 #define _G_ENG_STATE_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,6 +49,7 @@ extern "C" {
  */
 
 #include "core/core.h"
+#include "nvoc/object.h"
 #include "gpu/eng_desc.h"
 
 typedef enum ENGSTATE_STATE
@@ -101,15 +104,19 @@ typedef struct ENGSTATE_TRANSITION_DATA
 #endif
 
 
-// Metadata including vtable
+// Metadata with per-class RTTI and vtable with ancestor(s)
+struct NVOC_METADATA__OBJENGSTATE;
+struct NVOC_METADATA__Object;
 struct NVOC_VTABLE__OBJENGSTATE;
 
 
 struct OBJENGSTATE {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
-    const struct NVOC_VTABLE__OBJENGSTATE *__nvoc_vtable;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__OBJENGSTATE *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct Object __nvoc_base_Object;
@@ -130,9 +137,8 @@ struct OBJENGSTATE {
 };
 
 
-// Metadata including vtable with 14 function pointers plus superclass metadata
+// Vtable with 14 per-class function pointers
 struct NVOC_VTABLE__OBJENGSTATE {
-
     NV_STATUS (*__engstateConstructEngine__)(struct OBJGPU *, struct OBJENGSTATE * /*this*/, ENGDESCRIPTOR);  // virtual
     void (*__engstateInitMissing__)(struct OBJGPU *, struct OBJENGSTATE * /*this*/);  // virtual
     NV_STATUS (*__engstateStatePreInitLocked__)(struct OBJGPU *, struct OBJENGSTATE * /*this*/);  // virtual
@@ -147,6 +153,13 @@ struct NVOC_VTABLE__OBJENGSTATE {
     NV_STATUS (*__engstateStatePostUnload__)(struct OBJGPU *, struct OBJENGSTATE * /*this*/, NvU32);  // virtual
     void (*__engstateStateDestroy__)(struct OBJGPU *, struct OBJENGSTATE * /*this*/);  // virtual
     NvBool (*__engstateIsPresent__)(struct OBJGPU *, struct OBJENGSTATE * /*this*/);  // virtual
+};
+
+// Metadata with per-class RTTI and vtable with ancestor(s)
+struct NVOC_METADATA__OBJENGSTATE {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__Object metadata__Object;
+    const struct NVOC_VTABLE__OBJENGSTATE vtable;
 };
 
 #ifndef __NVOC_CLASS_OBJENGSTATE_TYPEDEF__
@@ -165,15 +178,16 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_OBJENGSTATE;
     ((pThis)->__nvoc_pbase_OBJENGSTATE)
 
 #ifdef __nvoc_eng_state_h_disabled
-#define __dynamicCast_OBJENGSTATE(pThis) ((OBJENGSTATE*)NULL)
+#define __dynamicCast_OBJENGSTATE(pThis) ((OBJENGSTATE*) NULL)
 #else //__nvoc_eng_state_h_disabled
 #define __dynamicCast_OBJENGSTATE(pThis) \
-    ((OBJENGSTATE*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJENGSTATE)))
+    ((OBJENGSTATE*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJENGSTATE)))
 #endif //__nvoc_eng_state_h_disabled
 
 // Property macros
 #define PDB_PROP_ENGSTATE_IS_MISSING_BASE_CAST
 #define PDB_PROP_ENGSTATE_IS_MISSING_BASE_NAME PDB_PROP_ENGSTATE_IS_MISSING
+
 
 NV_STATUS __nvoc_objCreateDynamic_OBJENGSTATE(OBJENGSTATE**, Dynamic*, NvU32, va_list);
 
@@ -182,91 +196,174 @@ NV_STATUS __nvoc_objCreate_OBJENGSTATE(OBJENGSTATE**, Dynamic*, NvU32);
     __nvoc_objCreate_OBJENGSTATE((ppNewObj), staticCast((pParent), Dynamic), (createFlags))
 
 
-// Wrapper macros
-#define engstateConstructEngine_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateConstructEngine__
+// Wrapper macros for implementation functions
+void engstateDestruct_IMPL(struct OBJENGSTATE *pEngstate);
+#define __nvoc_engstateDestruct(pEngstate) engstateDestruct_IMPL(pEngstate)
+
+NV_STATUS engstateStatePreInit_IMPL(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate);
+#ifdef __nvoc_eng_state_h_disabled
+static inline NV_STATUS engstateStatePreInit(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
+    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
+    return NV_ERR_NOT_SUPPORTED;
+}
+#else // __nvoc_eng_state_h_disabled
+#define engstateStatePreInit(pGpu, pEngstate) engstateStatePreInit_IMPL(pGpu, pEngstate)
+#endif // __nvoc_eng_state_h_disabled
+
+NV_STATUS engstateStateInit_IMPL(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate);
+#ifdef __nvoc_eng_state_h_disabled
+static inline NV_STATUS engstateStateInit(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
+    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
+    return NV_ERR_NOT_SUPPORTED;
+}
+#else // __nvoc_eng_state_h_disabled
+#define engstateStateInit(pGpu, pEngstate) engstateStateInit_IMPL(pGpu, pEngstate)
+#endif // __nvoc_eng_state_h_disabled
+
+ENGDESCRIPTOR engstateGetDescriptor_IMPL(struct OBJENGSTATE *pEngstate);
+#ifdef __nvoc_eng_state_h_disabled
+static inline ENGDESCRIPTOR engstateGetDescriptor(struct OBJENGSTATE *pEngstate) {
+    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
+    return 0;
+}
+#else // __nvoc_eng_state_h_disabled
+#define engstateGetDescriptor(pEngstate) engstateGetDescriptor_IMPL(pEngstate)
+#endif // __nvoc_eng_state_h_disabled
+
+struct OBJFIFO * engstateGetFifo_IMPL(struct OBJENGSTATE *pEngstate);
+#ifdef __nvoc_eng_state_h_disabled
+static inline struct OBJFIFO * engstateGetFifo(struct OBJENGSTATE *pEngstate) {
+    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
+    return NULL;
+}
+#else // __nvoc_eng_state_h_disabled
+#define engstateGetFifo(pEngstate) engstateGetFifo_IMPL(pEngstate)
+#endif // __nvoc_eng_state_h_disabled
+
+NV_STATUS engstateConstructBase_IMPL(struct OBJENGSTATE *arg_this, struct OBJGPU *arg2, ENGDESCRIPTOR arg3);
+#ifdef __nvoc_eng_state_h_disabled
+static inline NV_STATUS engstateConstructBase(struct OBJENGSTATE *arg_this, struct OBJGPU *arg2, ENGDESCRIPTOR arg3) {
+    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
+    return NV_ERR_NOT_SUPPORTED;
+}
+#else // __nvoc_eng_state_h_disabled
+#define engstateConstructBase(arg_this, arg2, arg3) engstateConstructBase_IMPL(arg_this, arg2, arg3)
+#endif // __nvoc_eng_state_h_disabled
+
+void engstateLogStateTransitionPre_IMPL(struct OBJENGSTATE *arg_this, ENGSTATE_STATE arg2, ENGSTATE_TRANSITION_DATA *arg3);
+#ifdef __nvoc_eng_state_h_disabled
+static inline void engstateLogStateTransitionPre(struct OBJENGSTATE *arg_this, ENGSTATE_STATE arg2, ENGSTATE_TRANSITION_DATA *arg3) {
+    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
+}
+#else // __nvoc_eng_state_h_disabled
+#define engstateLogStateTransitionPre(arg_this, arg2, arg3) engstateLogStateTransitionPre_IMPL(arg_this, arg2, arg3)
+#endif // __nvoc_eng_state_h_disabled
+
+void engstateLogStateTransitionPost_IMPL(struct OBJENGSTATE *arg_this, ENGSTATE_STATE arg2, ENGSTATE_TRANSITION_DATA *arg3);
+#ifdef __nvoc_eng_state_h_disabled
+static inline void engstateLogStateTransitionPost(struct OBJENGSTATE *arg_this, ENGSTATE_STATE arg2, ENGSTATE_TRANSITION_DATA *arg3) {
+    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
+}
+#else // __nvoc_eng_state_h_disabled
+#define engstateLogStateTransitionPost(arg_this, arg2, arg3) engstateLogStateTransitionPost_IMPL(arg_this, arg2, arg3)
+#endif // __nvoc_eng_state_h_disabled
+
+const char * engstateGetName_IMPL(struct OBJENGSTATE *arg_this);
+#ifdef __nvoc_eng_state_h_disabled
+static inline const char * engstateGetName(struct OBJENGSTATE *arg_this) {
+    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
+    return NULL;
+}
+#else // __nvoc_eng_state_h_disabled
+#define engstateGetName(arg_this) engstateGetName_IMPL(arg_this)
+#endif // __nvoc_eng_state_h_disabled
+
+
+// Wrapper macros for halified functions
+#define engstateConstructEngine_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateConstructEngine__
 #define engstateConstructEngine(pGpu, pEngstate, arg3) engstateConstructEngine_DISPATCH(pGpu, pEngstate, arg3)
-#define engstateInitMissing_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateInitMissing__
+#define engstateInitMissing_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateInitMissing__
 #define engstateInitMissing(pGpu, pEngstate) engstateInitMissing_DISPATCH(pGpu, pEngstate)
-#define engstateStatePreInitLocked_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStatePreInitLocked__
+#define engstateStatePreInitLocked_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePreInitLocked__
 #define engstateStatePreInitLocked(pGpu, pEngstate) engstateStatePreInitLocked_DISPATCH(pGpu, pEngstate)
-#define engstateStatePreInitUnlocked_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStatePreInitUnlocked__
+#define engstateStatePreInitUnlocked_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePreInitUnlocked__
 #define engstateStatePreInitUnlocked(pGpu, pEngstate) engstateStatePreInitUnlocked_DISPATCH(pGpu, pEngstate)
-#define engstateStateInitLocked_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStateInitLocked__
+#define engstateStateInitLocked_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateInitLocked__
 #define engstateStateInitLocked(pGpu, pEngstate) engstateStateInitLocked_DISPATCH(pGpu, pEngstate)
-#define engstateStateInitUnlocked_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStateInitUnlocked__
+#define engstateStateInitUnlocked_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateInitUnlocked__
 #define engstateStateInitUnlocked(pGpu, pEngstate) engstateStateInitUnlocked_DISPATCH(pGpu, pEngstate)
-#define engstateStatePreLoad_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStatePreLoad__
+#define engstateStatePreLoad_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePreLoad__
 #define engstateStatePreLoad(pGpu, pEngstate, arg3) engstateStatePreLoad_DISPATCH(pGpu, pEngstate, arg3)
-#define engstateStateLoad_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStateLoad__
+#define engstateStateLoad_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateLoad__
 #define engstateStateLoad(pGpu, pEngstate, arg3) engstateStateLoad_DISPATCH(pGpu, pEngstate, arg3)
-#define engstateStatePostLoad_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStatePostLoad__
+#define engstateStatePostLoad_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePostLoad__
 #define engstateStatePostLoad(pGpu, pEngstate, arg3) engstateStatePostLoad_DISPATCH(pGpu, pEngstate, arg3)
-#define engstateStatePreUnload_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStatePreUnload__
+#define engstateStatePreUnload_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePreUnload__
 #define engstateStatePreUnload(pGpu, pEngstate, arg3) engstateStatePreUnload_DISPATCH(pGpu, pEngstate, arg3)
-#define engstateStateUnload_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStateUnload__
+#define engstateStateUnload_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateUnload__
 #define engstateStateUnload(pGpu, pEngstate, arg3) engstateStateUnload_DISPATCH(pGpu, pEngstate, arg3)
-#define engstateStatePostUnload_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStatePostUnload__
+#define engstateStatePostUnload_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePostUnload__
 #define engstateStatePostUnload(pGpu, pEngstate, arg3) engstateStatePostUnload_DISPATCH(pGpu, pEngstate, arg3)
-#define engstateStateDestroy_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateStateDestroy__
+#define engstateStateDestroy_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateDestroy__
 #define engstateStateDestroy(pGpu, pEngstate) engstateStateDestroy_DISPATCH(pGpu, pEngstate)
-#define engstateIsPresent_FNPTR(pEngstate) pEngstate->__nvoc_vtable->__engstateIsPresent__
+#define engstateIsPresent_FNPTR(pEngstate) pEngstate->__nvoc_metadata_ptr->vtable.__engstateIsPresent__
 #define engstateIsPresent(pGpu, pEngstate) engstateIsPresent_DISPATCH(pGpu, pEngstate)
 
 // Dispatch functions
 static inline NV_STATUS engstateConstructEngine_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate, ENGDESCRIPTOR arg3) {
-    return pEngstate->__nvoc_vtable->__engstateConstructEngine__(pGpu, pEngstate, arg3);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateConstructEngine__(pGpu, pEngstate, arg3);
 }
 
 static inline void engstateInitMissing_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
-    pEngstate->__nvoc_vtable->__engstateInitMissing__(pGpu, pEngstate);
+    pEngstate->__nvoc_metadata_ptr->vtable.__engstateInitMissing__(pGpu, pEngstate);
 }
 
 static inline NV_STATUS engstateStatePreInitLocked_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
-    return pEngstate->__nvoc_vtable->__engstateStatePreInitLocked__(pGpu, pEngstate);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePreInitLocked__(pGpu, pEngstate);
 }
 
 static inline NV_STATUS engstateStatePreInitUnlocked_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
-    return pEngstate->__nvoc_vtable->__engstateStatePreInitUnlocked__(pGpu, pEngstate);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePreInitUnlocked__(pGpu, pEngstate);
 }
 
 static inline NV_STATUS engstateStateInitLocked_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
-    return pEngstate->__nvoc_vtable->__engstateStateInitLocked__(pGpu, pEngstate);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateInitLocked__(pGpu, pEngstate);
 }
 
 static inline NV_STATUS engstateStateInitUnlocked_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
-    return pEngstate->__nvoc_vtable->__engstateStateInitUnlocked__(pGpu, pEngstate);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateInitUnlocked__(pGpu, pEngstate);
 }
 
 static inline NV_STATUS engstateStatePreLoad_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate, NvU32 arg3) {
-    return pEngstate->__nvoc_vtable->__engstateStatePreLoad__(pGpu, pEngstate, arg3);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePreLoad__(pGpu, pEngstate, arg3);
 }
 
 static inline NV_STATUS engstateStateLoad_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate, NvU32 arg3) {
-    return pEngstate->__nvoc_vtable->__engstateStateLoad__(pGpu, pEngstate, arg3);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateLoad__(pGpu, pEngstate, arg3);
 }
 
 static inline NV_STATUS engstateStatePostLoad_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate, NvU32 arg3) {
-    return pEngstate->__nvoc_vtable->__engstateStatePostLoad__(pGpu, pEngstate, arg3);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePostLoad__(pGpu, pEngstate, arg3);
 }
 
 static inline NV_STATUS engstateStatePreUnload_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate, NvU32 arg3) {
-    return pEngstate->__nvoc_vtable->__engstateStatePreUnload__(pGpu, pEngstate, arg3);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePreUnload__(pGpu, pEngstate, arg3);
 }
 
 static inline NV_STATUS engstateStateUnload_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate, NvU32 arg3) {
-    return pEngstate->__nvoc_vtable->__engstateStateUnload__(pGpu, pEngstate, arg3);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateUnload__(pGpu, pEngstate, arg3);
 }
 
 static inline NV_STATUS engstateStatePostUnload_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate, NvU32 arg3) {
-    return pEngstate->__nvoc_vtable->__engstateStatePostUnload__(pGpu, pEngstate, arg3);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateStatePostUnload__(pGpu, pEngstate, arg3);
 }
 
 static inline void engstateStateDestroy_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
-    pEngstate->__nvoc_vtable->__engstateStateDestroy__(pGpu, pEngstate);
+    pEngstate->__nvoc_metadata_ptr->vtable.__engstateStateDestroy__(pGpu, pEngstate);
 }
 
 static inline NvBool engstateIsPresent_DISPATCH(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
-    return pEngstate->__nvoc_vtable->__engstateIsPresent__(pGpu, pEngstate);
+    return pEngstate->__nvoc_metadata_ptr->vtable.__engstateIsPresent__(pGpu, pEngstate);
 }
 
 NV_STATUS engstateConstructEngine_IMPL(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate, ENGDESCRIPTOR arg3);
@@ -296,97 +393,6 @@ NV_STATUS engstateStatePostUnload_IMPL(struct OBJGPU *pGpu, struct OBJENGSTATE *
 void engstateStateDestroy_IMPL(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate);
 
 NvBool engstateIsPresent_IMPL(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate);
-
-void engstateDestruct_IMPL(struct OBJENGSTATE *pEngstate);
-
-#define __nvoc_engstateDestruct(pEngstate) engstateDestruct_IMPL(pEngstate)
-NV_STATUS engstateStatePreInit_IMPL(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate);
-
-#ifdef __nvoc_eng_state_h_disabled
-static inline NV_STATUS engstateStatePreInit(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
-    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
-    return NV_ERR_NOT_SUPPORTED;
-}
-#else //__nvoc_eng_state_h_disabled
-#define engstateStatePreInit(pGpu, pEngstate) engstateStatePreInit_IMPL(pGpu, pEngstate)
-#endif //__nvoc_eng_state_h_disabled
-
-NV_STATUS engstateStateInit_IMPL(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate);
-
-#ifdef __nvoc_eng_state_h_disabled
-static inline NV_STATUS engstateStateInit(struct OBJGPU *pGpu, struct OBJENGSTATE *pEngstate) {
-    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
-    return NV_ERR_NOT_SUPPORTED;
-}
-#else //__nvoc_eng_state_h_disabled
-#define engstateStateInit(pGpu, pEngstate) engstateStateInit_IMPL(pGpu, pEngstate)
-#endif //__nvoc_eng_state_h_disabled
-
-ENGDESCRIPTOR engstateGetDescriptor_IMPL(struct OBJENGSTATE *pEngstate);
-
-#ifdef __nvoc_eng_state_h_disabled
-static inline ENGDESCRIPTOR engstateGetDescriptor(struct OBJENGSTATE *pEngstate) {
-    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
-    ENGDESCRIPTOR ret;
-    portMemSet(&ret, 0, sizeof(ENGDESCRIPTOR));
-    return ret;
-}
-#else //__nvoc_eng_state_h_disabled
-#define engstateGetDescriptor(pEngstate) engstateGetDescriptor_IMPL(pEngstate)
-#endif //__nvoc_eng_state_h_disabled
-
-struct OBJFIFO *engstateGetFifo_IMPL(struct OBJENGSTATE *pEngstate);
-
-#ifdef __nvoc_eng_state_h_disabled
-static inline struct OBJFIFO *engstateGetFifo(struct OBJENGSTATE *pEngstate) {
-    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
-    return NULL;
-}
-#else //__nvoc_eng_state_h_disabled
-#define engstateGetFifo(pEngstate) engstateGetFifo_IMPL(pEngstate)
-#endif //__nvoc_eng_state_h_disabled
-
-NV_STATUS engstateConstructBase_IMPL(struct OBJENGSTATE *arg1, struct OBJGPU *arg2, ENGDESCRIPTOR arg3);
-
-#ifdef __nvoc_eng_state_h_disabled
-static inline NV_STATUS engstateConstructBase(struct OBJENGSTATE *arg1, struct OBJGPU *arg2, ENGDESCRIPTOR arg3) {
-    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
-    return NV_ERR_NOT_SUPPORTED;
-}
-#else //__nvoc_eng_state_h_disabled
-#define engstateConstructBase(arg1, arg2, arg3) engstateConstructBase_IMPL(arg1, arg2, arg3)
-#endif //__nvoc_eng_state_h_disabled
-
-void engstateLogStateTransitionPre_IMPL(struct OBJENGSTATE *arg1, ENGSTATE_STATE arg2, ENGSTATE_TRANSITION_DATA *arg3);
-
-#ifdef __nvoc_eng_state_h_disabled
-static inline void engstateLogStateTransitionPre(struct OBJENGSTATE *arg1, ENGSTATE_STATE arg2, ENGSTATE_TRANSITION_DATA *arg3) {
-    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
-}
-#else //__nvoc_eng_state_h_disabled
-#define engstateLogStateTransitionPre(arg1, arg2, arg3) engstateLogStateTransitionPre_IMPL(arg1, arg2, arg3)
-#endif //__nvoc_eng_state_h_disabled
-
-void engstateLogStateTransitionPost_IMPL(struct OBJENGSTATE *arg1, ENGSTATE_STATE arg2, ENGSTATE_TRANSITION_DATA *arg3);
-
-#ifdef __nvoc_eng_state_h_disabled
-static inline void engstateLogStateTransitionPost(struct OBJENGSTATE *arg1, ENGSTATE_STATE arg2, ENGSTATE_TRANSITION_DATA *arg3) {
-    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
-}
-#else //__nvoc_eng_state_h_disabled
-#define engstateLogStateTransitionPost(arg1, arg2, arg3) engstateLogStateTransitionPost_IMPL(arg1, arg2, arg3)
-#endif //__nvoc_eng_state_h_disabled
-
-const char *engstateGetName_IMPL(struct OBJENGSTATE *arg1);
-
-#ifdef __nvoc_eng_state_h_disabled
-static inline const char *engstateGetName(struct OBJENGSTATE *arg1) {
-    NV_ASSERT_FAILED_PRECOMP("OBJENGSTATE was disabled!");
-    return NULL;
-}
-#else //__nvoc_eng_state_h_disabled
-#define engstateGetName(arg1) engstateGetName_IMPL(arg1)
-#endif //__nvoc_eng_state_h_disabled
 
 #undef PRIVATE_FIELD
 

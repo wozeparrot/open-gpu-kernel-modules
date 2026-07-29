@@ -33,6 +33,7 @@
 #include "uvm_mmu.h"
 #include "uvm_linux.h"
 #include "uvm_common.h"
+#include "uvm_fd_type.h"
 #include "nv-kref.h"
 #include "nv-linux.h"
 #include "uvm_perf_events.h"
@@ -198,6 +199,9 @@ struct uvm_va_space_struct
     // This is a count of non fault capable processors with a GPU VA space
     // registered.
     NvU32 num_non_faultable_gpu_va_spaces;
+
+    // Count of integrated GPUs in a VA space.
+    NvU32 num_integrated_gpus;
 
     // Semaphore protecting the state of the va space
     uvm_rw_semaphore_t lock;
@@ -613,25 +617,13 @@ static uvm_egm_numa_node_info_t *uvm_va_space_get_first_egm_numa_node_info_for_g
 // does not point to a va_space.
 static uvm_va_space_t *uvm_fd_va_space(struct file *filp)
 {
-    uvm_va_space_t *va_space;
-    uvm_fd_type_t type;
-
-    type = uvm_fd_type(filp, (void **) &va_space);
-    if (type != UVM_FD_VA_SPACE)
-        return NULL;
-
-    return va_space;
+    return uvm_fd_get_type(filp, UVM_FD_VA_SPACE);
 }
 
 static uvm_va_space_t *uvm_va_space_get(struct file *filp)
 {
-    uvm_fd_type_t fd_type;
-    uvm_va_space_t *va_space;
-
-    fd_type = uvm_fd_type(filp, (void **)&va_space);
-    UVM_ASSERT(uvm_file_is_nvidia_uvm(filp));
-    UVM_ASSERT_MSG(fd_type == UVM_FD_VA_SPACE, "filp: 0x%llx", (NvU64)filp);
-
+    uvm_va_space_t *va_space = uvm_fd_va_space(filp);
+    UVM_ASSERT(va_space);
     return va_space;
 }
 
@@ -789,6 +781,33 @@ uvm_processor_id_t uvm_processor_mask_find_closest_id(uvm_va_space_t *va_space,
          UVM_ID_IS_VALID(id);                                           \
          uvm_processor_mask_clear(mask, id), id = uvm_processor_mask_find_closest_id(va_space, mask, src))
 
+static bool uvm_va_space_ats_supported(const uvm_va_space_t *va_space)
+{
+    return atomic_read(&va_space->ats.state) == UVM_ATS_VA_SPACE_ATS_SUPPORTED;
+}
+
+static bool uvm_va_space_ats_unsupported(const uvm_va_space_t *va_space)
+{
+    return atomic_read(&va_space->ats.state) == UVM_ATS_VA_SPACE_ATS_UNSUPPORTED;
+}
+
+static bool uvm_va_space_ats_unset(const uvm_va_space_t *va_space)
+{
+    return atomic_read(&va_space->ats.state) == UVM_ATS_VA_SPACE_ATS_UNSET;
+}
+
+static bool uvm_va_space_ats_enabled(const uvm_va_space_t *va_space)
+{
+    UVM_ASSERT(!uvm_va_space_ats_unset(va_space));
+    return g_uvm_global.ats.enabled && uvm_va_space_ats_supported(va_space);
+}
+
+static void uvm_va_space_ats_set(uvm_va_space_t *va_space, uvm_ats_va_space_state_t state)
+{
+    UVM_ASSERT(state != UVM_ATS_VA_SPACE_ATS_UNSET);
+    atomic_set(&va_space->ats.state, state);
+}
+
 // Return the GPU whose memory corresponds to the given node_id
 static uvm_gpu_t *uvm_va_space_find_gpu_with_memory_node_id(uvm_va_space_t *va_space, int node_id)
 {
@@ -796,7 +815,7 @@ static uvm_gpu_t *uvm_va_space_find_gpu_with_memory_node_id(uvm_va_space_t *va_s
 
     UVM_ASSERT(nv_numa_node_has_memory(node_id));
 
-    if (!g_uvm_global.ats.supported)
+    if (!uvm_va_space_ats_supported(va_space))
         return NULL;
 
     for_each_va_space_gpu(gpu, va_space) {
@@ -855,6 +874,8 @@ uvm_user_channel_t *uvm_gpu_va_space_get_user_channel(uvm_gpu_va_space_t *gpu_va
 // present, just whether system + VA space support exists.
 bool uvm_va_space_pageable_mem_access_supported(uvm_va_space_t *va_space);
 
+bool uvm_va_space_pageable_mem_access_enabled(uvm_va_space_t *va_space);
+
 NV_STATUS uvm_test_get_pageable_mem_access_type(UVM_TEST_GET_PAGEABLE_MEM_ACCESS_TYPE_PARAMS *params,
                                                  struct file *filp);
 NV_STATUS uvm_test_enable_nvlink_peer_access(UVM_TEST_ENABLE_NVLINK_PEER_ACCESS_PARAMS *params, struct file *filp);
@@ -870,7 +891,7 @@ NV_STATUS uvm_test_va_space_allow_movable_allocations(UVM_TEST_VA_SPACE_ALLOW_MO
 // (migrations, cache invalidates, etc.).
 //
 // Locking:
-//  - vma->vm_mm->mmap_lock must be held in at least read mode. Note, that
+//  - vmf->vma->vm_mm->mmap_lock must be held in at least read mode. Note, that
 //    might not be the same as current->mm->mmap_lock.
 // Returns:
 // VM_FAULT_NOPAGE: if page was faulted in OK
@@ -878,24 +899,26 @@ NV_STATUS uvm_test_va_space_allow_movable_allocations(UVM_TEST_VA_SPACE_ALLOW_MO
 // VM_FAULT_OOM: if system memory wasn't available.
 // VM_FAULT_SIGBUS: if a CPU mapping to fault_addr cannot be accessed,
 //     for example because it's within a range group which is non-migratable.
-vm_fault_t uvm_va_space_cpu_fault_managed(uvm_va_space_t *va_space,
-                                          struct vm_area_struct *vma,
-                                          struct vm_fault *vmf);
+vm_fault_t uvm_va_space_cpu_fault_managed(uvm_va_space_t *va_space, struct vm_fault *vmf);
 
 // Handle a CPU fault in the given VA space for a HMM allocation,
 // performing any operations necessary to establish a coherent CPU mapping
 // (migrations, cache invalidates, etc.).
 //
 // Locking:
-//  - vma->vm_mm->mmap_lock must be held in at least read mode. Note, that
+//  - vmf->vma->vm_mm->mmap_lock must be held in at least read mode. Note, that
 //    might not be the same as current->mm->mmap_lock.
 // Returns:
 // VM_FAULT_NOPAGE: if page was faulted in OK
 //     (possibly or'ed with VM_FAULT_MAJOR if a migration was needed).
 // VM_FAULT_OOM: if system memory wasn't available.
 // VM_FAULT_SIGBUS: if a CPU mapping to fault_addr cannot be accessed.
-vm_fault_t uvm_va_space_cpu_fault_hmm(uvm_va_space_t *va_space,
-                                      struct vm_area_struct *vma,
-                                      struct vm_fault *vmf);
+vm_fault_t uvm_va_space_cpu_fault_hmm(uvm_va_space_t *va_space, struct vm_fault *vmf);
+
+static bool uvm_va_space_has_integrated_gpu(uvm_va_space_t *va_space)
+{
+    uvm_assert_rwsem_locked(&va_space->lock);
+    return va_space->num_integrated_gpus  > 0;
+}
 
 #endif // __UVM_VA_SPACE_H__

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -41,12 +41,12 @@
 #define GSP_FW_HEAP_PARAM_BASE_RM_SIZE_GH100              (14 << 20)   // Hopper+
 
 //
-// Calibrated by observing RM init heap usage on GPUs with various FB sizes.
+// Calibrated by observing RM init heap usage on GPUs with various memory sizes.
 // This seems to fit the data fairly well, but is likely inaccurate (differences
-// in heap usage are more likely correlate with GPU architecture than FB size).
+// in heap usage are more likely correlate with GPU architecture than memory size).
 // TODO: this requires more detailed profiling and tuning.
 //
-#define GSP_FW_HEAP_PARAM_SIZE_PER_GB_FB                  (96 << 10)   // All architectures
+#define GSP_FW_HEAP_PARAM_SIZE_PER_GB                    (96 << 10)   // All architectures
 
 //
 // This number is calibrated by profiling the WPR heap usage of a single
@@ -69,16 +69,20 @@
 #define GSP_FW_HEAP_PARAM_CLIENT_ALLOC_SIZE      ((48 << 10) * 2048)   // Support 2048 channels
 
 #if RMCFG_FEATURE_GSPRM_BULLSEYE || defined(GSPRM_BULLSEYE_ENABLE)
-#define BULLSEYE_ROOT_HEAP_ALLOC_RM_DATA_SECTION_SIZE_DELTA         (12u)
-#define BULLSEYE_ROOT_HEAP_ALLOC_BAREMETAL_LIBOS_HEAP_SIZE_DELTA    (70u)
+#define BULLSEYE_ROOT_HEAP_ALLOC_RM_DATA_SECTION_SIZE_DELTA         (13u)
+#define BULLSEYE_ROOT_HEAP_ALLOC_BAREMETAL_LIBOS_HEAP_SIZE_DELTA    (10u)
 #define GSP_FW_HEAP_SIZE_VGPU_DEFAULT \
                                 ((581u + ((BULLSEYE_ROOT_HEAP_ALLOC_RM_DATA_SECTION_SIZE_DELTA)*8u) + \
                                 (BULLSEYE_ROOT_HEAP_ALLOC_BAREMETAL_LIBOS_HEAP_SIZE_DELTA)) << 20)
+#define GSP_FW_HEAP_SIZE_VGPU_48VMS \
+                                ((1370u + ((BULLSEYE_ROOT_HEAP_ALLOC_RM_DATA_SECTION_SIZE_DELTA)*8u) + \
+                                (BULLSEYE_ROOT_HEAP_ALLOC_BAREMETAL_LIBOS_HEAP_SIZE_DELTA)) << 20)
 #else
-#define GSP_FW_HEAP_SIZE_VGPU_DEFAULT                       (581 << 20)
+// for more information on how these values are calculated, refer to init_partition.h where 
+// the breakdown of formula is included. The asserts describe the values needed.
+#define GSP_FW_HEAP_SIZE_VGPU_DEFAULT                       (581 << 20) 
+#define GSP_FW_HEAP_SIZE_VGPU_48VMS                         (1370u << 20)
 #endif // RMCFG_FEATURE_GSPRM_BULLSEYE || defined(GSPRM_BULLSEYE_ENABLE)
-
-
 
 // Min/max bounds for heap size override by regkey
 #define GSP_FW_HEAP_SIZE_OVERRIDE_LIBOS2_MIN_MB                (64u)
@@ -97,12 +101,16 @@
 #define GSP_FW_HEAP_SIZE_OVERRIDE_LIBOS3_VGPU_MIN_MB \
                                     (581u + ((BULLSEYE_ROOT_HEAP_ALLOC_RM_DATA_SECTION_SIZE_DELTA)*8u) + \
                                     (BULLSEYE_ROOT_HEAP_ALLOC_BAREMETAL_LIBOS_HEAP_SIZE_DELTA))
+
+#define GSP_FW_HEAP_SIZE_OVERRIDE_LIBOS3_VGPU_MAX_MB \
+                                    (1093u + ((BULLSEYE_ROOT_HEAP_ALLOC_RM_DATA_SECTION_SIZE_DELTA)*8u) + \
+                                    (BULLSEYE_ROOT_HEAP_ALLOC_BAREMETAL_LIBOS_HEAP_SIZE_DELTA))
 #else
 #define GSP_FW_HEAP_SIZE_OVERRIDE_LIBOS3_BAREMETAL_MIN_MB      (88u)
 #define GSP_FW_HEAP_SIZE_OVERRIDE_LIBOS3_BAREMETAL_MAX_MB     (280u)
 
 #define GSP_FW_HEAP_SIZE_OVERRIDE_LIBOS3_VGPU_MIN_MB          (581u)
+#define GSP_FW_HEAP_SIZE_OVERRIDE_LIBOS3_VGPU_MAX_MB          (1093u)
 #endif // RMCFG_FEATURE_GSPRM_BULLSEYE || defined(GSPRM_BULLSEYE_ENABLE)
-#define GSP_FW_HEAP_SIZE_OVERRIDE_LIBOS3_VGPU_MAX_MB         (1040u)
 
 #endif // GSP_FW_HEAP_H

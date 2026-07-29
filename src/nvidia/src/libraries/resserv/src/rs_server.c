@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2015-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2015-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -256,7 +256,7 @@ NV_STATUS serverFreeResourceTreeUnderLock(RsServer *pServer, RS_RES_FREE_PARAMS 
             goto done;
 
         status = clientFreeResource(pResourceRef->pClient, pServer, pFreeParams);
-        NV_ASSERT(status == NV_OK);
+        NV_ASSERT((status == NV_OK) || (status == NV_ERR_GPU_IN_FULLCHIP_RESET));
 
         serverResLock_Epilogue(pServer, LOCK_ACCESS_WRITE, pLockInfo, &releaseFlags);
     }
@@ -1372,7 +1372,7 @@ serverFreeResourceTree
         freeParams.bInvalidateOnly = bInvalidateOnly;
         freeParams.pSecInfo = pParams->pSecInfo;
         status = serverFreeResourceTreeUnderLock(pServer, &freeParams);
-        NV_ASSERT(status == NV_OK);
+        NV_ASSERT((status == NV_OK) || (status == NV_ERR_GPU_IN_FULLCHIP_RESET));
 
         if (pServer->bDebugFreeList)
         {
@@ -1698,11 +1698,21 @@ serverCopyResource
 
     status = clientGetResourceRef(pClientSrc, pParams->hResourceSrc, &pResourceRefSrc);
     if (status != NV_OK)
+    {
+        NV_PRINTF(LEVEL_NOTICE, "Failed to find handle 0x%x under client 0x%x\n", pParams->hResourceSrc, pParams->hClientSrc);
         goto done;
+    }
 
     if (pResourceRefSrc->bInvalidated)
     {
         status = NV_ERR_RESOURCE_LOST;
+        goto done;
+    }
+
+    status = clientGetResourceRef(pClientDst, pParams->hParentDst, &pParams->pDstParentRef);
+    if (status != NV_OK)
+    {
+        NV_PRINTF(LEVEL_NOTICE, "Failed to find handle 0x%x under client 0x%x\n", pParams->hParentDst, pParams->hClientDst);
         goto done;
     }
 
@@ -1718,10 +1728,11 @@ serverCopyResource
 
     pParams->pSrcClient = pClientSrc;
     pParams->pSrcRef = pResourceRefSrc;
+    pParams->pDstClient = pClientDst;
 
     status = serverUpdateLockFlagsForCopy(pServer, pParams);
     if (status != NV_OK)
-        return status;
+        goto done;
 
     status = serverResLock_Prologue(pServer, LOCK_ACCESS_WRITE, pParams->pLockInfo, &releaseFlags);
     if (status != NV_OK)
@@ -2266,6 +2277,7 @@ serverInterMap
         goto done;
 
     pMapping->flags = pParams->flags;
+    pMapping->flags2 = pParams->flags2;
     pMapping->dmaOffset = pParams->dmaOffset;
     pMapping->size = pParams->length;
     pMapping->pMemDesc = pParams->pMemDesc;
@@ -2311,6 +2323,7 @@ serverInterUnmapMapping
         NV_ASSERT_OK_OR_GOTO(status, refAddInterMapping(pMapperRef, pMapping->pMappableRef, pMapping->pContextRef, &pNewMappingLeft), done);
 
         pNewMappingLeft->flags = pMapping->flags;
+        pNewMappingLeft->flags2 = pMapping->flags2;
         pNewMappingLeft->dmaOffset = pMapping->dmaOffset;
         pNewMappingLeft->size = pParams->dmaOffset - pMapping->dmaOffset;
     }
@@ -2320,6 +2333,7 @@ serverInterUnmapMapping
         NV_ASSERT_OK_OR_GOTO(status, refAddInterMapping(pMapperRef, pMapping->pMappableRef, pMapping->pContextRef, &pNewMappingRight), done);
 
         pNewMappingRight->flags = pMapping->flags;
+        pNewMappingRight->flags2 = pMapping->flags2;
         pNewMappingRight->dmaOffset = pParams->dmaOffset + pParams->size;
         pNewMappingRight->size = pMapping->dmaOffset + pMapping->size - pNewMappingRight->dmaOffset;
     }

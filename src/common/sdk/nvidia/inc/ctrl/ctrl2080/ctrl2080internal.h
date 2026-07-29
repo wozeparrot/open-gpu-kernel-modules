@@ -31,6 +31,7 @@
 //
 
 #include "nvimpshared.h"
+#include "ctrl2080nvlink_common.h"
 #include "cc_drv.h"
 #include "ctrl/ctrl2080/ctrl2080base.h"
 
@@ -39,6 +40,7 @@
 #include "ctrl/ctrl0080/ctrl0080msenc.h"     /* NV0080_CTRL_MSENC_CAPS_TBL_SIZE    */
 #include "ctrl/ctrl0080/ctrl0080bsp.h"       /* NV0080_CTRL_BSP_CAPS_TBL_SIZE      */
 #include "ctrl/ctrl2080/ctrl2080fifo.h"      /* NV2080_CTRL_FIFO_UPDATE_CHANNEL_INFO */
+#include "ctrl/ctrl2080/ctrl2080mc.h"        /* NV2080_INTR_* */
 #include "ctrl/ctrl0073/ctrl0073system.h"    /* NV0073_CTRL_SYSTEM_ACPI_ID_MAP_MAX_DISPLAYS */
 #include "ctrl/ctrl0000/ctrl0000system.h"
 #include "ctrl/ctrl90f1.h"
@@ -229,6 +231,9 @@ typedef struct NV2080_CTRL_INTERNAL_STATIC_GR_GLOBAL_SM_ORDER {
         NvU16 globalTpcId;
         NvU16 virtualGpcId;
         NvU16 migratableTpcId;
+        NvU16 ugpuId;
+        NvU16 physicalCpcId;
+        NvU16 virtualTpcId;
     } globalSmId[NV2080_CTRL_INTERNAL_GR_MAX_SM];
 
     NvU16 numSm;
@@ -278,7 +283,7 @@ typedef struct NV2080_CTRL_INTERNAL_MSENC_GET_CAPS_PARAMS {
 } NV2080_CTRL_INTERNAL_MSENC_GET_CAPS_PARAMS;
 
 
-#define NV2080_CTRL_INTERNAL_GR_MAX_GPC                            12
+#define NV2080_CTRL_INTERNAL_GR_MAX_GPC                            16
 #define NV2080_CTRL_INTERNAL_MAX_TPC_PER_GPC_COUNT                 10
 
 /*!
@@ -819,22 +824,38 @@ typedef NV2080_CTRL_INTERNAL_MIGMGR_PROMOTE_GPU_INSTANCE_MEM_RANGE_PARAMS NV2080
 
 #define NV2080_CTRL_CMD_INTERNAL_MIGMGR_PROMOTE_GPU_INSTANCE_MEM_RANGE (0x20800a43) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_MIGMGR_PROMOTE_GPU_INSTANCE_MEM_RANGE_PARAMS_MESSAGE_ID" */
 
-
-
-#define NV2080_CTRL_INTERNAL_GR_INIT_BUG4208224_WAR_PARAMS_MESSAGE_ID (0x45U)
-
-typedef struct NV2080_CTRL_INTERNAL_GR_INIT_BUG4208224_WAR_PARAMS {
-    NvBool bTeardown;
-} NV2080_CTRL_INTERNAL_GR_INIT_BUG4208224_WAR_PARAMS;
-
-#define NV2080_CTRL_CMD_INTERNAL_KGR_INIT_BUG4208224_WAR (0x20800a46) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_KGR_INIT_BUG4208224_WAR_PARAMS_MESSAGE_ID" */
-#define NV2080_CTRL_INTERNAL_KGR_INIT_BUG4208224_WAR_PARAMS_MESSAGE_ID (0x46U)
-
-typedef NV2080_CTRL_INTERNAL_GR_INIT_BUG4208224_WAR_PARAMS NV2080_CTRL_INTERNAL_KGR_INIT_BUG4208224_WAR_PARAMS;
-
 typedef struct NV2080_CTRL_INTERNAL_STATIC_GR_PDB_PROPERTIES {
     NvBool bPerSubCtxheaderSupported;
 } NV2080_CTRL_INTERNAL_STATIC_GR_PDB_PROPERTIES;
+
+/*!
+ * NV2080_CTRL_CMD_INTERNAL_GPU_CHECK_CTS_ID_VALID
+ *
+ * This command validates whether a given CTS ID can be used within a GPU Instance by checking
+ * if the required GPCs can be allocated from the GPU Instance.
+ *
+ *   ctsId [in]
+ *     The CTS ID to validate
+ *
+ *   bCheckClientGI [in]
+ *     Validate the CTS ID against the GPU Instance owned by the client.
+ *
+ *   giComputeSize [in]
+ *     The compute size for the GPU Instance, which determines the number of GPCs in the GPU Instance.
+ *
+ *   bCtsIdValid [out]
+ *     Returns whether the CTS ID is valid within the specified GPU Instance.
+ */
+#define NV2080_CTRL_CMD_INTERNAL_GPU_CHECK_CTS_ID_VALID (0x20800a46) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_GPU_CHECK_CTS_ID_VALID_PARAMS_MESSAGE_ID" */
+
+#define NV2080_CTRL_INTERNAL_GPU_CHECK_CTS_ID_VALID_PARAMS_MESSAGE_ID (0x46U)
+
+typedef struct NV2080_CTRL_INTERNAL_GPU_CHECK_CTS_ID_VALID_PARAMS {
+    NvU32  ctsId;
+    NvBool bCheckClientGI;
+    NvU32  giComputeSize;
+    NvBool bCtsIdValid;
+} NV2080_CTRL_INTERNAL_GPU_CHECK_CTS_ID_VALID_PARAMS;
 
 #define NV2080_CTRL_INTERNAL_STATIC_GR_GET_PDB_PROPERTIES_PARAMS_MESSAGE_ID (0x47U)
 
@@ -1434,35 +1455,11 @@ typedef struct NV2080_CTRL_INTERNAL_FB_GET_HEAP_RESERVATION_SIZE_PARAMS {
  *     Interrupt table for Kernel RM.
  *
  *   subtreeMap [OUT]
- *     Subtree range for each NV2080_INTR_CATEGORY.
+ *     Subtree mask for each NV2080_INTR_CATEGORY.
  */
 #define NV2080_CTRL_CMD_INTERNAL_INTR_GET_KERNEL_TABLE (0x20800a5c) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_INTR_GET_KERNEL_TABLE_PARAMS_MESSAGE_ID" */
 
 #define NV2080_CTRL_INTERNAL_INTR_MAX_TABLE_SIZE       128
-
-/*!
- * Categories of interrupts.
- *
- * Each of these categories get a separate range of interrupt subtrees (top
- * level bits).
- */
-typedef enum NV2080_INTR_CATEGORY {
-    NV2080_INTR_CATEGORY_DEFAULT = 0,
-    NV2080_INTR_CATEGORY_ESCHED_DRIVEN_ENGINE = 1,
-    NV2080_INTR_CATEGORY_ESCHED_DRIVEN_ENGINE_NOTIFICATION = 2,
-    NV2080_INTR_CATEGORY_RUNLIST = 3,
-    NV2080_INTR_CATEGORY_RUNLIST_NOTIFICATION = 4,
-    NV2080_INTR_CATEGORY_UVM_OWNED = 5,
-    NV2080_INTR_CATEGORY_UVM_SHARED = 6,
-    NV2080_INTR_CATEGORY_ENUM_COUNT = 7,
-} NV2080_INTR_CATEGORY;
-
-#define NV2080_INTR_INVALID_SUBTREE NV_U8_MAX
-
-typedef struct NV2080_INTR_CATEGORY_SUBTREE_MAP {
-    NvU8 subtreeStart;
-    NvU8 subtreeEnd;
-} NV2080_INTR_CATEGORY_SUBTREE_MAP;
 
 typedef struct NV2080_CTRL_INTERNAL_INTR_GET_KERNEL_TABLE_ENTRY {
     NvU16 engineIdx;
@@ -1476,7 +1473,7 @@ typedef struct NV2080_CTRL_INTERNAL_INTR_GET_KERNEL_TABLE_ENTRY {
 typedef struct NV2080_CTRL_INTERNAL_INTR_GET_KERNEL_TABLE_PARAMS {
     NvU32                                            tableLen;
     NV2080_CTRL_INTERNAL_INTR_GET_KERNEL_TABLE_ENTRY table[NV2080_CTRL_INTERNAL_INTR_MAX_TABLE_SIZE];
-    NV2080_INTR_CATEGORY_SUBTREE_MAP                 subtreeMap[NV2080_INTR_CATEGORY_ENUM_COUNT];
+    NV_DECLARE_ALIGNED(NV2080_INTR_CATEGORY_SUBTREE_MAP subtreeMap[NV2080_INTR_CATEGORY_ENUM_COUNT], 8);
 } NV2080_CTRL_INTERNAL_INTR_GET_KERNEL_TABLE_PARAMS;
 
 /* Index to retrieve the needed heap space for specific module */
@@ -1670,17 +1667,6 @@ typedef struct NV2080_CTRL_INTERNAL_MEMSYS_GET_MIG_MEMORY_PARTITION_TABLE_PARAMS
  * Invoke RC recovery after watchdog timeout is hit.
  */
 #define NV2080_CTRL_CMD_INTERNAL_RC_WATCHDOG_TIMEOUT      (0x20800a6a) /* finn: Evaluated from "((FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | 0x6a)" */
-
-/* !
- *  This command disables cuda limit activation at teardown of the client.
- */
-#define NV2080_CTRL_CMD_INTERNAL_PERF_CUDA_LIMIT_DISABLE  (0x20800a7a) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | 0x7A" */
-
-/*
- *  This command is cleaning up OPTP when a client is found to have
- *  been terminated unexpectedly.
- */
-#define NV2080_CTRL_CMD_INTERNAL_PERF_OPTP_CLI_CLEAR      (0x20800a7c) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | 0x7C" */
 
 /* !
  *  This command is used to get the current AUX power state of the sub-device.
@@ -2914,6 +2900,8 @@ typedef struct NV2080_CTRL_INTERNAL_GSYNC_SET_OR_RESTORE_RASTER_SYNC_PARAMS {
     NvU32  bRasterSyncGpioDirection;
 } NV2080_CTRL_INTERNAL_GSYNC_SET_OR_RESTORE_RASTER_SYNC_PARAMS;
 
+
+
 /*!
  * NV2080_CTRL_CMD_INTERNAL_FBSR_INIT
  *
@@ -3438,7 +3426,7 @@ typedef struct NV2080_CTRL_INTERNAL_FIFO_GET_NUM_SECURE_CHANNELS_PARAMS {
 } NV2080_CTRL_INTERNAL_FIFO_GET_NUM_SECURE_CHANNELS_PARAMS;
 
 /*!
- * NV2080_CTRL_CMD_INTERNAL_PERF_PFM_REQ_HNDLR_PRH_DEPENDENCY_CHECK
+ * NV2080_CTRL_CMD_INTERNAL_PERF_PFM_REQ_HNDLR_DEPENDENCY_CHECK
  *
  * This command checks if all the dependant modules to PRH have been initialized. 
  *
@@ -3447,7 +3435,7 @@ typedef struct NV2080_CTRL_INTERNAL_FIFO_GET_NUM_SECURE_CHANNELS_PARAMS {
  *   NV_ERR_INVALID_STATE
  *   NV_ERR_NOT_SUPPORTED
  */
-#define NV2080_CTRL_CMD_INTERNAL_PERF_PFM_REQ_HNDLR_PRH_DEPENDENCY_CHECK (0x20800a18) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | 0x18" */
+#define NV2080_CTRL_CMD_INTERNAL_PERF_PFM_REQ_HNDLR_DEPENDENCY_CHECK (0x20800a45) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | 0x45" */
 
 /*
  * NV2080_CTRL_CMD_INTERNAL_BIF_DISABLE_SYSTEM_MEMORY_ACCESS
@@ -3466,7 +3454,7 @@ typedef struct NV2080_CTRL_INTERNAL_FIFO_GET_NUM_SECURE_CHANNELS_PARAMS {
  *   NV_ERR_INVALID_ARGUMENT
  *   NV_ERR_NOT_SUPPORTED
  */
-#define NV2080_CTRL_CMD_INTERNAL_BIF_DISABLE_SYSTEM_MEMORY_ACCESS        (0x20800adb) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_BIF_DISABLE_SYSTEM_MEMORY_ACCESS_PARAMS_MESSAGE_ID" */
+#define NV2080_CTRL_CMD_INTERNAL_BIF_DISABLE_SYSTEM_MEMORY_ACCESS    (0x20800adb) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_BIF_DISABLE_SYSTEM_MEMORY_ACCESS_PARAMS_MESSAGE_ID" */
 
 #define NV2080_CTRL_INTERNAL_BIF_DISABLE_SYSTEM_MEMORY_ACCESS_PARAMS_MESSAGE_ID (0xDBU)
 
@@ -4004,8 +3992,9 @@ typedef struct NV2080_CTRL_CMD_INTERNAL_PMGR_PFM_REQ_HNDLR_GET_EDPP_LIMIT_INFO_P
 /*
  * NV2080_CTRL_CMD_INTERNAL_INIT_USER_SHARED_DATA
  *
- * @brief Initialize RM User Shared Data memory mapping on physical RM
+ * @brief Initialize/Destroy RM User Shared Data memory mapping on physical RM
  *
+ * @param[in]  bInit    If this is an init or a destroy request
  * @param[in]  physAddr Physical address of memdesc to link physical to kernel
  *                      0 to de-initialize
  *
@@ -4015,6 +4004,7 @@ typedef struct NV2080_CTRL_CMD_INTERNAL_PMGR_PFM_REQ_HNDLR_GET_EDPP_LIMIT_INFO_P
 #define NV2080_CTRL_INTERNAL_INIT_USER_SHARED_DATA_PARAMS_MESSAGE_ID (0xFEU)
 
 typedef struct NV2080_CTRL_INTERNAL_INIT_USER_SHARED_DATA_PARAMS {
+    NvBool bInit;
     NV_DECLARE_ALIGNED(NvU64 physAddr, 8);
 } NV2080_CTRL_INTERNAL_INIT_USER_SHARED_DATA_PARAMS;
 #define NV2080_CTRL_CMD_INTERNAL_INIT_USER_SHARED_DATA (0x20800afe) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_INIT_USER_SHARED_DATA_PARAMS_MESSAGE_ID" */
@@ -4680,7 +4670,7 @@ typedef struct NV2080_CTRL_INTERNAL_NVLINK_UPDATE_HSHUB_MUX_PARAMS {
 
 typedef struct NV2080_CTRL_INTERNAL_NVLINK_PRE_SETUP_NVLINK_PEER_PARAMS {
     NvU32  peerId;
-    NvU32  peerLinkMask;
+    NV_DECLARE_ALIGNED(NvU64 peerLinkMask, 8);
     NvBool bEgmPeer;
     NvBool bNvswitchConn;
 } NV2080_CTRL_INTERNAL_NVLINK_PRE_SETUP_NVLINK_PEER_PARAMS;
@@ -4796,7 +4786,7 @@ typedef struct NV2080_CTRL_INTERNAL_NVLINK_SAVE_RESTORE_HSHUB_STATE_PARAMS {
 typedef struct NV2080_CTRL_INTERNAL_NVLINK_PROGRAM_BUFFERREADY_PARAMS {
     NvU32  flags;
     NvBool bSysmem;
-    NvU32  peerLinkMask;
+    NV_DECLARE_ALIGNED(NvU64 peerLinkMask, 8);
 } NV2080_CTRL_INTERNAL_NVLINK_PROGRAM_BUFFERREADY_PARAMS;
 #define NV2080_CTRL_CMD_INTERNAL_NVLINK_PROGRAM_BUFFERREADY (0x20800a64U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_NVLINK_PROGRAM_BUFFERREADY_PARAMS_MESSAGE_ID" */
 
@@ -4829,7 +4819,7 @@ typedef struct NV2080_CTRL_INTERNAL_NVLINK_UPDATE_CURRENT_CONFIG_PARAMS {
 
 typedef struct NV2080_CTRL_INTERNAL_NVLINK_UPDATE_PEER_LINK_MASK_PARAMS {
     NvU32 gpuInst;
-    NvU32 peerLinkMask;
+    NV_DECLARE_ALIGNED(NvU64 peerLinkMask, 8);
 } NV2080_CTRL_INTERNAL_NVLINK_UPDATE_PEER_LINK_MASK_PARAMS;
 
 #define NV2080_CTRL_CMD_INTERNAL_NVLINK_UPDATE_PEER_LINK_MASK (0x20800a7dU) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_NVLINK_UPDATE_PEER_LINK_MASK_PARAMS_MESSAGE_ID" */
@@ -4962,6 +4952,8 @@ typedef struct NV2080_CTRL_INTERNAL_NVLINK_DEVICE_LINK_VALUES {
  *    Mask of links discovered from all the IOCTRLs
  * [Out] ipVerNvlink
  *    IP revision of the NVLink HW
+ * [Out] maxSupportedLinks
+ *    Maximum number of links supported for a given arch
  * [Out] linkInfo
  *    Per link information
  */
@@ -4974,6 +4966,7 @@ typedef struct NV2080_CTRL_INTERNAL_NVLINK_GET_NVLINK_DEVICE_INFO_PARAMS {
     NvU32                                          ioctrlSize;
     NV_DECLARE_ALIGNED(NvU64 discoveredLinks, 8);
     NvU32                                          ipVerNvlink;
+    NvU32                                          maxSupportedLinks;
     NV2080_CTRL_INTERNAL_NVLINK_DEVICE_LINK_VALUES linkInfo[NV2080_CTRL_INTERNAL_NVLINK_MAX_ARR_SIZE];
 } NV2080_CTRL_INTERNAL_NVLINK_GET_NVLINK_DEVICE_INFO_PARAMS;
 
@@ -5169,6 +5162,7 @@ typedef struct NV2080_CTRL_INTERNAL_NVLINK_GET_LINK_AND_CLOCK_VALUES {
 
 typedef struct NV2080_CTRL_INTERNAL_NVLINK_GET_LINK_AND_CLOCK_INFO_PARAMS {
     NV_DECLARE_ALIGNED(NvU64 linkMask, 8);
+    NV_DECLARE_ALIGNED(NV2080_CTRL_NVLINK_LINK_MASK links, 8);
     NvU32                                                 nvlinkRefClkSpeedKHz;
     NvBool                                                bSublinkStateInst; // whether instantaneous sublink state is needed
     NV2080_CTRL_INTERNAL_NVLINK_GET_LINK_AND_CLOCK_VALUES linkInfo[NV2080_CTRL_INTERNAL_NVLINK_MAX_ARR_SIZE];
@@ -5264,6 +5258,95 @@ typedef struct NV2080_CTRL_INTERNAL_NVLINK_HSHUB_GET_SYSMEM_NVLINK_MASK_PARAMS {
 
 #define NV2080_CTRL_CMD_INTERNAL_NVLINK_HSHUB_GET_SYSMEM_NVLINK_MASK (0x20800aabU) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_NVLINK_HSHUB_GET_SYSMEM_NVLINK_MASK_PARAMS_MESSAGE_ID" */
 
+/*
+ * NV2080_CTRL_CMD_INTERNAL_SEND_CMC_LIBOS_BUFFER_INFO
+ *
+ *  Send CMC gsplite the address and size of log buffer allocated on sysmem
+ *
+ * [In] PublicId
+ *     ID of the gsplite engine
+ * [In] logBufferSize
+ *     Size of the log buffer allocated on sysmem
+ * [In] logBufferAddr
+ *     Start address of the log buffer
+ */
+#define NV2080_CTRL_INTERNAL_SEND_CMC_LIBOS_BUFFER_INFO_PARAMS_MESSAGE_ID (0x89U)
+
+typedef struct NV2080_CTRL_INTERNAL_SEND_CMC_LIBOS_BUFFER_INFO_PARAMS {
+    NvU32 PublicId;
+    NV_DECLARE_ALIGNED(NvU64 logBufferSize, 8);
+    NV_DECLARE_ALIGNED(NvU64 logBufferAddr, 8);
+} NV2080_CTRL_INTERNAL_SEND_CMC_LIBOS_BUFFER_INFO_PARAMS;
+
+#define NV2080_CTRL_CMD_INTERNAL_SEND_CMC_LIBOS_BUFFER_INFO (0x20800a89U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_SEND_CMC_LIBOS_BUFFER_INFO_PARAMS_MESSAGE_ID" */
+
+#define NV2080_CTRL_INTERNAL_HFRP_INSTANCE_SIZE             5
+
+/*
+ * NV2080_CTRL_CMD_INTERNAL_GPU_GET_HFRP_INFO
+ *
+ * This command retrives HFRP info from physical RM
+ *   
+ * [Out] hfrpPrivBase 
+ *      HFRP device PRIV base 
+ * [Out] hfrpIntrCtrlReg
+ *      HFRP intr control base 
+ *
+ */
+#define NV2080_CTRL_INTERNAL_GPU_GET_HFRP_INFO_PARAMS_MESSAGE_ID (0x7AU)
+
+typedef struct NV2080_CTRL_INTERNAL_GPU_GET_HFRP_INFO_PARAMS {
+    NvU32 hfrpPrivBase[NV2080_CTRL_INTERNAL_HFRP_INSTANCE_SIZE];
+    NvU32 hfrpIntrCtrlReg[NV2080_CTRL_INTERNAL_HFRP_INSTANCE_SIZE];
+} NV2080_CTRL_INTERNAL_GPU_GET_HFRP_INFO_PARAMS;
+
+#define NV2080_CTRL_CMD_INTERNAL_GPU_GET_HFRP_INFO (0x20800a7aU) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_GPU_GET_HFRP_INFO_PARAMS_MESSAGE_ID" */
+
+/*
+ * NV2080_CTRL_CMD_INTERNAL_SEND_CMC_UMD_API_OP_PARAMS
+ *
+ *  Send UMD API operations to CMC
+ *
+ * [in]  opType
+ *     UMD Task construct/destroy operation to perform on CMC
+ * [in]  handle
+ *     Handle of CmcUmdApi object for CMC to identify
+ * [in]  ringBufferSize
+ *     Size of ring buffer in bytes
+ * [in]  ringBufferOffset
+ *     Offset of ring buffer
+ * [in]  userdPa
+ *     PA of USERD memory
+ * [in]  userdVa
+ *     VA of USERD memory
+ * [in] instBlkAddr
+ *     Address of instance block holding VASpace PDB info
+ * [in] instBlkAperture
+ *     Aperture of instance block
+ * [out] workSubmitToken
+ *     WorkSubmitToken generated by CMC for UMD_API object
+ *
+ */
+#define NV2080_CTRL_INTERNAL_SEND_CMC_UMD_API_OP_PARAMS_MESSAGE_ID (0x7CU)
+
+typedef struct NV2080_CTRL_INTERNAL_SEND_CMC_UMD_API_OP_PARAMS {
+    NvU32 opType;
+    NvU32 ringBufferSize;
+    NV_DECLARE_ALIGNED(NvU64 ringBufferOffset, 8);
+    NV_DECLARE_ALIGNED(NvU64 userdPa, 8);
+    NV_DECLARE_ALIGNED(NvU64 userdVa, 8);
+    NV_DECLARE_ALIGNED(NvU64 instBlkAddr, 8);
+    NvU8  instBlkAperture;
+    NvU8  userdAperture;
+    NvU32 workSubmitToken;
+    NvU32 cmcHandle;
+} NV2080_CTRL_INTERNAL_SEND_CMC_UMD_API_OP_PARAMS;
+
+#define NV2080_INTERNAL_CMC_UMD_API_TASK_CONSTRUCT                       0x0U
+#define NV2080_INTERNAL_CMC_UMD_API_TASK_DESTROY                         0x1U
+
+#define NV2080_CTRL_CMD_INTERNAL_SEND_CMC_UMD_API_OP                     (0x20800a7cU) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_SEND_CMC_UMD_API_OP_PARAMS_MESSAGE_ID" */
+
 
 /*
 * NV2080_CTRL_CMD_INTERNAL_NVLINK_REPLAY_SUPPRESSED_ERRORS
@@ -5271,6 +5354,69 @@ typedef struct NV2080_CTRL_INTERNAL_NVLINK_HSHUB_GET_SYSMEM_NVLINK_MASK_PARAMS {
 * Request from CPU-RM to proccess supressed errors during boot on GSP
 * This command accepts no parameters.
 */
-#define NV2080_CTRL_CMD_INTERNAL_NVLINK_REPLAY_SUPPRESSED_ERRORS     (0x20800b01U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_2_INTERFACE_ID << 8) | 0x1" */
+#define NV2080_CTRL_CMD_INTERNAL_NVLINK_REPLAY_SUPPRESSED_ERRORS         (0x20800b01U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_2_INTERFACE_ID << 8) | 0x1" */
+
+
+/*!
+ * @ref NV2080_CTRL_CMD_GR_GET_SM_ISSUE_RATE_MODIFIER_V2
+ */
+
+
+
+
+typedef struct NV2080_CTRL_INTERNAL_STATIC_GR_SM_ISSUE_RATE_MODIFIER_V2 {
+    NvU32                                    smIssueRateModifierListSize;
+    NV2080_CTRL_GR_SM_ISSUE_RATE_MODIFIER_V2 smIssueRateModifierList[NV2080_CTRL_GR_SM_ISSUE_RATE_MODIFIER_V2_MAX_LIST_SIZE];
+} NV2080_CTRL_INTERNAL_STATIC_GR_SM_ISSUE_RATE_MODIFIER_V2;
+
+#define NV2080_CTRL_INTERNAL_STATIC_GR_GET_SM_ISSUE_RATE_MODIFIER_V2_PARAMS_MESSAGE_ID (0x02U)
+
+typedef struct NV2080_CTRL_INTERNAL_STATIC_GR_GET_SM_ISSUE_RATE_MODIFIER_V2_PARAMS {
+    NV2080_CTRL_INTERNAL_STATIC_GR_SM_ISSUE_RATE_MODIFIER_V2 smIssueRateModifierV2[NV2080_CTRL_INTERNAL_GR_MAX_ENGINES];
+} NV2080_CTRL_INTERNAL_STATIC_GR_GET_SM_ISSUE_RATE_MODIFIER_V2_PARAMS;
+
+#define NV2080_CTRL_CMD_INTERNAL_STATIC_KGR_GET_SM_ISSUE_RATE_MODIFIER_V2 (0x20800b03) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_2_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_STATIC_KGR_GET_SM_ISSUE_RATE_MODIFIER_V2_PARAMS_MESSAGE_ID" */
+
+#define NV2080_CTRL_INTERNAL_STATIC_KGR_GET_SM_ISSUE_RATE_MODIFIER_V2_PARAMS_MESSAGE_ID (0x03U)
+
+typedef NV2080_CTRL_INTERNAL_STATIC_GR_GET_SM_ISSUE_RATE_MODIFIER_V2_PARAMS NV2080_CTRL_INTERNAL_STATIC_KGR_GET_SM_ISSUE_RATE_MODIFIER_V2_PARAMS;
+
+
+/*!
+ * @ref NV2080_CTRL_CMD_GR_GET_SM_ISSUE_THROTTLE_CTRL
+ *
+ * This command returns the throttle controls for all the GR engines.
+ *
+ */
+
+
+
+
+typedef struct NV2080_CTRL_INTERNAL_STATIC_GR_SM_ISSUE_THROTTLE_CTRL {
+    NvU32                                 smIssueThrottleCtrlListSize;
+    NV2080_CTRL_GR_SM_ISSUE_THROTTLE_CTRL smIssueThrottleCtrlList[NV2080_CTRL_GR_SM_ISSUE_THROTTLE_CTRL_MAX_LIST_SIZE];
+} NV2080_CTRL_INTERNAL_STATIC_GR_SM_ISSUE_THROTTLE_CTRL;
+
+#define NV2080_CTRL_INTERNAL_STATIC_GR_GET_SM_ISSUE_THROTTLE_CTRL_PARAMS_MESSAGE_ID (0x04U)
+
+typedef struct NV2080_CTRL_INTERNAL_STATIC_GR_GET_SM_ISSUE_THROTTLE_CTRL_PARAMS {
+    NV2080_CTRL_INTERNAL_STATIC_GR_SM_ISSUE_THROTTLE_CTRL smIssueThrottleCtrl[NV2080_CTRL_INTERNAL_GR_MAX_ENGINES];
+} NV2080_CTRL_INTERNAL_STATIC_GR_GET_SM_ISSUE_THROTTLE_CTRL_PARAMS;
+
+#define NV2080_CTRL_CMD_INTERNAL_STATIC_KGR_GET_SM_ISSUE_THROTTLE_CTRL (0x20800b05) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_2_INTERFACE_ID << 8) | NV2080_CTRL_INTERNAL_STATIC_KGR_GET_SM_ISSUE_THROTTLE_CTRL_PARAMS_MESSAGE_ID" */
+
+#define NV2080_CTRL_INTERNAL_STATIC_KGR_GET_SM_ISSUE_THROTTLE_CTRL_PARAMS_MESSAGE_ID (0x05U)
+
+typedef NV2080_CTRL_INTERNAL_STATIC_GR_GET_SM_ISSUE_THROTTLE_CTRL_PARAMS NV2080_CTRL_INTERNAL_STATIC_KGR_GET_SM_ISSUE_THROTTLE_CTRL_PARAMS;
+
+/*!
+ * NV2080_CTRL_CMD_INTERNAL_NVLINK_RC_USER_MODE_CHANNELS
+ *
+ * This command is used to perform recovery actions after the fabric has been
+ * idled due to a fatal nvlink error.
+ * This command accepts no parameters.
+ *
+ */
+#define NV2080_CTRL_CMD_INTERNAL_NVLINK_RC_USER_MODE_CHANNELS (0x20800b08) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_INTERNAL_2_INTERFACE_ID << 8) | 0x08" */
 
 /* ctrl2080internal_h */

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -30,17 +30,28 @@
 
 #include "containers/list.h"
 
-#define MAX_VGPU_TYPES_PER_PGPU                 NVA081_MAX_VGPU_TYPES_PER_PGPU
-#define VGPU_CONFIG_PARAMS_MAX_LENGTH           1024
-#define VGPU_STRING_BUFFER_SIZE                 NVA081_VGPU_STRING_BUFFER_SIZE
-#define VGPU_UUID_SIZE                          NVA081_VM_UUID_SIZE
-#define VGPU_MAX_GFID                           64
-#define VGPU_SIGNATURE_SIZE                     NVA081_VGPU_SIGNATURE_SIZE
-#define VGPU_MAX_PLUGIN_CHANNELS                5
-#define MAX_VGPU_DEVICES_PER_PGPU               NVA081_MAX_VGPU_PER_PGPU
+#define MAX_VGPU_TYPES_PER_PGPU                        NVA081_MAX_VGPU_TYPES_PER_PGPU
+#define VGPU_CONFIG_PARAMS_MAX_LENGTH                  1024
+#define VGPU_STRING_BUFFER_SIZE                        NVA081_VGPU_STRING_BUFFER_SIZE
+#define VGPU_UUID_SIZE                                 NVA081_VM_UUID_SIZE
+#define VGPU_MAX_GFID                                  64
+#define VGPU_SIGNATURE_SIZE                            NVA081_VGPU_SIGNATURE_SIZE
+#define VGPU_MAX_PLUGIN_CHANNELS                       5
+#define MAX_VGPU_DEVICES_PER_PGPU                      NVA081_MAX_VGPU_PER_PGPU
+#define MAX_VGPU_DEVICES_PER_PGPU_NON_MIG              NVA081_MAX_VGPU_PER_PGPU_NON_MIG
+#define MAX_VGPU_DEVICES_PER_GI                        NVA081_MAX_VGPU_PER_GI
 
-#define SET_GUEST_ID_ACTION_SET                 0
-#define SET_GUEST_ID_ACTION_UNSET               1
+#define SET_GUEST_ID_ACTION_SET                        0
+#define SET_GUEST_ID_ACTION_UNSET                      1
+
+// swrl count for MIG when running in non-timesliced mode
+#define OBJSCHED_SW_MIG_NO_TIMESLICE_RUNLIST_COUNT     1
+// swrl count for MIG when running in timesliced mode
+#define OBJSCHED_SW_MIG_TIMESLICE_RUNLIST_COUNT        (MAX_VGPU_DEVICES_PER_GI + 1)
+// swrl count for non-mig
+#define OBJSCHED_SW_RUNLIST_COUNT                      (MAX_VGPU_DEVICES_PER_PGPU_NON_MIG + 1)
+//No. of Reserved CE Channels for KMD/OS in HYPER-V
+#define HYPERV_RESERVED_CE_CHANNELS_KMD                32
 
 typedef struct
 {
@@ -102,6 +113,7 @@ typedef struct
     NvU32                               frlEnable;
     NvU32                               gpuDirectSupported;
     NvU32                               nvlinkP2PSupported;
+    NvU32                               maxInstancePerGI;
     NvU32                               multiVgpuExclusive;
     NvU8                                vgpuExtraParams[VGPU_CONFIG_PARAMS_MAX_LENGTH];
     NvU8                                vgpuSignature[VGPU_SIGNATURE_SIZE];
@@ -132,5 +144,10 @@ vgpuMgrFreeSystemChannelIDs(OBJGPU *pGpu,
                             Device *pMigDevice,
                             NvU32 engineFifoListNumEntries,
                             FIFO_ENGINE_LIST *engineFifoList);
+
+
+NvU32 vgpuMgrGetSwrlCountToAllocate(OBJGPU *pGpu);
+
+NvU16 vgpuMgrGetVgpuSsvid(OBJGPU *pGpu);
 
 #endif // __common_vgpu_mgr_h__

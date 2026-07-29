@@ -1,13 +1,15 @@
 
 #ifndef _G_CHIPS2HALSPEC_NVOC_H_
 #define _G_CHIPS2HALSPEC_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,8 +26,8 @@ extern "C" {
 
 // Several WARs that only visible by NVOC compiler
 
-#define GPUHAL_ARCH(x)      NV_PMC_BOOT_0_ARCHITECTURE_##x
-#define GPUHAL_IMPL(x)      NV_PMC_BOOT_0_IMPLEMENTATION_##x
+#define GPUHAL_ARCH(x)      NV_PMC_BOOT_42_ARCHITECTURE_##x
+#define GPUHAL_IMPL(x)      NV_PMC_BOOT_42_IMPLEMENTATION_##x
 
 // Create alias 'group' to provide a concise syntax
 #define group variant_group
@@ -139,12 +141,18 @@ void __nvoc_init_halspec_DispIpHal(DispIpHal*, NvU32);
 // delete ~DISPv0400 & (TU102 | TU104 | TU106 | TU116 | TU117);
 // delete DISPv0401 & ~(GA102 | GA103 | GA104 | GA106 | GA107);
 // delete ~DISPv0401 & (GA102 | GA103 | GA104 | GA106 | GA107);
+// delete DISPv0402 & ~T234D;
+// delete ~DISPv0402 & T234D;
 // delete DISPv0404 & ~(AD102 | AD103 | AD104 | AD106 | AD107);
 // delete ~DISPv0404 & (AD102 | AD103 | AD104 | AD106 | AD107);
-// delete DISPv0501 & ~GB10B;
-// delete ~DISPv0501 & GB10B;
+// delete DISPv0501 & ~(GB10B | T264D);
+// delete ~DISPv0501 & (GB10B | T264D);
 // delete DISPv0502 & ~(GB202 | GB203 | GB205 | GB206 | GB207);
 // delete ~DISPv0502 & (GB202 | GB203 | GB205 | GB206 | GB207);
+// delete DISPv0503 & ~GB20B;
+// delete ~DISPv0503 & GB20B;
+// delete DISPv0504 & ~GB20C;
+// delete ~DISPv0504 & GB20C;
 
 
 /* DPU IP versions */

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2014-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2014-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -542,7 +542,7 @@ NV_STATUS NV_API_CALL nv_vgpu_update_sysfs_info
     nv_state_t          *pNv,
     const NvU8          *pVgpuDevName,
     NvU32                mode,
-    NvU32                sysfs_val
+    NvU32                *sysfs_val
 )
 {
     THREAD_STATE_NODE       threadState;
@@ -576,9 +576,11 @@ NV_STATUS NV_API_CALL nv_vgpu_update_sysfs_info
     }
 
     if (updateMode == SET_GPU_INSTANCE_ID)
-        rmStatus = kvgpumgrSetGpuInstanceId(pRequestVgpu, sysfs_val);
+        rmStatus = kvgpumgrSetGpuInstanceId(pRequestVgpu, *sysfs_val);
     else if (updateMode == SET_PLACEMENT_ID)
-        rmStatus = kvgpumgrSetPlacementId(pRequestVgpu, sysfs_val);
+        rmStatus = kvgpumgrSetPlacementId(pRequestVgpu, *sysfs_val);
+    else if (updateMode == GET_PLACEMENT_ID)
+       *sysfs_val = pRequestVgpu->placementId;
 
 release_lock:
     // UNLOCK: release API lock
@@ -840,11 +842,11 @@ NV_STATUS NV_API_CALL nv_gpu_unbind_event
     // LOCK: acquire API lock
     if ((rmStatus = rmapiLockAcquire(API_LOCK_FLAGS_NONE, RM_LOCK_MODULES_HYPERVISOR)) == NV_OK)
     {
-        /*
-         * Send gpu_id in "status" field of the event so that nvidia-vgpu-mgr
-         * daemon knows which GPU is being unbound
-         */
-        CliAddSystemEvent(NV0000_NOTIFIERS_GPU_UNBIND_EVENT, gpuId, isEventNotified);
+        NV0000_CTRL_SYSTEM_EVENT_DATA_VGPU_UNBIND eventData = { 0 };
+
+        // Send gpu_id so that nvidia-vgpu-mgr daemon knows which GPU is being unbound
+        eventData.gpuId = gpuId;
+        CliAddSystemEvent(NV0000_NOTIFIERS_VGPU_UNBIND_EVENT, &eventData, isEventNotified);
 
         // UNLOCK: release API lock
         rmapiLockRelease();
@@ -872,7 +874,10 @@ NV_STATUS NV_API_CALL nv_gpu_bind_event(
     // LOCK: acquire API lock
     if ((rmStatus = rmapiLockAcquire(API_LOCK_FLAGS_NONE, RM_LOCK_MODULES_HYPERVISOR)) == NV_OK)
     {
-        CliAddSystemEvent(NV0000_NOTIFIERS_GPU_BIND_EVENT, gpuId, isEventNotified);
+        NV0000_CTRL_SYSTEM_EVENT_DATA_VGPU_BIND eventData = { 0 };
+
+        eventData.gpuId = gpuId;
+        CliAddSystemEvent(NV0000_NOTIFIERS_VGPU_BIND_EVENT, &eventData, isEventNotified);
 
         // UNLOCK: release API lock
         rmapiLockRelease();
@@ -971,7 +976,6 @@ NV_STATUS rm_is_vgpu_supported_device(
         for (i = 0; i < NV_ARRAY_ELEMENTS(sVgpuUsmTypes); i++)
         {
             if (pOsGpuInfo->pci_info.device_id == sVgpuUsmTypes[i].ulDevID &&
-                    pOsGpuInfo->subsystem_vendor == sVgpuUsmTypes[i].ulSubSystemVendorID &&
                     pOsGpuInfo->subsystem_id == sVgpuUsmTypes[i].ulSubID)
             {
                 return NV_OK;

@@ -112,6 +112,7 @@ typedef NV_STATUS      RpcCtrlVaspaceCopyServerReservedPdes(POBJGPU, POBJRPC, Nv
 typedef NV_STATUS      RpcCtrlCmdGetChipletHsCreditPool(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlGrCtxswPreemptionBind(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlAllocPmaStream(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
+typedef NV_STATUS      RpcCtrlCmdInternalGpuCheckCtsIdValid(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlCmdGetHsCreditsMapping(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlReleaseHes(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlReserveHwpmLegacy(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
@@ -183,6 +184,7 @@ typedef NV_STATUS      RpcCtrlFabricMemStats(POBJGPU, POBJRPC, NvHandle, NvHandl
 typedef NV_STATUS      RpcCtrlCmdNvlinkInbandSendData(POBJGPU, POBJRPC, NV2080_CTRL_NVLINK_INBAND_SEND_DATA_PARAMS*);
 typedef NV_STATUS      RpcCtrlGrCtxswZcullBind(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlInternalMemsysSetZbcReferenced(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
+typedef NV_STATUS      RpcSetupHibernationBuffer(POBJGPU, POBJRPC);
 typedef NV_STATUS      RpcCtrlPerfRatedTdpSetControl(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlExecPartitionsCreate(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlGpfifoGetWorkSubmitToken(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
@@ -195,6 +197,7 @@ typedef NV_STATUS      RpcRestoreHibernationData(POBJGPU, POBJRPC);
 typedef NV_STATUS      RpcCtrlFlaSetupInstanceMemBlock(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlInternalSriovPromotePmaStream(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlFbGetFsInfo(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
+typedef NV_STATUS      RpcInitGspTraceCrashBuffer(POBJGPU, POBJRPC, NvU64, NvU32);
 typedef NV_STATUS      RpcCtrlSetChannelInterleaveLevel(POBJGPU, POBJRPC, NvHandle, NvHandle, void*);
 typedef NV_STATUS      RpcCtrlDbgResumeContext(POBJGPU, POBJRPC, NvHandle, NvHandle);
 typedef NV_STATUS      RpcAllocRoot(POBJGPU, POBJRPC, NvHandle);
@@ -276,6 +279,7 @@ typedef struct RPC_HAL_IFACES {
     RpcCtrlCmdGetChipletHsCreditPool  *rpcCtrlCmdGetChipletHsCreditPool; /* GET_CHIPLET_HS_CREDIT_POOL */
     RpcCtrlGrCtxswPreemptionBind  *rpcCtrlGrCtxswPreemptionBind; /* CTRL_GR_CTXSW_PREEMPTION_BIND */
     RpcCtrlAllocPmaStream       *rpcCtrlAllocPmaStream;       /* CTRL_ALLOC_PMA_STREAM */
+    RpcCtrlCmdInternalGpuCheckCtsIdValid  *rpcCtrlCmdInternalGpuCheckCtsIdValid; /* Check CTS ID validity */
     RpcCtrlCmdGetHsCreditsMapping  *rpcCtrlCmdGetHsCreditsMapping; /* GET_HS_CREDITS_MAPPING */
     RpcCtrlReleaseHes           *rpcCtrlReleaseHes;           /* RELEASE_HES */
     RpcCtrlReserveHwpmLegacy    *rpcCtrlReserveHwpmLegacy;    /* CTRL_RESERVE_HWPM_LEGACY */
@@ -340,6 +344,7 @@ typedef struct RPC_HAL_IFACES {
     RpcCtrlCmdNvlinkInbandSendData  *rpcCtrlCmdNvlinkInbandSendData; /* CTRL_CMD_NVLINK_INBAND_SEND_DATA */
     RpcCtrlGrCtxswZcullBind     *rpcCtrlGrCtxswZcullBind;     /* CTRL_GR_CTXSW_ZCULL_BIND */
     RpcCtrlInternalMemsysSetZbcReferenced  *rpcCtrlInternalMemsysSetZbcReferenced; /* CTRL_INTERNAL_MEMSYS_SET_ZBC_REFERENCED */
+    RpcSetupHibernationBuffer   *rpcSetupHibernationBuffer;   /* SETUP_HIBERNATION_BUFFER */
     RpcCtrlPerfRatedTdpSetControl  *rpcCtrlPerfRatedTdpSetControl; /* CTRL_PERF_RATED_TDP_SET_CONTROL */
     RpcCtrlExecPartitionsCreate  *rpcCtrlExecPartitionsCreate; /* CTRL_EXEC_PARTITIONS_CREATE */
     RpcCtrlGpfifoGetWorkSubmitToken  *rpcCtrlGpfifoGetWorkSubmitToken; /* CTRL_GPFIFO_GET_WORK_SUBMIT_TOKEN */
@@ -350,6 +355,7 @@ typedef struct RPC_HAL_IFACES {
     RpcCtrlFlaSetupInstanceMemBlock  *rpcCtrlFlaSetupInstanceMemBlock; /* NV2080_CTRL_CMD_FLA_SETUP_INSTANCE_MEM_BLOCK */
     RpcCtrlInternalSriovPromotePmaStream  *rpcCtrlInternalSriovPromotePmaStream; /* CTRL_INTERNAL_SRIOV_PROMOTE_PMA_STREAM */
     RpcCtrlFbGetFsInfo          *rpcCtrlFbGetFsInfo;          /* CTRL_FB_GET_FS_INFO */
+    RpcInitGspTraceCrashBuffer  *rpcInitGspTraceCrashBuffer;  /* INIT_GSP_TRACE_CRASH_BUFFER */
     RpcCtrlSetChannelInterleaveLevel  *rpcCtrlSetChannelInterleaveLevel; /* CTRL_SET_CHANNEL_INTERLEAVE_LEVEL */
     RpcCtrlDbgResumeContext     *rpcCtrlDbgResumeContext;     /* CTRL_DBG_RESUME_CONTEXT */
     RpcAllocRoot                *rpcAllocRoot;                /* ALLOC_ROOT */
@@ -472,6 +478,8 @@ typedef struct RPC_HAL_IFACES {
         (_pRpc)->_hal.rpcCtrlGrCtxswPreemptionBind(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
 #define rpcCtrlAllocPmaStream_HAL(_pGpu, _pRpc, _arg0, _arg1, _pArg2)  \
         (_pRpc)->_hal.rpcCtrlAllocPmaStream(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
+#define rpcCtrlCmdInternalGpuCheckCtsIdValid_HAL(_pGpu, _pRpc, _arg0, _arg1, _pArg2)  \
+        (_pRpc)->_hal.rpcCtrlCmdInternalGpuCheckCtsIdValid(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
 #define rpcCtrlCmdGetHsCreditsMapping_HAL(_pGpu, _pRpc, _arg0, _arg1, _pArg2)  \
         (_pRpc)->_hal.rpcCtrlCmdGetHsCreditsMapping(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
 #define rpcCtrlReleaseHes_HAL(_pGpu, _pRpc, _arg0, _arg1, _pArg2)  \
@@ -600,6 +608,8 @@ typedef struct RPC_HAL_IFACES {
         (_pRpc)->_hal.rpcCtrlGrCtxswZcullBind(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
 #define rpcCtrlInternalMemsysSetZbcReferenced_HAL(_pGpu, _pRpc, _arg0, _arg1, _pArg2)  \
         (_pRpc)->_hal.rpcCtrlInternalMemsysSetZbcReferenced(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
+#define rpcSetupHibernationBuffer_HAL(_pGpu, _pRpc)  \
+        (_pRpc)->_hal.rpcSetupHibernationBuffer(_pGpu, _pRpc)
 #define rpcCtrlPerfRatedTdpSetControl_HAL(_pGpu, _pRpc, _arg0, _arg1, _pArg2)  \
         (_pRpc)->_hal.rpcCtrlPerfRatedTdpSetControl(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
 #define rpcCtrlExecPartitionsCreate_HAL(_pGpu, _pRpc, _arg0, _arg1, _pArg2)  \
@@ -620,6 +630,8 @@ typedef struct RPC_HAL_IFACES {
         (_pRpc)->_hal.rpcCtrlInternalSriovPromotePmaStream(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
 #define rpcCtrlFbGetFsInfo_HAL(_pGpu, _pRpc, _arg0, _arg1, _pArg2)  \
         (_pRpc)->_hal.rpcCtrlFbGetFsInfo(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
+#define rpcInitGspTraceCrashBuffer_HAL(_pGpu, _pRpc, _arg0, _arg1)  \
+        (_pRpc)->_hal.rpcInitGspTraceCrashBuffer(_pGpu, _pRpc, _arg0, _arg1)
 #define rpcCtrlSetChannelInterleaveLevel_HAL(_pGpu, _pRpc, _arg0, _arg1, _pArg2)  \
         (_pRpc)->_hal.rpcCtrlSetChannelInterleaveLevel(_pGpu, _pRpc, _arg0, _arg1, _pArg2)
 #define rpcCtrlDbgResumeContext_HAL(_pGpu, _pRpc, _arg0, _arg1)  \

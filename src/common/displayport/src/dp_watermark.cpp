@@ -840,25 +840,36 @@ bool DisplayPort::isModePossibleMSTWithFEC
 
 unsigned DisplayPort::pbnForMode(const ModesetInfo & modesetInfo, bool bAccountSpread)
 {
+    unsigned bpp_factor;
     NvU64 pbn_numerator, pbn_denominator;
-
-    // When DSC is enabled consider depth will multiplied by 16
-    unsigned dsc_factor = 1;
 
     if (modesetInfo.bEnableDsc)
     {
-        if(modesetInfo.colorFormat == dpColorFormat_YCbCr422_Native)
+        if (modesetInfo.depth > 512U)
         {
-            dsc_factor = 32;
+            bpp_factor = 256U;
         }
         else
         {
-            dsc_factor = 16;
+            // Pre-Blackwell, depth will have bppx16
+            bpp_factor = 16U;
+        }   
+    }
+    else
+    {
+        if (modesetInfo.depth > 36U)
+        {
+            // Blackwell and later, depth will have effectiveBppx256
+            bpp_factor = 256U;
+        }
+        else
+        {
+            bpp_factor = 1U;
         }
     }
 
     pbn_numerator = modesetInfo.pixelClockHz * modesetInfo.depth * 64 / 8;
-    pbn_denominator = 54000000ULL * dsc_factor;
+    pbn_denominator = 54000000ULL * bpp_factor;
 
     if (bAccountSpread)
     {

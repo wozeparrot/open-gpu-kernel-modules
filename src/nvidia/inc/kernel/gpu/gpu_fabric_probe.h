@@ -42,6 +42,8 @@ NV_STATUS gpuFabricProbeStart(OBJGPU *pGpu,
 void gpuFabricProbeStop(GPU_FABRIC_PROBE_INFO_KERNEL *pGpuFabricProbeInfoKernel);
 void gpuFabricProbeStopPhysical(GPU_FABRIC_PROBE_INFO_PHYSICAL *pGpuFabricProbeInfoPhysical,
                                 NvU32 gfId);
+NV_STATUS gpuFabricProbeSuspendPhysical(GPU_FABRIC_PROBE_INFO_PHYSICAL *pGpuFabricProbeInfoPhysical, NvU32 *pPrevBwMode);
+NV_STATUS gpuFabricProbeResumePhysical(GPU_FABRIC_PROBE_INFO_PHYSICAL *pGpuFabricProbeInfoPhysical, NvU32 newBwMode);
 
 void gpuFabricProbeSuspend(GPU_FABRIC_PROBE_INFO_KERNEL *pGpuFabricProbeInfoKernel);
 void gpuFabricProbeInvalidate(GPU_FABRIC_PROBE_INFO_KERNEL *pGpuFabricProbeInfoKernel);
@@ -60,6 +62,7 @@ NV_STATUS gpuFabricProbeGetEgmGpaAddress(GPU_FABRIC_PROBE_INFO_KERNEL *pInfo, Nv
 NV_STATUS gpuFabricProbeGetNumProbeReqs(GPU_FABRIC_PROBE_INFO_KERNEL *pInfo, NvU64 *numProbes);
 NV_STATUS gpuFabricProbeGetFabricCliqueId(GPU_FABRIC_PROBE_INFO_KERNEL *pInfo, NvU32 *pFabricCliqueId);
 NV_STATUS gpuFabricProbeGetFabricHealthStatus(GPU_FABRIC_PROBE_INFO_KERNEL *pInfo, NvU32 *pFabricHealthStatusMask);
+NV_STATUS gpuFabricProbeGetRemapTableIndex(GPU_FABRIC_PROBE_INFO_KERNEL *pInfo, NvU32 *pRemapTableIdx);
 
 NvBool gpuFabricProbeIsReceived(GPU_FABRIC_PROBE_INFO_KERNEL *pGpuFabricProbeInfoKernel);
 NvBool gpuFabricProbeIsSuccess(GPU_FABRIC_PROBE_INFO_KERNEL *pGpuFabricProbeInfoKernel);
@@ -69,6 +72,8 @@ NV_STATUS gpuFabricProbeSetBwMode(NvU8 mode);
 NV_STATUS gpuFabricProbeSetBwModePerGpu(OBJGPU *pGpu, NvU8 mode);
 NV_STATUS gpuFabricProbeGetlinkMaskToBeReduced(GPU_FABRIC_PROBE_INFO_KERNEL *pGpuFabricProbeInfoKernel,
                                                NvU32 *linkMaskToBeReduced);
+NV_STATUS gpuFabricProbeSetlinkMaskToBeReduced(GPU_FABRIC_PROBE_INFO_KERNEL *pGpuFabricProbeInfoKernel,
+                                               NvU32 linkMaskToBeReduced);
 NV_STATUS gpuFabricProbeReceiveUpdateKernelCallback(NvU32 gpuInstance, NvU64 *pNotifyGfIdMask,
             NV2080_CTRL_NVLINK_INBAND_RECEIVED_DATA_PARAMS *pInbandRcvParams);
 NV_STATUS gpuFabricProbeReceiveKernelCallback(NvU32 gpuInstance, NvU64 *pNotifyGfIdMask,

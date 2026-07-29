@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -411,17 +411,24 @@ kmemsysProgramSysmemFlushBuffer_GH100
  * @param[in] pGpu                OBJGPU pointer
  * @param[in[ pKernelMemorySystem KernelMemorySystem pointer
  *
- * @returns void
+ * @returns NV_STATUS - NV_OK if sysmemFlushBuffer is valid otherwise NV_ERR_INVALID_STATE
  */
-void
+NV_STATUS
 kmemsysAssertSysmemFlushBufferValid_GH100
 (
     OBJGPU *pGpu,
     KernelMemorySystem *pKernelMemorySystem
 )
 {
-    NV_ASSERT((GPU_REG_RD_DRF(pGpu, _PFB, _FBHUB_PCIE_FLUSH_SYSMEM_ADDR_LO, _ADR) != 0) ||
-              (GPU_REG_RD_DRF(pGpu, _PFB, _FBHUB_PCIE_FLUSH_SYSMEM_ADDR_HI, _ADR) != 0));
+    NvU32 regPfbFbhubPcieFlushSysmemAddrValLo = GPU_REG_RD_DRF(pGpu, _PFB, _FBHUB_PCIE_FLUSH_SYSMEM_ADDR_LO, _ADR);
+    NvU32 regPfbFbhubPcieFlushSysmemAddrValHi = GPU_REG_RD_DRF(pGpu, _PFB, _FBHUB_PCIE_FLUSH_SYSMEM_ADDR_HI, _ADR);
+
+    if (regPfbFbhubPcieFlushSysmemAddrValLo == 0 && regPfbFbhubPcieFlushSysmemAddrValHi == 0)
+    {
+        return NV_ERR_INVALID_STATE;
+    }
+
+    return NV_OK;
 }
 
 /*!
@@ -669,27 +676,37 @@ kmemsysGetEccDedCountRegAddr_GH100
     NvU32               subp
 )
 {
-    return NV_PFB_FBPA_0_ECC_DED_COUNT(fbpa) + (subp * NV_FBPA_PRI_STRIDE);
+    return NV_PFB_FBPA_0_ECC_DED_COUNT(subp) + (fbpa * NV_FBPA_PRI_STRIDE);
 }
 
-/*!
- * @brief Check if the GPU memory partition is in use, which
- *        indicates whether memory has been onlined or not.
+/*
+ * @brief Check that the mapping parameters are valid
  *
  * @param[in] pGpu                OBJGPU pointer
  * @param[in] pKernelMemorySystem KernelMemorySystem pointer
- * @param[in] swizzId             swizzId of the MIG GPU instance,
- *                                0 for full GPU instance/non-MIG.
+ * @param[in/out] pParams         Parameters for the FLA attachment
+ * @param[in] pFabricMemDesc      FLA memory descriptor for checking the 2MB guard page
+ * @param[out] pOffsetTableIndex  Index in the table for the new entry
  *
- * @returns NvBool - NV_TRUE if memory is onlined, NV_FALSE otherwise
+ * @returns NV_STATUS - NV_OK if parameters are valid otherwise NV_ERR_INVALID_ARGUMENT
+ *                      was necessary
  */
-NvBool
-kmemsysIsNumaPartitionInUse_GH100
+NV_STATUS
+kmemsysMcFlaOffsetTableAlloc_GH100
 (
-    OBJGPU             *pGpu,
-    KernelMemorySystem *pKernelMemorySystem,
-    NvU32               swizzId
+    OBJGPU                        *pGpu,
+    KernelMemorySystem            *pKernelMemorySystem,
+    NV00FD_CTRL_ATTACH_MEM_PARAMS *pParams,
+    MEMORY_DESCRIPTOR             *pFabricMemDesc,
+    NvU8                          *pOffsetTableIndex
 )
 {
-    return pKernelMemorySystem->memPartitionNumaInfo[swizzId].bInUse;
+    if (pParams->subPageOffset != 0)
+    {
+        NV_PRINTF(LEVEL_ERROR, "MC FLA mapping subPageOffset must be 0\n");
+        return NV_ERR_INVALID_ARGUMENT;
+    }
+
+    return NV_OK;
 }
+

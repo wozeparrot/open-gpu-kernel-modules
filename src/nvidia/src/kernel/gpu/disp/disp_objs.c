@@ -72,6 +72,18 @@ dispapiConstruct_IMPL
     if (status != NV_OK)
         return status;
 
+    NV_ASSERT_OR_RETURN(pGpu != NULL, NV_ERR_INVALID_STATE);
+
+    if (pGpu->getProperty(pGpu, PDB_PROP_GPU_TEGRA_SOC_NVDISPLAY) &&
+        pParams->pSecInfo->privLevel < RS_PRIV_LEVEL_USER_ROOT)
+    {
+        NV_PRINTF(LEVEL_ERROR,
+                  "Failure allocating display class 0x%08x: Only root(admin)/kernel clients are allowed\n",
+                  pParams->externalClassId);
+
+        return NV_ERR_INSUFFICIENT_PERMISSIONS;
+    }
+
     // Find class in class db (verifies class is valid for this GPU)
     status = gpuGetClassByClassId(pGpu, pParams->externalClassId, &pClassDescriptor);
     if (status != NV_OK)
@@ -93,8 +105,6 @@ dispapiConstruct_IMPL
     pDisplayApi->pGpuInRmctrl = NULL;
     pDisplayApi->pGpuGrp = gpumgrGetGpuGrpFromGpu(pGpu);
     pDisplayApi->bBcResource = bBcResource;
-    pDisplayApi->hNotifierMemory = NV01_NULL_OBJECT;
-    pDisplayApi->pNotifierMemory = NULL;
 
     gpuSetThreadBcState(pGpu, bBcResource);
 
@@ -688,4 +698,21 @@ dispapiCtrlCmdEventSetNotification_IMPL
     }
 
     return status;
+}
+
+NV_STATUS dispapiValidateRmctrlPriv_IMPL(OBJGPU *pGpu)
+{
+    RS_PRIV_LEVEL minPrivLevel = RS_PRIV_LEVEL_KERNEL;
+
+    // Demote priv level of certain controls to root for MODS on soc-disp. Bug 5117826
+    if (pGpu->getProperty(pGpu, PDB_PROP_GPU_TEGRA_SOC_NVDISPLAY))
+        minPrivLevel = RS_PRIV_LEVEL_USER_ROOT;
+
+    CALL_CONTEXT *pCallContext = resservGetTlsCallContext();
+    NV_ASSERT_OR_RETURN(pCallContext != NULL, NV_ERR_INVALID_STATE);
+
+    if (pCallContext->secInfo.privLevel < minPrivLevel)
+        return NV_ERR_INSUFFICIENT_PERMISSIONS;
+
+    return NV_OK;
 }

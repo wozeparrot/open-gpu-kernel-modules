@@ -1,20 +1,22 @@
 
 #ifndef _G_ENG_DESC_NVOC_H_
 #define _G_ENG_DESC_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2013-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2013-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -859,6 +861,19 @@ typedef struct OBJFUSE OBJFUSE;
 
 
 
+struct Jtag;
+
+#ifndef __NVOC_CLASS_Jtag_TYPEDEF__
+#define __NVOC_CLASS_Jtag_TYPEDEF__
+typedef struct Jtag Jtag;
+#endif /* __NVOC_CLASS_Jtag_TYPEDEF__ */
+
+#ifndef __nvoc_class_id_Jtag
+#define __nvoc_class_id_Jtag 0xd73cf9
+#endif /* __nvoc_class_id_Jtag */
+
+
+
 struct OBJHDCP;
 
 #ifndef __NVOC_CLASS_OBJHDCP_TYPEDEF__
@@ -947,6 +962,18 @@ typedef struct KernelPmu KernelPmu;
 #ifndef __nvoc_class_id_KernelPmu
 #define __nvoc_class_id_KernelPmu 0xab9d7d
 #endif /* __nvoc_class_id_KernelPmu */
+
+
+struct GCX;
+
+#ifndef __NVOC_CLASS_GCX_TYPEDEF__
+#define __NVOC_CLASS_GCX_TYPEDEF__
+typedef struct GCX GCX;
+#endif /* __NVOC_CLASS_GCX_TYPEDEF__ */
+
+#ifndef __nvoc_class_id_GCX
+#define __nvoc_class_id_GCX 0x4507c4
+#endif /* __nvoc_class_id_GCX */
 
 
 struct Lpwr;
@@ -1417,16 +1444,16 @@ typedef struct Nne Nne;
 
 
 
-struct Smbpbi;
+struct Oob;
 
-#ifndef __NVOC_CLASS_Smbpbi_TYPEDEF__
-#define __NVOC_CLASS_Smbpbi_TYPEDEF__
-typedef struct Smbpbi Smbpbi;
-#endif /* __NVOC_CLASS_Smbpbi_TYPEDEF__ */
+#ifndef __NVOC_CLASS_Oob_TYPEDEF__
+#define __NVOC_CLASS_Oob_TYPEDEF__
+typedef struct Oob Oob;
+#endif /* __NVOC_CLASS_Oob_TYPEDEF__ */
 
-#ifndef __nvoc_class_id_Smbpbi
-#define __nvoc_class_id_Smbpbi 0x884e68
-#endif /* __nvoc_class_id_Smbpbi */
+#ifndef __nvoc_class_id_Oob
+#define __nvoc_class_id_Oob 0x98b919
+#endif /* __nvoc_class_id_Oob */
 
 
 
@@ -1517,6 +1544,30 @@ typedef struct KernelGsplite KernelGsplite;
 #endif /* __nvoc_class_id_KernelGsplite */
 
 
+struct KernelHFRP;
+
+#ifndef __NVOC_CLASS_KernelHFRP_TYPEDEF__
+#define __NVOC_CLASS_KernelHFRP_TYPEDEF__
+typedef struct KernelHFRP KernelHFRP;
+#endif /* __NVOC_CLASS_KernelHFRP_TYPEDEF__ */
+
+#ifndef __nvoc_class_id_KernelHFRP
+#define __nvoc_class_id_KernelHFRP 0xa9fc13
+#endif /* __nvoc_class_id_KernelHFRP */
+
+
+struct Spdm;
+
+#ifndef __NVOC_CLASS_Spdm_TYPEDEF__
+#define __NVOC_CLASS_Spdm_TYPEDEF__
+typedef struct Spdm Spdm;
+#endif /* __NVOC_CLASS_Spdm_TYPEDEF__ */
+
+#ifndef __nvoc_class_id_Spdm
+#define __nvoc_class_id_Spdm 0x261ee8
+#endif /* __nvoc_class_id_Spdm */
+
+
 #define ENG_CLASS_INVALID              classId(OBJINVALID)
 #define ENG_CLASS_SW                   classId(OBJSWENG)
 #define ENG_CLASS_GPU                  classId(OBJGPU)
@@ -1569,6 +1620,7 @@ typedef struct KernelGsplite KernelGsplite;
 #define ENG_CLASS_NVDEC                classId(OBJBSP)
 #define ENG_CLASS_CIPHER               classId(OBJCIPHER)
 #define ENG_CLASS_FUSE                 classId(OBJFUSE)
+#define ENG_CLASS_JTAG                 classId(Jtag)
 #define ENG_CLASS_HDCP                 classId(OBJHDCP)
 #define ENG_CLASS_HDMI                 classId(OBJHDMI)
 #define ENG_CLASS_THERM                classId(Therm)
@@ -1576,6 +1628,7 @@ typedef struct KernelGsplite KernelGsplite;
 #define ENG_CLASS_DPAUX                classId(OBJDPAUX)
 #define ENG_CLASS_PMU                  classId(Pmu)
 #define ENG_CLASS_KERNEL_PMU           classId(KernelPmu)
+#define ENG_CLASS_GCX                  classId(GCX)
 #define ENG_CLASS_LPWR                 classId(Lpwr)
 #define ENG_CLASS_ISOHUB               classId(OBJISOHUB)
 #define ENG_CLASS_PMGR                 classId(Pmgr)
@@ -1602,7 +1655,7 @@ typedef struct KernelGsplite KernelGsplite;
 #define ENG_CLASS_KERNEL_SEC2          classId(KernelSec2)
 #define ENG_CLASS_DISPMACRO            classId(OBJDISPMACRO)
 #define ENG_CLASS_NNE                  classId(OBJNNE)
-#define ENG_CLASS_SMBPBI               classId(Smbpbi)
+#define ENG_CLASS_OOB                  classId(Oob)
 #define ENG_CLASS_DSI                  classId(OBJDSI)
 #define ENG_CLASS_DCECLIENTRM          classId(OBJDCECLIENTRM)
 #define ENG_CLASS_DCB                  classId(OBJDCB)
@@ -1623,6 +1676,7 @@ typedef struct KernelGsplite KernelGsplite;
 #define ENG_CLASS_HSHUB                classId(Hshub)
 #define ENG_CLASS_KERNEL_IOCTRL        classId(KernelIoctrl)
 #define ENG_CLASS_OFA                  classId(OBJOFA)
+#define ENG_CLASS_KERNEL_HFRP          classId(KernelHFRP)
 
 
 //
@@ -1682,6 +1736,7 @@ typedef struct KernelGsplite KernelGsplite;
 #define ENG_OR                   MKENGDESC(ENG_CLASS_OR,                   0)
 #define ENG_CIPHER               MKENGDESC(ENG_CLASS_CIPHER,               0)
 #define ENG_FUSE                 MKENGDESC(ENG_CLASS_FUSE,                 0)
+#define ENG_JTAG                 MKENGDESC(ENG_CLASS_JTAG,                 0)
 #define ENG_HDCP                 MKENGDESC(ENG_CLASS_HDCP,                 0)
 #define ENG_HDMI                 MKENGDESC(ENG_CLASS_HDMI,                 0)
 #define ENG_THERM                MKENGDESC(ENG_CLASS_THERM,                0)
@@ -1689,6 +1744,7 @@ typedef struct KernelGsplite KernelGsplite;
 #define ENG_DPAUX                MKENGDESC(ENG_CLASS_DPAUX,                0)
 #define ENG_PMU                  MKENGDESC(ENG_CLASS_PMU,                  0)
 #define ENG_KERNEL_PMU           MKENGDESC(ENG_CLASS_KERNEL_PMU,           0)
+#define ENG_GCX                  MKENGDESC(ENG_CLASS_GCX,                  0)
 #define ENG_LPWR                 MKENGDESC(ENG_CLASS_LPWR,            0)
 #define ENG_ISOHUB               MKENGDESC(ENG_CLASS_ISOHUB,          0)
 #define ENG_PMGR                 MKENGDESC(ENG_CLASS_PMGR,            0)
@@ -1715,7 +1771,7 @@ typedef struct KernelGsplite KernelGsplite;
 #define ENG_KERNEL_SEC2          MKENGDESC(ENG_CLASS_KERNEL_SEC2,     0)
 #define ENG_DISPMACRO            MKENGDESC(ENG_CLASS_DISPMACRO,       0)
 #define ENG_NNE                  MKENGDESC(ENG_CLASS_NNE,             0)
-#define ENG_SMBPBI               MKENGDESC(ENG_CLASS_SMBPBI,          0)
+#define ENG_OOB                  MKENGDESC(ENG_CLASS_OOB,             0)
 #define ENG_DSI                  MKENGDESC(ENG_CLASS_DSI,             0)
 #define ENG_DCECLIENTRM          MKENGDESC(ENG_CLASS_DCECLIENTRM,     0)
 #define ENG_DCB                  MKENGDESC(ENG_CLASS_DCB,             0)
@@ -1724,6 +1780,7 @@ typedef struct KernelGsplite KernelGsplite;
 #define ENG_KERNEL_GMMU          MKENGDESC(ENG_CLASS_KERNEL_GMMU,     0)
 #define ENG_CONF_COMPUTE         MKENGDESC(ENG_CLASS_CONF_COMPUTE,    0)
 #define ENG_KERNEL_CCU           MKENGDESC(ENG_CLASS_KERNEL_CCU,      0)
+#define ENG_SPDM                 MKENGDESC(classId(Spdm),             0)
 
 // Indexed GSPLITE Engine Tag Reference
 
@@ -1740,7 +1797,6 @@ typedef struct KernelGsplite KernelGsplite;
 
 // Indexed MSENC Engine Tag Reference
 #define ENG_NVENC(x)             MKENGDESC(ENG_CLASS_NVENC,           x)
-// Bug 4175886 - Use this new value for all chips once GB20X is released
 #define ENG_NVENC__SIZE_1        4
 #define IS_MSENC(engDesc)        (ENGDESC_FIELD(engDesc, _CLASS) == classId(OBJMSENC))
 #define GET_MSENC_IDX(engDesc)   ENGDESC_FIELD(engDesc, _INST)
@@ -1798,6 +1854,8 @@ typedef struct KernelGsplite KernelGsplite;
 #define ENG_OFA__SIZE_1             2
 #define IS_OFA(engDesc)             (ENGDESC_FIELD(engDesc, _CLASS) == classId(OBJOFA))
 #define GET_OFA_IDX(engDesc)        ENGDESC_FIELD(engDesc, _INST)
+
+#define ENG_KERNEL_HFRP          MKENGDESC(ENG_CLASS_KERNEL_HFRP,           0)
 
 #endif // _ENG_DESC_H_
 

@@ -64,9 +64,10 @@ $(call BUILD_OBJECT_LIST,$(LIBSPDM_SOURCES)): CFLAGS += $(addprefix -I ,$(LIBSPD
 $(call BUILD_OBJECT_LIST,$(LIBSPDM_SOURCES)): CFLAGS += $(addprefix -D,$(LIBSPDM_DEFINES))
 
 #if NV_USE_MBEDTLS
-CFLAGS += -I $(SRC_COMMON)/mbedtls/include
-CFLAGS += -I $(SRC_COMMON)/mbedtls/nvidia
-CFLAGS += -DMBEDTLS_USER_CONFIG_FILE=\"nvrm_mbedtls_config.h\"
+MBEDTLS_VERSION ?= 3.6.2
+CFLAGS += -I $(SRC_COMMON)/mbedtls/$(MBEDTLS_VERSION)/include
+CFLAGS += -I $(SRC_COMMON)/mbedtls/$(MBEDTLS_VERSION)/nvidia
+CFLAGS += -D"MBEDTLS_USER_CONFIG_FILE=<nvrm_mbedtls_config.h>"
 #endif
 
 CFLAGS += -Werror-implicit-function-declaration
@@ -109,7 +110,7 @@ CFLAGS += -DNVRM
 CFLAGS += -DLOCK_VAL_ENABLED=0
 CFLAGS += -DPORT_ATOMIC_64_BIT_SUPPORTED=1
 CFLAGS += -DPORT_IS_KERNEL_BUILD=1
-CFLAGS += -DPORT_IS_CHECKED_BUILD=1
+CFLAGS += -DPORT_IS_CHECKED_BUILD=0
 CFLAGS += -DPORT_MODULE_atomic=1
 CFLAGS += -DPORT_MODULE_core=1
 CFLAGS += -DPORT_MODULE_cpu=1
@@ -183,7 +184,7 @@ ifeq ($(TARGET_ARCH),x86_64)
   endif
   CONDITIONAL_CFLAGS += $(call TEST_CC_ARG, -fno-jump-tables)
   CONDITIONAL_CFLAGS += $(call TEST_CC_ARG, -mindirect-branch-register)
-  CONDITIONAL_CFLAGS += $(call TEST_CC_ARG, -mindirect-branch=thunk-extern)
+    CONDITIONAL_CFLAGS += $(call TEST_CC_ARG, -mindirect-branch=thunk-extern)
 endif
 
 CFLAGS += $(CONDITIONAL_CFLAGS)
@@ -209,11 +210,12 @@ all: $(NV_KERNEL_O)
 LINKER_SCRIPT = nv-kernel.ld
 
 NV_KERNEL_O_LDFLAGS += $(LDFLAGS)
+NV_KERNEL_O_LDFLAGS += -T $(LINKER_SCRIPT)
+
 
 $(NV_KERNEL_O): $(OBJS) $(EXPORTS_LINK_COMMAND) $(LINKER_SCRIPT)
 	$(call quiet_cmd,LD) \
 	  $(NV_KERNEL_O_LDFLAGS) \
-	  -T $(LINKER_SCRIPT) \
 	  -r -o $(NV_KERNEL_O) $(OBJS) @$(EXPORTS_LINK_COMMAND)
 	$(call quiet_cmd,OBJCOPY) \
 	  --localize-symbol=memset \

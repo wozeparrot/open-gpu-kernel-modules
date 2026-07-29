@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -28,11 +28,13 @@
 #include "os/os.h"
 #include "kernel/gpu/mmu/kern_gmmu.h"
 #include "kernel/gpu/nvlink/kernel_ioctrl.h"
+#include "kernel/gpu/nvlink/common_nvlink.h"
 #include "core/thread_state.h"
 #include "platform/sli/sli.h"
 
 #include "gpu/gpu.h"
 #include "gpu/mem_mgr/mem_mgr.h"
+#include "swref/common_def_nvlink.h"
 
 #if defined(INCLUDE_NVLINK_LIB)
 static NV_STATUS _knvlinkAreLinksDisconnected(OBJGPU *, KernelNvlink *, NvBool *);
@@ -137,24 +139,24 @@ knvlinkOverrideConfig_GV100
     NV_STATUS status = NV_OK;
     NvU32     i;
 
-    pKernelNvlink->pLinkConnection = portMemAllocNonPaged(sizeof(NvU32) * NVLINK_MAX_LINKS_SW);
+    pKernelNvlink->pLinkConnection = portMemAllocNonPaged(sizeof(NvU32) * pKernelNvlink->maxSupportedLinks);
     if (pKernelNvlink->pLinkConnection == NULL)
         return NV_ERR_NO_MEMORY;
 
-    portMemSet(pKernelNvlink->pLinkConnection, 0, sizeof(NvU32) * NVLINK_MAX_LINKS_SW);
+    portMemSet(pKernelNvlink->pLinkConnection, 0, sizeof(NvU32) * pKernelNvlink->maxSupportedLinks);
 
     //
     // To deal with the nonlegacy force config reg keys, we need to now fill
     // in the default phys links, use a unity 1/1 map.
     //
-    for (i = 0; i < NVLINK_MAX_LINKS_SW; i++)
+    for (i = 0; i < pKernelNvlink->maxSupportedLinks; i++)
     {
         // The physical link is guaranteed valid in all cases
         pKernelNvlink->pLinkConnection[i] = DRF_NUM(_NVLINK, _ARCH_CONNECTION, _PHYSICAL_LINK, i);
     }
 
     // Check to see if there are chiplib overrides for nvlink configuration
-    status = osGetForcedNVLinkConnection(pGpu, NVLINK_MAX_LINKS_SW, pKernelNvlink->pLinkConnection);
+    status = osGetForcedNVLinkConnection(pGpu, pKernelNvlink->maxSupportedLinks, pKernelNvlink->pLinkConnection);
     if (NV_OK != status)
     {
         // A non-OK status implies there are no overrides.
@@ -167,8 +169,8 @@ knvlinkOverrideConfig_GV100
     portMemSet(&forcedConfigParams, 0, sizeof(forcedConfigParams));
 
     forcedConfigParams.bLegacyForcedConfig = NV_FALSE;
-    portMemCopy(&forcedConfigParams.linkConnection, (sizeof(NvU32) * NVLINK_MAX_LINKS_SW),
-                pKernelNvlink->pLinkConnection,     (sizeof(NvU32) * NVLINK_MAX_LINKS_SW));
+    portMemCopy(&forcedConfigParams.linkConnection, (sizeof(NvU32) * pKernelNvlink->maxSupportedLinks),
+                pKernelNvlink->pLinkConnection,     (sizeof(NvU32) * pKernelNvlink->maxSupportedLinks));
 
     //
     // RPC to GSP-RM to for GSP-RM to process the forced NVLink configurations. This includes
@@ -218,31 +220,35 @@ knvlinkApplyNvswitchDegradedModeSettings_GV100
 (
     OBJGPU       *pGpu,
     KernelNvlink *pKernelNvlink,
-    NvU32        *pSwitchLinkMasks
+    NvU64        *pSwitchLinkMasks
 )
 {
     NV_STATUS status = NV_OK;
 
 #if defined(INCLUDE_NVLINK_LIB)
 
-    NvBool  bLinkDisconnected[NVLINK_MAX_LINKS_SW] = {0};
     NvBool  bUpdateConnStatus = NV_FALSE;
-    NvU32   switchLinks       = 0;
+    NvU64   switchLinks       = 0;
     NvU32   linkId;
+    NvBool  *bLinkDisconnected = portMemAllocNonPaged(sizeof(NvBool) * pKernelNvlink->maxSupportedLinks);
+    if (bLinkDisconnected == NULL)
+        return NV_ERR_NO_MEMORY;
 
+    portMemSet(bLinkDisconnected, 0, sizeof(NvBool) * pKernelNvlink->maxSupportedLinks);
     // At least there should be one connection to NVSwitch, else bail out
-    FOR_EACH_INDEX_IN_MASK(32, linkId, KNVLINK_GET_MASK(pKernelNvlink, enabledLinks, 32))
+    FOR_EACH_INDEX_IN_MASK(64, linkId, KNVLINK_GET_MASK(pKernelNvlink, enabledLinks, 64))
     {
         if (pKernelNvlink->nvlinkLinks[linkId].remoteEndInfo.deviceType == NVLINK_DEVICE_TYPE_NVSWITCH)
         {
-            switchLinks |= NVBIT(linkId);
+            switchLinks |= NVBIT64(linkId);
         }
     }
     FOR_EACH_INDEX_IN_MASK_END;
 
     if (switchLinks == 0)
     {
-        return NV_OK;
+        status = NV_OK;
+        goto cleanup;
     }
 
     //
@@ -252,10 +258,11 @@ knvlinkApplyNvswitchDegradedModeSettings_GV100
     //              and sublink states. Trigger one RPC instead of invoking the RPC once
     //              for each link which reduces perf.
     //
-    status = _knvlinkAreLinksDisconnected(pGpu, pKernelNvlink, bLinkDisconnected);
-    NV_CHECK_OR_RETURN(LEVEL_INFO, status == NV_OK, status);
+    NV_CHECK_OK_OR_GOTO(status, LEVEL_INFO,
+        _knvlinkAreLinksDisconnected(pGpu, pKernelNvlink, bLinkDisconnected),
+        cleanup);
 
-    FOR_EACH_INDEX_IN_MASK(32, linkId, KNVLINK_GET_MASK(pKernelNvlink, enabledLinks, 32))
+    FOR_EACH_INDEX_IN_MASK(64, linkId, KNVLINK_GET_MASK(pKernelNvlink, enabledLinks, 64))
     {
         bUpdateConnStatus = NV_FALSE;
 
@@ -277,7 +284,7 @@ knvlinkApplyNvswitchDegradedModeSettings_GV100
                 }
 
                 // Mark this link as disconnected
-                pKernelNvlink->disconnectedLinkMask |= (NVBIT32(linkId));
+                pKernelNvlink->disconnectedLinkMask |= (NVBIT64(linkId));
                 pKernelNvlink->nvlinkLinks[linkId].remoteEndInfo.bConnected = NV_FALSE;
 
                 // RPC into GSP-RM to update the link connected status only if its required
@@ -286,18 +293,20 @@ knvlinkApplyNvswitchDegradedModeSettings_GV100
                     status = knvlinkUpdateLinkConnectionStatus(pGpu, pKernelNvlink, linkId);
                     if (status != NV_OK)
                     {
-                        return status;
+                        goto cleanup;
                     }
                 }
             }
             else if (pKernelNvlink->nvlinkLinks[linkId].remoteEndInfo.bConnected == NV_TRUE)
             {
-                *pSwitchLinkMasks |= NVBIT32(linkId);
+                *pSwitchLinkMasks |= NVBIT64(linkId);
             }
         }
     }
     FOR_EACH_INDEX_IN_MASK_END;
 
+cleanup:
+    portMemFree(bLinkDisconnected);
 #endif
 
     return status;
@@ -329,6 +338,8 @@ _knvlinkAreLinksDisconnected
 )
 {
     NV_STATUS status = NV_OK;
+    NvU64     links  = 0;
+    NV2080_NVLINK_BIT_VECTOR localLinkMask;
     NvU32     linkId;
 
     NV_ASSERT_OR_RETURN(bLinkDisconnected != NULL, NV_ERR_INVALID_ARGUMENT);
@@ -341,7 +352,25 @@ _knvlinkAreLinksDisconnected
     }
 
     portMemSet(pParams, 0, sizeof(*pParams));
-    pParams->linkMask = KNVLINK_GET_MASK(pKernelNvlink, enabledLinks, 32);
+
+    links = KNVLINK_GET_MASK(pKernelNvlink, enabledLinks, 32);
+    status = convertMaskToBitVector(links, &localLinkMask);
+    if (status != NV_OK)
+    {
+        NV_PRINTF(LEVEL_ERROR, "Failed to convert linkmask into bit vector! 0x%x\n", status);
+        goto cleanup;
+    }
+
+    status = convertBitVectorToLinkMasks(&localLinkMask,
+                                         &pParams->linkMask,
+                                         sizeof(pParams->linkMask),
+                                         &pParams->links);
+    if (status != NV_OK)
+    {
+        NV_PRINTF(LEVEL_ERROR, "Failed to convert bit vector to link masks! 0x%x\n", status);
+        goto cleanup;
+    }
+
     pParams->bSublinkStateInst = NV_TRUE;
 
     status = knvlinkExecGspRmRpc(pGpu, pKernelNvlink,
@@ -350,8 +379,14 @@ _knvlinkAreLinksDisconnected
     if (status != NV_OK)
         goto cleanup;
 
-    FOR_EACH_INDEX_IN_MASK(32, linkId, KNVLINK_GET_MASK(pKernelNvlink, enabledLinks, 32))
+    FOR_EACH_IN_BITVECTOR(&localLinkMask, linkId)
     {
+        if (linkId >= NV2080_CTRL_INTERNAL_NVLINK_MAX_ARR_SIZE)
+        {
+            NV_PRINTF(LEVEL_ERROR, "Trying to access incorrect link from link mask! %d\n", linkId);
+            goto cleanup;
+        }
+
         if ((pParams->linkInfo[linkId].linkState == NVLINK_LINKSTATE_SAFE) &&
             (pParams->linkInfo[linkId].txSublinkState == NVLINK_SUBLINK_STATE_TX_OFF) &&
             (pParams->linkInfo[linkId].rxSublinkState == NVLINK_SUBLINK_STATE_RX_OFF))
@@ -370,7 +405,7 @@ _knvlinkAreLinksDisconnected
             bLinkDisconnected[linkId] = NV_FALSE;
         }
     }
-    FOR_EACH_INDEX_IN_MASK_END;
+    FOR_EACH_IN_BITVECTOR_END();
 
 cleanup:
     portMemFree(pParams);

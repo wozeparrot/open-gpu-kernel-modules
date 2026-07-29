@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2020-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -30,6 +30,7 @@
   */
 
 #define RM_STRICT_CONFIG_EMIT_DISP_ENGINE_DEFINITIONS     0
+#define BPPX256_SCALER       256U
 
 #include "os/os.h"
 #include "gpu/gpu.h"
@@ -40,6 +41,7 @@
 #include "gpu/disp/head/kernel_head.h"
 #include "mem_mgr/mem.h"
 #include "platform/sli/sli.h"
+#include "diagnostics/journal.h"
 #include "displayport/displayport.h"
 #include "displayport/displayport2x.h"
 
@@ -131,6 +133,10 @@ dispcmnCtrlCmdSystemAllocateDisplayBandwidth_IMPL
         return status;
     }
 
+    status = dispapiValidateRmctrlPriv(pGpu);
+    if (status != NV_OK)
+        return status;
+
     pKernelDisplay = GPU_GET_KERNEL_DISPLAY(pGpu);
     if (pKernelDisplay->getProperty(pKernelDisplay,
                                     PDB_PROP_KDISP_IMP_ALLOC_BW_IN_KERNEL_RM_DEF))
@@ -163,6 +169,39 @@ dispcmnCtrlCmdSystemAllocateDisplayBandwidth_IMPL
                             NV0073_CTRL_CMD_SYSTEM_INTERNAL_ALLOCATE_DISPLAY_BANDWIDTH,
                             pParams, sizeof(*pParams));
     }
+    return status;
+}
+
+NV_STATUS
+dispcmnCtrlCmdSystemGetVblankEnable_IMPL
+(
+    DispCommon *pDispCommon,
+    NV0073_CTRL_SYSTEM_GET_VBLANK_ENABLE_PARAMS *pVBEnableParams
+)
+{
+    OBJGPU        *pGpu;
+    KernelDisplay *pKernelDisplay;
+    KernelHead    *pKernelHead;
+    NV_STATUS status = NV_OK;
+    // client gave us a subdevice #: get right pGpu for it
+    status = dispapiSetUnicastAndSynchronize_HAL(
+                               staticCast(pDispCommon, DisplayApi),
+                               DISPAPI_GET_GPUGRP(pDispCommon),
+                               &pGpu,
+                               NULL,
+                               pVBEnableParams->subDeviceInstance);
+    if(status != NV_OK)
+    {
+        return status;
+    }
+
+    pKernelDisplay = GPU_GET_KERNEL_DISPLAY(pGpu);
+    pKernelHead = KDISP_GET_HEAD(pKernelDisplay,pVBEnableParams->head);
+    NV_ASSERT_OR_RETURN(pKernelHead != NULL, NV_ERR_INVALID_ARGUMENT);
+
+    pVBEnableParams->bEnabled = (kheadReadVblankIntrState(pGpu, pKernelHead) !=
+                                 NV_HEAD_VBLANK_INTR_UNAVAILABLE);
+
     return status;
 }
 
@@ -378,62 +417,6 @@ dispcmnCtrlCmdSystemGetVblankCounter_IMPL
     return NV_OK;
 }
 
-/*
- * @brief This call engages the WAR for VR where the Pstate
- *        switching can cause delay in serving Vblank interrupts
- *        by servicing disp interrupts inline.
- *
- * @return
- *   NV_OK
- *     The request successfully completed.
- *   NV_ERR_INVALID_ARGUMENT
- *     Invalid argument is passed.
- */
-NV_STATUS
-dispcmnCtrlCmdInlineDispIntrServiceWarForVr_IMPL
-(
-    DispCommon *pDispCommon,
-    NV0073_CTRL_SYSTEM_INLINE_DISP_INTR_SERVICE_WAR_FOR_VR_PARAMS *pParams
-)
-{
-    OBJGPU   *pGpu  = NULL;
-    RM_API   *pRmApi;
-    NV_STATUS status;
-    KernelDisplay *pKernelDisplay = NULL;
-
-    // Get the right pGpu from subdevice instance given by client
-    status = dispapiSetUnicastAndSynchronize_HAL(
-                               staticCast(pDispCommon, DisplayApi),
-                               DISPAPI_GET_GPUGRP(pDispCommon),
-                               &pGpu,
-                               NULL,
-                               pParams->subDeviceInstance);
-
-    if (status != NV_OK)
-    {
-        return status;
-    }
-
-    SLI_LOOP_START(SLI_LOOP_FLAGS_BC_ONLY)
-
-    pKernelDisplay = GPU_GET_KERNEL_DISPLAY(pGpu);
-    if (pKernelDisplay == NULL)
-        SLI_LOOP_RETURN(NV_ERR_INVALID_STATE);
-
-    pRmApi = GPU_GET_PHYSICAL_RMAPI(pGpu);
-
-    status = pRmApi->Control(pRmApi,
-                           RES_GET_CLIENT_HANDLE(pDispCommon),
-                           RES_GET_HANDLE(pDispCommon),
-                           NV0073_CTRL_CMD_INTERNAL_INLINE_DISP_INTR_SERVICE_WAR_FOR_VR,
-                           pParams,
-                           sizeof(*pParams));
-
-    SLI_LOOP_END
-
-    return NV_OK;
-}
-
 /*!
  * @brief Function to handle NV0073_CTRL_CMD_CALCULATE_DP_IMP control call.
  *        Check if the requested mode is supported by the link.
@@ -489,6 +472,7 @@ dispcmnCtrlCmdCalculateDpImp_IMPL
     dpModesetData.bMultiStream              = pParams->linkConfig.bMultiStreamTopology;
     dpModesetData.bFecEnable                = pParams->linkConfig.bFECEnabled;
     dpModesetData.bEnhancedFraming          = pParams->linkConfig.bEnhancedFraming;
+    dpModesetData.bDisableEffBppSST8b10b    = pParams->linkConfig.bDisableEffBppSST8b10b;
 
     NV_ASSERT_OR_RETURN((IS_VALID_DP2_X_LINKBW(dpModesetData.dp2LinkBw) &&
                          IS_VALID_LANECOUNT(dpModesetData.laneCount)),
@@ -526,10 +510,11 @@ dispcmnCtrlCmdCalculateDpImp_IMPL
         pParams->watermark.hBlankSym        = dpInfo.hBlankSym;
         pParams->watermark.vBlankSym        = dpInfo.vBlankSym;
         pParams->watermark.minHBlank        = dpInfo.minHBlank;
+        pParams->watermark.effectiveBpp     = dpInfo.effectiveBppxScaler;
 
         if ((dpInfo.minHBlank > hBlank) ||
             (dpInfo.hBlankSym < NV_MAX(dpInfo.twoChannelAudioSymbols, dpInfo.eightChannelAudioSymbols)) ||
-            (dpModesetData.PClkFreqHz * dpModesetData.bpp >= dpInfo.linkTotalDataRate))
+            (dpModesetData.PClkFreqHz * dpInfo.effectiveBppxScaler >= dpInfo.linkTotalDataRate * BPPX256_SCALER))
         {
             pParams->watermark.bIsModePossible = NV_FALSE;
         }
@@ -540,7 +525,7 @@ dispcmnCtrlCmdCalculateDpImp_IMPL
         //
         if (!(dpModesetData.bDP2xChannelCoding || dpModesetData.bMultiStream) &&
             (dpModesetData.bDscEnable) &&
-            (dpModesetData.PClkFreqHz * dpModesetData.bpp < dpInfo.linkTotalDataRate / 64))
+            ((dpModesetData.PClkFreqHz * dpInfo.effectiveBppxScaler) < (dpInfo.linkTotalDataRate * BPPX256_SCALER) / 64))
         {
             pParams->watermark.bIsModePossible = NV_FALSE;
         }
@@ -550,6 +535,33 @@ dispcmnCtrlCmdCalculateDpImp_IMPL
         pParams->watermark.bIsModePossible = NV_FALSE;
     }
     return status;
+}
+
+/*!
+ * @brief  Retrieves DpRingBuffer from RM
+ *
+ * @param pDispCommon [In]
+ * @param pParams     [In, Out]
+ *
+ * @return
+ *   NV_OK
+ *     The call succeeded.
+ *   NV_ERR_NOT_SUPPORTED
+ *     Can't get DpRingBuffer from RM
+ */
+NV_STATUS
+dispcmnCtrlCmdDpRetrieveDpRingBuffer_IMPL
+(
+    DispCommon *pDispCommon,
+    NV0073_CTRL_CMD_DP_RETRIEVE_DP_RING_BUFFER_PARAMS *pParams
+)
+{
+    pParams->pDpRingBuffer = (NvU8 *)rcdbCreateRingBuffer(
+        SYS_GET_RCDB(SYS_GET_INSTANCE()),
+        pParams->ringBufferType,
+        pParams->numRecords);
+
+    return NV_OK;
 }
 
 /*!
@@ -585,6 +597,10 @@ dispcmnCtrlCmdSystemGetLoadVCounterInfo_IMPL
                                NULL,
                                pLoadVCounterInfoParams->subDeviceInstance);
 
+    if (status != NV_OK)
+        return status;
+
+    status = dispapiValidateRmctrlPriv(pGpu);
     if (status != NV_OK)
         return status;
 

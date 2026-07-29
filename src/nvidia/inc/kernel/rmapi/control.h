@@ -25,6 +25,7 @@
 
 #include "core/core.h"
 
+#include "nvsecurityinfo.h"
 #include "resserv/rs_resource.h"
 #include "resserv/resserv.h"
 
@@ -118,6 +119,12 @@ typedef struct
 
 // top-level internal RM Control interface
 NV_STATUS   rmControl_Deferred(RmCtrlDeferredCmd *pRmCtrlDeferredCmd);
+
+//
+// Validate whether client has privilege to execute specified cmd.
+// Doesn't handle vGPU CPU plugin case.
+//
+NV_STATUS rmControlValidateClientPrivilegeAccess(NvHandle hClient, NvHandle hObject, NvU32 cmd, NvU32 ctrlFlags, API_SECURITY_INFO *pSecInfo);
 
 // Helper functions for handling embedded parameter copies
 NV_STATUS embeddedParamCopyIn(RMAPI_PARAM_COPY  *pParamCopy, RmCtrlParams *pRmCtrlParams);
@@ -332,6 +339,11 @@ NV_STATUS embeddedParamCopyOut(RMAPI_PARAM_COPY  *pParamCopy, RmCtrlParams *pRmC
 //
 #define RMCTRL_FLAGS_NO_API_LOCK                              0x000400000
 
+//
+// This flag specifies that the control call persists in RMCTRL cache across
+// OBJGPU StateLoad/Unload. This flag may be set in addition to RMCTRL_FLAGS_CACHEABLE
+// or RMCTRL_FLAGS_CACHEABLE_BY_INPUT.
+//
 #define RMCTRL_FLAGS_PERSISTENT_CACHEABLE                     0x000800000
 
 //
@@ -351,18 +363,6 @@ NV_STATUS embeddedParamCopyOut(RMAPI_PARAM_COPY  *pParamCopy, RmCtrlParams *pRmC
 //    This attribute only has an effect when the RM access rights implementation
 //    is enabled; see g_bRsAccessEnabled.
 //
-
-
-/*
- * On T234, RM is in kernel mode, so when RM is running in kernel mode it
- * does not allow usermode clients like MODs to call control calls that are
- * marked as KERNEL_PRIVILEGED.
- * So defining new macro DISPLAY_PRIVILEGED(i.e PRIVILEGED) for Tegra and mark
- * control calls needed by MODs with this so that MODs running as root can call
- * these control calls. However keeping same privilege level for DGPUs which
- * does not change the current behaviour.
- */
-#define DISPLAY_PRIVILEGED KERNEL_PRIVILEGED
 
 #endif // _CONTROL_H_
 

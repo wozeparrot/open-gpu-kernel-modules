@@ -23,6 +23,7 @@
 
 #include "gpu/mem_mgr/mem_mgr.h"
 #include "gpu/mem_mgr/heap.h"
+#include "gpu/mem_mgr/phys_mem_allocator/phys_mem_allocator.h"
 #include "gpu/mem_mgr/fbsr.h"
 #include "gpu/mem_sys/kern_mem_sys.h"
 #include "gpu/bus/kern_bus.h"
@@ -48,6 +49,12 @@ memmgrSavePowerMgmtState_KERNEL
     NvU32     i;
     OBJFBSR  *pFbsr;
     NV_STATUS rmStatus = NV_OK;
+
+    if (pGpu->getProperty(pGpu, PDB_PROP_GPU_ZERO_FB) ||
+        pGpu->getProperty(pGpu, PDB_PROP_GPU_BROKEN_FB))
+    {
+        return NV_OK;
+    }
 
     if (pMemoryManager->pActiveFbsr)
     {
@@ -82,11 +89,11 @@ memmgrSavePowerMgmtState_KERNEL
 
         if (pGpu->getProperty(pGpu, PDB_PROP_GPU_GCOFF_STATE_ENTERING))
         {
-            rmStatus = pmaBuildAllocatedBlocksList(&pHeap->pmaObject, &pSaveList);
+            rmStatus = pmaBuildAllocatedBlocksList(pHeap->pPmaObject, &pSaveList);
         }
         else
         {
-            rmStatus = pmaBuildPersistentList(&pHeap->pmaObject, &pSaveList);
+            rmStatus = pmaBuildPersistentList(pHeap->pPmaObject, &pSaveList);
         }
 
         if (rmStatus == NV_OK)
@@ -117,11 +124,11 @@ memmgrSavePowerMgmtState_KERNEL
 
         if (pGpu->getProperty(pGpu, PDB_PROP_GPU_GCOFF_STATE_ENTERING))
         {
-            pmaFreeAllocatedBlocksList(&pHeap->pmaObject, &pSaveList);
+            pmaFreeAllocatedBlocksList(pHeap->pPmaObject, &pSaveList);
         }
         else
         {
-            pmaFreePersistentList(&pHeap->pmaObject, &pSaveList);
+            pmaFreePersistentList(pHeap->pPmaObject, &pSaveList);
         }
     }
 
@@ -214,6 +221,12 @@ memmgrRestorePowerMgmtState_KERNEL
     OBJFBSR     *pFbsr         = pMemoryManager->pActiveFbsr;
     NV_STATUS    status        = NV_OK;
     NvBool       bIsGpuLost    = NV_FALSE;
+
+    if (pGpu->getProperty(pGpu, PDB_PROP_GPU_ZERO_FB) ||
+        pGpu->getProperty(pGpu, PDB_PROP_GPU_BROKEN_FB))
+    {
+        return NV_OK;
+    }
 
     if (portAtomicIncrementS32(&concurrentfbRestorePowerMgmtStateAccess[pGpu->gpuInstance]) != 1)
     {
@@ -324,7 +337,8 @@ _memmgrAllocFbsrReservedRanges
                          pWprMeta->vgaWorkspaceSize;                                              // VGA Workspace
 
             // Check if CBC region needs to be saved
-            if (GPU_GET_KERNEL_MEMORY_SYSTEM(pGpu)->bPreserveComptagBackingStoreOnSuspend)
+            if (GPU_GET_KERNEL_MEMORY_SYSTEM(pGpu)->bPreserveComptagBackingStoreOnSuspend ||
+                pGpu->getProperty(pGpu, PDB_PROP_GPU_RTD3_GCOFF_SUPPORTED))
             {
                 NV0080_CTRL_FB_GET_COMPBIT_STORE_INFO_PARAMS compbitStoreInfoParams;
                 RM_API *pRmApi = GPU_GET_PHYSICAL_RMAPI(pGpu);

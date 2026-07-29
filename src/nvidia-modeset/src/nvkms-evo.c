@@ -186,19 +186,23 @@ NVEvoInfoStringRec dummyInfoString = {
 
 /*!
  * Return the NVDevEvoPtr, if any, that matches deviceId.
+ *
+ * If the deviceId is NVKMS_DEVICE_ID_TEGRA, then find the device with
+ * pDevEvo->isSOCDisplay set and use that instead.
  */
-NVDevEvoPtr nvFindDevEvoByDeviceId(NvU32 deviceId)
+NVDevEvoPtr nvFindDevEvoByDeviceId(struct NvKmsDeviceId deviceId)
 {
     NVDevEvoPtr pDevEvo;
 
     FOR_ALL_EVO_DEVS(pDevEvo) {
-        if (pDevEvo->usesTegraDevice &&
-            (deviceId == NVKMS_DEVICE_ID_TEGRA)) {
+        if (pDevEvo->isSOCDisplay &&
+            (deviceId.rmDeviceId == NVKMS_DEVICE_ID_TEGRA)) {
             return pDevEvo;
-        } else if (pDevEvo->deviceId == deviceId) {
+        } else if (pDevEvo->deviceId.rmDeviceId == deviceId.rmDeviceId &&
+                   pDevEvo->deviceId.migDevice == deviceId.migDevice) {
             return pDevEvo;
         }
-    };
+    }
 
     return NULL;
 }
@@ -861,13 +865,53 @@ static NvBool HeadStateIsHdmiTmdsDeepColor(const NVDispHeadStateEvoRec *pHeadSta
     return FALSE;
 }
 
+static NvBool ProtocolsAreRasterLockPossible(
+    const NVDevEvoRec *pDevEvo,
+    enum nvKmsTimingsProtocol protocol1,
+    enum nvKmsTimingsProtocol protocol2)
+{
+    if (pDevEvo->caps.rasterLockAcrossProtocolsAllowed) {
+        /* It doesn't matter what the protocols are. */
+        return TRUE;
+    }
+
+    /* Otherwise, only raster lock compatible protocols. */
+
+    switch (protocol1) {
+
+        case NVKMS_PROTOCOL_DAC_RGB:           /* fall through */
+        case NVKMS_PROTOCOL_DSI:               /* fall through */
+        case NVKMS_PROTOCOL_SOR_HDMI_FRL:      /* fall through */
+        case NVKMS_PROTOCOL_PIOR_EXT_TMDS_ENC: /* fall through */
+        case NVKMS_PROTOCOL_SOR_DUAL_TMDS:     /* fall through */
+        case NVKMS_PROTOCOL_SOR_LVDS_CUSTOM:
+            /* require exact match */
+            return protocol1 == protocol2;
+
+        case NVKMS_PROTOCOL_SOR_SINGLE_TMDS_A: /* fall through */
+        case NVKMS_PROTOCOL_SOR_SINGLE_TMDS_B:
+            /* TMDS_A and TMDS_B can be locked to each other */
+            return protocol2 == NVKMS_PROTOCOL_SOR_SINGLE_TMDS_A ||
+                   protocol2 == NVKMS_PROTOCOL_SOR_SINGLE_TMDS_B;
+
+        case NVKMS_PROTOCOL_SOR_DP_A:          /* fall through */
+        case NVKMS_PROTOCOL_SOR_DP_B:
+            /* DP_A and DP_B can be locked to each other */
+            return protocol2 == NVKMS_PROTOCOL_SOR_DP_A ||
+                   protocol2 == NVKMS_PROTOCOL_SOR_DP_B;
+    }
+
+    return FALSE;
+}
+
 /*!
  * Check whether rasterlock is possible between the two head states.
  * Note that we don't compare viewports, but I don't believe the viewport size
  * affects whether it is possible to rasterlock.
  */
 
-static NvBool RasterLockPossible(const NVDispHeadStateEvoRec *pHeadState1,
+static NvBool RasterLockPossible(const NVDevEvoRec *pDevEvo,
+                                 const NVDispHeadStateEvoRec *pHeadState1,
                                  const NVDispHeadStateEvoRec *pHeadState2)
 {
     const NVHwModeTimingsEvo *pTimings1 = &pHeadState1->timings;
@@ -894,6 +938,11 @@ static NvBool RasterLockPossible(const NVDispHeadStateEvoRec *pHeadState1,
         if (pHeadState1->pixelDepth != pHeadState2->pixelDepth) {
             return FALSE;
         }
+    }
+
+    if (!ProtocolsAreRasterLockPossible(
+            pDevEvo, pTimings1->protocol, pTimings2->protocol)) {
+        return FALSE;
     }
 
     return ((pTimings1->rasterSize.x       == pTimings2->rasterSize.x) &&
@@ -1021,10 +1070,8 @@ void nvEvoSetDpVscSdp(NVDispEvoPtr pDispEvo,
 
     nvPushEvoSubDevMaskDisp(pDispEvo);
 
-    if (((pDpyColor->format == NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_SPACE_YCbCr420) ||
-         (pDpyColor->colorimetry == NVKMS_OUTPUT_COLORIMETRY_BT2100)) &&
-        ((pTimings->protocol == NVKMS_PROTOCOL_SOR_DP_A) ||
-         (pTimings->protocol == NVKMS_PROTOCOL_SOR_DP_B))) {
+    if (pTimings->protocol == NVKMS_PROTOCOL_SOR_DP_A ||
+        pTimings->protocol == NVKMS_PROTOCOL_SOR_DP_B) {
         DPSDP_DP_VSC_SDP_DESCRIPTOR sdp = { };
         nvConstructDpVscSdp(pInfoFrame, pDpyColor, &sdp);
         pDevEvo->hal->SetDpVscSdp(pDispEvo, head, &sdp, updateState);
@@ -1930,7 +1977,7 @@ static void FinishModesetOneDisp(
         }
 
         if (pPrevHeadState &&
-            !RasterLockPossible(pHeadState, pPrevHeadState)) {
+            !RasterLockPossible(pDevEvo, pHeadState, pPrevHeadState)) {
             pDispEvo->rasterLockPossible = FALSE;
             break;
         }
@@ -2142,7 +2189,7 @@ static void FinishModesetOneGroup(RasterLockGroup *pRasterLockGroup)
             }
 
             if (pPrevHeadState &&
-                !RasterLockPossible(pHeadState, pPrevHeadState)) {
+                !RasterLockPossible(pDevEvo, pHeadState, pPrevHeadState)) {
                 rasterLockPossible = FALSE;
                 goto exitHeadLoop;
             }
@@ -3044,12 +3091,23 @@ void nvUpdateCurrentHardwareColorSpaceAndRangeEvo(
             case NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_SPACE_YCbCr444:
             case NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_SPACE_YCbCr422:
             case NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_SPACE_YCbCr420:
-                if (pDpyColor->colorimetry == NVKMS_OUTPUT_COLORIMETRY_BT2100) {
+                switch (pDpyColor->colorimetry) {
+                case NVKMS_OUTPUT_COLORIMETRY_BT2100:
                     pHeadState->procAmp.colorimetry = NVT_COLORIMETRY_BT2020YCC;
-                } else if (nvEvoIsHDQualityVideoTimings(&pHeadState->timings)) {
+                    break;
+                case NVKMS_OUTPUT_COLORIMETRY_BT709:
                     pHeadState->procAmp.colorimetry = NVT_COLORIMETRY_YUV_709;
-                } else {
+                    break;
+                case NVKMS_OUTPUT_COLORIMETRY_BT601:
                     pHeadState->procAmp.colorimetry = NVT_COLORIMETRY_YUV_601;
+                    break;
+                case NVKMS_OUTPUT_COLORIMETRY_DEFAULT:
+                    if (nvEvoIsHDQualityVideoTimings(&pHeadState->timings)) {
+                        pHeadState->procAmp.colorimetry = NVT_COLORIMETRY_YUV_709;
+                    } else {
+                        pHeadState->procAmp.colorimetry = NVT_COLORIMETRY_YUV_601;
+                    }
+                    break;
                 }
                 break;
             default:
@@ -5027,8 +5085,6 @@ static void ClearApiHeadStateOneDisp(NVDispEvoRec *pDispEvo)
 {
     NvU32 apiHead;
 
-    nvKmsOrphanVblankSemControlForAllOpens(pDispEvo);
-
     /*
      * Unregister all the flip-occurred event callbacks which are
      * registered with the (api-head, layer) pair event data,
@@ -5042,10 +5098,8 @@ static void ClearApiHeadStateOneDisp(NVDispEvoRec *pDispEvo)
         NvU32 layer;
         NVDispApiHeadStateEvoRec *pApiHeadState =
             &pDispEvo->apiHeadState[apiHead];
-        for (NvU32 i = 0; i < ARRAY_LEN(pApiHeadState->vblankCallbackList); i++) {
-            nvAssert(nvListIsEmpty(&pApiHeadState->vblankCallbackList[i]));
-        }
-        nvAssert(nvListIsEmpty(&pApiHeadState->vblankSemControl.list));
+
+        nvAssert(pApiHeadState->rmVBlankCallbackHandle == 0);
 
         for (layer = 0; layer < ARRAY_LEN(pApiHeadState->flipOccurredEvent); layer++) {
             if (pApiHeadState->flipOccurredEvent[layer].ref_ptr != NULL) {
@@ -5084,11 +5138,6 @@ static NvBool InitApiHeadStateOneDisp(NVDispEvoRec *pDispEvo)
 
         pApiHeadState->activeDpys = nvEmptyDpyIdList();
         pApiHeadState->attributes = NV_EVO_DEFAULT_ATTRIBUTES_SET;
-
-        for (NvU32 i = 0; i < ARRAY_LEN(pApiHeadState->vblankCallbackList); i++) {
-            nvListInit(&pApiHeadState->vblankCallbackList[i]);
-        }
-        nvListInit(&pApiHeadState->vblankSemControl.list);
 
         for (layer = 0; layer < ARRAY_LEN(pApiHeadState->flipOccurredEvent); layer++) {
             pApiHeadState->flipOccurredEvent[layer].ref_ptr =
@@ -6707,11 +6756,45 @@ static void AssignGuaranteedSOCBounds(const NVDevEvoRec *pDevEvo,
 }
 
 /*
- * Initialize the given NvKmsUsageBounds. Ask for everything supported by the HW
- * by default.  Later, based on what IMP says, we will scale back as needed.
+ * Filter surface memory formats based on maximum pixel depth.
+ * Returns a new bitmask with only formats that have bpp <= maxPixelDepth.
+ * If maxPixelDepth is 0, returns the original mask (no filtering).
+ */
+static NvU64 FilterFormatsByPixelDepth(NvU64 formats, NvU8 maxPixelDepth)
+{
+    NvU64 filtered = 0;
+    enum NvKmsSurfaceMemoryFormat format;
+
+    if (maxPixelDepth == 0) {
+        return formats;
+    }
+
+    for (format = NvKmsSurfaceMemoryFormatMin;
+         format <= NvKmsSurfaceMemoryFormatMax;
+         format++) {
+        const NvKmsSurfaceMemoryFormatInfo *pFormatInfo;
+
+        if (!(formats & NVBIT64(format))) {
+            continue;
+        }
+
+        pFormatInfo = nvKmsGetSurfaceMemoryFormatInfo(format);
+        if (pFormatInfo->depth <= maxPixelDepth) {
+            filtered |= NVBIT64(format);
+        }
+    }
+
+    return filtered;
+}
+
+/*
+ * Initialize the given NvKmsUsageBounds. Ask for everything supported by the HW,
+ * filtered against any client-specified constraints.  Later, based on what IMP says,
+ * we will scale back as needed.
  */
 void nvAssignDefaultUsageBounds(const NVDispEvoRec *pDispEvo,
-                                NVHwModeViewPortEvo *pViewPort)
+                                NVHwModeViewPortEvo *pViewPort,
+                                const struct NvKmsModeValidationParams *pModeValidationParams)
 {
     const NVDevEvoRec *pDevEvo = pDispEvo->pDevEvo;
     struct NvKmsUsageBounds *pPossible = &pViewPort->possibleUsage;
@@ -6721,7 +6804,10 @@ void nvAssignDefaultUsageBounds(const NVDispEvoRec *pDispEvo,
         struct NvKmsScalingUsageBounds *pScaling = &pPossible->layer[i].scaling;
 
         pPossible->layer[i].supportedSurfaceMemoryFormats =
-            pDevEvo->caps.layerCaps[i].supportedSurfaceMemoryFormats;
+            FilterFormatsByPixelDepth(
+                pDevEvo->caps.layerCaps[i].supportedSurfaceMemoryFormats,
+                pModeValidationParams->maxUsageBoundPixelDepth[i]);
+
         pPossible->layer[i].usable =
             (pPossible->layer[i].supportedSurfaceMemoryFormats != 0);
         if (!pPossible->layer[i].usable) {
@@ -6775,7 +6861,8 @@ ConstructHwModeTimingsViewPort(const NVDispEvoRec *pDispEvo,
                                NVHwModeTimingsEvoPtr pTimings,
                                NVEvoInfoStringPtr pInfoString,
                                const struct NvKmsSize *pViewPortSizeIn,
-                               const struct NvKmsRect *pViewPortOut)
+                               const struct NvKmsRect *pViewPortOut,
+                               const struct NvKmsModeValidationParams *pParams)
 {
     NVHwModeViewPortEvoPtr pViewPort = &pTimings->viewPort;
     NvU32 outWidth, outHeight;
@@ -6866,16 +6953,25 @@ ConstructHwModeTimingsViewPort(const NVDispEvoRec *pDispEvo,
         }
     }
 
-    nvAssignDefaultUsageBounds(pDispEvo, &pTimings->viewPort);
+    nvAssignDefaultUsageBounds(pDispEvo, &pTimings->viewPort, pParams);
 
     return TRUE;
 }
 
 
-static NvBool GetDefaultFrlDpyColor(
+static NvBool FrlOverrideForYCbCr422(
+    const NVDevEvoRec *pDevEvo,
     const NvKmsDpyOutputColorFormatInfo *pColorFormatsInfo,
     NVDpyAttributeColor *pDpyColor)
 {
+    /*
+     * If the hardware natively supports YCbCr422 + FRL,
+     * there is nothing to do.
+     */
+    if (pDevEvo->hal->caps.supportsYCbCr422OverHDMIFRL) {
+        return TRUE;
+    }
+
     nvkms_memset(pDpyColor, 0, sizeof(*pDpyColor));
     pDpyColor->colorimetry = NVKMS_OUTPUT_COLORIMETRY_DEFAULT;
 
@@ -6898,17 +6994,18 @@ static NvBool GetDefaultFrlDpyColor(
     return FALSE;
 }
 
-static NvBool GetDfpHdmiProtocol(const NVDpyEvoRec *pDpyEvo,
-                                 const NvU32 overrides,
-                                 NVDpyAttributeColor *pDpyColor,
-                                 NVHwModeTimingsEvoPtr pTimings,
-                                 enum nvKmsTimingsProtocol *pTimingsProtocol)
+static NvBool GetDfpHdmiProtocol(
+    const NVDpyEvoRec *pDpyEvo,
+    const struct NvKmsModeValidationParams *pValidationParams,
+    NVDpyAttributeColor *pDpyColor,
+    NVHwModeTimingsEvoPtr pTimings,
+    enum nvKmsTimingsProtocol *pTimingsProtocol)
 {
     NVConnectorEvoPtr pConnectorEvo = pDpyEvo->pConnectorEvo;
+    const NVDevEvoRec *pDevEvo = pConnectorEvo->pDispEvo->pDevEvo;
     const NvU32 rmProtocol = pConnectorEvo->or.protocol;
     const NvKmsDpyOutputColorFormatInfo colorFormatsInfo =
         nvDpyGetOutputColorFormatInfo(pDpyEvo);
-    const NvBool forceHdmiFrlIsSupported = FALSE;
 
     nvAssert(rmProtocol == NV0073_CTRL_SPECIFIC_OR_PROTOCOL_SOR_DUAL_TMDS ||
              rmProtocol == NV0073_CTRL_SPECIFIC_OR_PROTOCOL_SOR_SINGLE_TMDS_A ||
@@ -6916,18 +7013,22 @@ static NvBool GetDfpHdmiProtocol(const NVDpyEvoRec *pDpyEvo,
 
     /* Override protocol if this mode requires HDMI FRL. */
     /* If we don't require boot clocks... */
-    if (((overrides & NVKMS_MODE_VALIDATION_REQUIRE_BOOT_CLOCKS) == 0) &&
-            ((nvHdmiGetEffectivePixelClockKHz(pDpyEvo, pTimings, pDpyColor) >
-                pDpyEvo->maxSingleLinkPixelClockKHz) ||
-             forceHdmiFrlIsSupported) &&
-            /* If FRL is supported... */
-            nvHdmiDpySupportsFrl(pDpyEvo)) {
+    if (((pValidationParams->overrides &
+          NVKMS_MODE_VALIDATION_REQUIRE_BOOT_CLOCKS) == 0) &&
+        (!nvHdmiIsTmdsPossible(pDpyEvo, pTimings, pDpyColor) ||
+         nvGetPreferHdmiFrlMode(pDevEvo, pValidationParams)) &&
+         /* If FRL is possible... */
+         nvHdmiIsFrlPossible(pDpyEvo)) {
 
-        /* Hardware does not support HDMI FRL with YUV422 */
-        if ((pDpyColor->format ==
-                NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_SPACE_YCbCr422) &&
-                !GetDefaultFrlDpyColor(&colorFormatsInfo, pDpyColor)) {
-            return FALSE;
+        /*
+         * Not all hardware configurations support YCbCr422 with FRL;
+         * override if necessary, or fail FRL.
+         */
+        if (pDpyColor->format ==
+                NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_SPACE_YCbCr422) {
+            if (!FrlOverrideForYCbCr422(pDevEvo, &colorFormatsInfo, pDpyColor)) {
+                return FALSE;
+            }
         }
 
         *pTimingsProtocol = NVKMS_PROTOCOL_SOR_HDMI_FRL;
@@ -6935,9 +7036,7 @@ static NvBool GetDfpHdmiProtocol(const NVDpyEvoRec *pDpyEvo,
     }
 
     do {
-        if (nvHdmiGetEffectivePixelClockKHz(pDpyEvo, pTimings, pDpyColor) <=
-               pDpyEvo->maxSingleLinkPixelClockKHz) {
-
+        if (nvHdmiIsTmdsPossible(pDpyEvo, pTimings, pDpyColor)) {
             switch (rmProtocol) {
                 case NV0073_CTRL_SPECIFIC_OR_PROTOCOL_SOR_DUAL_TMDS:
                     /*
@@ -6985,7 +7084,7 @@ static NvBool GetDfpProtocol(const NVDpyEvoRec *pDpyEvo,
 
     if (pConnectorEvo->or.type == NV0073_CTRL_SPECIFIC_OR_TYPE_SOR) {
         if (nvDpyIsHdmiEvo(pDpyEvo)) {
-            if (!GetDfpHdmiProtocol(pDpyEvo, overrides, pDpyColor, pTimings,
+            if (!GetDfpHdmiProtocol(pDpyEvo, pParams, pDpyColor, pTimings,
                                     &timingsProtocol)) {
                 return FALSE;
             }
@@ -7065,6 +7164,7 @@ ConstructHwModeTimingsEvoCrt(const NVConnectorEvoRec *pConnectorEvo,
                              const struct NvKmsSize *pViewPortSizeIn,
                              const struct NvKmsRect *pViewPortOut,
                              NVHwModeTimingsEvoPtr pTimings,
+                             const struct NvKmsModeValidationParams *pParams,
                              NVEvoInfoStringPtr pInfoString)
 {
     ConstructHwModeTimingsFromNvModeTimings(pModeTimings, pTimings);
@@ -7080,7 +7180,7 @@ ConstructHwModeTimingsEvoCrt(const NVConnectorEvoRec *pConnectorEvo,
 
     return ConstructHwModeTimingsViewPort(pConnectorEvo->pDispEvo, pTimings,
                                           pInfoString, pViewPortSizeIn,
-                                          pViewPortOut);
+                                          pViewPortOut, pParams);
 }
 
 
@@ -7098,6 +7198,7 @@ static NvBool ConstructHwModeTimingsEvoDfp(const NVDpyEvoRec *pDpyEvo,
                                            const NvModeTimings *pModeTimings,
                                            const struct NvKmsSize *pViewPortSizeIn,
                                            const struct NvKmsRect *pViewPortOut,
+                                           const NvBool dscPassThrough,
                                            NVDpyAttributeColor *pDpyColor,
                                            NVHwModeTimingsEvoPtr pTimings,
                                            const struct
@@ -7107,6 +7208,26 @@ static NvBool ConstructHwModeTimingsEvoDfp(const NVDpyEvoRec *pDpyEvo,
     NvBool ret;
 
     ConstructHwModeTimingsFromNvModeTimings(pModeTimings, pTimings);
+
+    pTimings->dscPassThrough = dscPassThrough;
+    if (pTimings->dscPassThrough &&
+            (pDpyColor->format !=
+             NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_SPACE_RGB)) {
+        const NvKmsDpyOutputColorFormatInfo colorFormatsInfo =
+            nvDpyGetOutputColorFormatInfo(pDpyEvo);
+
+        if (colorFormatsInfo.rgb444.maxBpc ==
+                NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_BPC_UNKNOWN) {
+            return FALSE;
+        }
+
+        nvkms_memset(pDpyColor, 0, sizeof(*pDpyColor));
+
+        pDpyColor->colorimetry = NVKMS_OUTPUT_COLORIMETRY_DEFAULT;
+        pDpyColor->format = NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_SPACE_RGB;
+        pDpyColor->bpc = colorFormatsInfo.rgb444.maxBpc;
+        pDpyColor->range = NV_KMS_DPY_ATTRIBUTE_COLOR_RANGE_FULL;
+    }
 
     ret = GetDfpProtocol(pDpyEvo, pParams, pDpyColor, pTimings);
 
@@ -7122,7 +7243,7 @@ static NvBool ConstructHwModeTimingsEvoDfp(const NVDpyEvoRec *pDpyEvo,
 
     return ConstructHwModeTimingsViewPort(pDpyEvo->pDispEvo, pTimings,
                                           pInfoString, pViewPortSizeIn,
-                                          pViewPortOut);
+                                          pViewPortOut, pParams);
 }
 
 static NvBool IsColorBpcSupported(
@@ -7280,6 +7401,7 @@ NvBool nvConstructHwModeTimingsEvo(const NVDpyEvoRec *pDpyEvo,
                                    const struct NvKmsMode *pKmsMode,
                                    const struct NvKmsSize *pViewPortSizeIn,
                                    const struct NvKmsRect *pViewPortOut,
+                                   const NvBool dscPassThrough,
                                    NVDpyAttributeColor *pDpyColor,
                                    NVHwModeTimingsEvoPtr pTimings,
                                    const struct NvKmsModeValidationParams
@@ -7296,14 +7418,16 @@ NvBool nvConstructHwModeTimingsEvo(const NVDpyEvoRec *pDpyEvo,
         ret = ConstructHwModeTimingsEvoDfp(pDpyEvo,
                                            &pKmsMode->timings,
                                            pViewPortSizeIn, pViewPortOut,
+                                           dscPassThrough,
                                            pDpyColor, pTimings, pParams,
                                            pInfoString);
     } else if (pConnectorEvo->legacyType ==
                NV0073_CTRL_SPECIFIC_DISPLAY_TYPE_CRT) {
+        nvAssert(dscPassThrough == FALSE);
         ret = ConstructHwModeTimingsEvoCrt(pConnectorEvo,
                                            &pKmsMode->timings,
                                            pViewPortSizeIn, pViewPortOut,
-                                           pTimings, pInfoString);
+                                           pTimings, pParams, pInfoString);
     } else {
         nvAssert(!"Invalid pDpyEvo->type");
         return FALSE;
@@ -9121,6 +9245,13 @@ NVDevEvoPtr nvAllocDevEvo(const struct NvKmsAllocDeviceRequest *pRequest,
         goto done;
     }
 
+    if (!nvAllocLutSurfacesEvo(pDevEvo)) {
+        nvEvoLogDev(pDevEvo, EVO_LOG_ERROR,
+            "Failed to allocate memory for the display color lookup table.");
+        status = NVKMS_ALLOC_DEVICE_STATUS_FATAL_ERROR;
+        goto done;
+    }
+
     nvDPSetAllowMultiStreaming(pDevEvo, TRUE /* allowMST */);
 
     /*
@@ -9139,13 +9270,6 @@ NVDevEvoPtr nvAllocDevEvo(const struct NvKmsAllocDeviceRequest *pRequest,
     }
 
     if (!nvHsAllocDevice(pDevEvo, pRequest)) {
-        status = NVKMS_ALLOC_DEVICE_STATUS_FATAL_ERROR;
-        goto done;
-    }
-
-    if (!nvAllocLutSurfacesEvo(pDevEvo)) {
-        nvEvoLogDev(pDevEvo, EVO_LOG_ERROR,
-            "Failed to allocate memory for the display color lookup table.");
         status = NVKMS_ALLOC_DEVICE_STATUS_FATAL_ERROR;
         goto done;
     }
@@ -10002,11 +10126,11 @@ NvBool nvEvoIsConsoleActive(const NVDevEvoRec *pDevEvo)
      * console or the NVKMS console might be active.
      *
      * If (pDevEvo->modesetOwner != NULL) but
-     * pDevEvo->modesetOwnerChanged is TRUE, that means the modeset
+     * pDevEvo->modesetOwnerOrSubOwnerChanged is TRUE, that means the modeset
      * ownership is grabbed by the external client but it hasn't
-     * performed any modeset and the console is still active.
+     * performed any modeset and the console might still be active.
      */
-    if ((pDevEvo->modesetOwner == NULL) || pDevEvo->modesetOwnerChanged) {
+    if ((pDevEvo->modesetOwner == NULL) || pDevEvo->modesetOwnerOrSubOwnerChanged) {
         NvU32 sd;
         const NVDispEvoRec *pDispEvo;
         FOR_ALL_EVO_DISPLAYS(pDispEvo, sd, pDevEvo) {

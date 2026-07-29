@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -125,6 +125,12 @@ _krcInitRegistryOverrides
     {
         dword = NV_REG_STR_RM_BREAK_ON_RC_DEFAULT;
     }
+    else
+    {
+        NV_PRINTF(LEVEL_INFO,
+            "BreakOnRc set by regkey " NV_REG_STR_RM_BREAK_ON_RC "= 0x%08x\n",
+            dword);
+    }
 
     pKernelRc->bBreakOnRc = (dword == NV_REG_STR_RM_BREAK_ON_RC_ENABLE);
 
@@ -132,8 +138,11 @@ _krcInitRegistryOverrides
     if (DRF_VAL(_DEBUG, _BREAK_FLAGS, _RC, SYS_GET_INSTANCE()->debugFlags) ==
         NV_DEBUG_BREAK_FLAGS_RC_ENABLE)
     {
+        NV_PRINTF(LEVEL_INFO,
+                  "BreakOnRc overridden by NV_DEBUG_BREAK_FLAGS_RC\n");
         pKernelRc->bBreakOnRc = NV_TRUE;
     }
+    NV_PRINTF(LEVEL_INFO, "BreakOnRc = %d\n", pKernelRc->bBreakOnRc);
 
     if (osReadRegistryDword(pGpu,
                             NV_REG_STR_RM_WATCHDOG_TIMEOUT,
@@ -452,7 +461,7 @@ krcCheckBusError_KERNEL
     PcieAerCapability clAer;
 
     // PCI-E provides extended error reporting
-    if (pKernelBif == NULL || kbifGetBusIntfType_HAL(pKernelBif) !=
+    if (pKernelBif == NULL || gpuGetBusIntfType_HAL(pGpu) !=
                                   NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS)
     {
         return NV_OK;
@@ -585,7 +594,7 @@ _krcValidateAndDumpToKernelLog(NvU64 *lastXidTimestamp)
 {
     NvU32 sec, usec;
 
-    if (((osGetCurrentTime(&sec, &usec) == NV_OK) &&
+    if (((osGetSystemTime(&sec, &usec) == NV_OK) &&
        ((((sec * 1000000) + usec) - *lastXidTimestamp) > 1000000)))
     {
         nvlogDumpToKernelLog(NV_TRUE);

@@ -32,6 +32,8 @@
 #include "nvkms-utils.h"
 #include "nvkms-kapi-private.h"
 
+#include "nv_smg.h"
+
 //XXX Decouple functions like nvEvoLog used for logging from NVKMS
 
 #define nvKmsKapiLogDebug(__format...) \
@@ -107,8 +109,11 @@ struct NvKmsKapiDevice {
 
     /* SMG state */
 
+    MIGDeviceId migDevice;
     NvU32 smgGpuInstSubscriptionHdl;
     NvU32 smgComputeInstSubscriptionHdl;
+
+    nvRMContext rmSmgContext;
 
     /* Device capabilities */
 
@@ -124,6 +129,10 @@ struct NvKmsKapiDevice {
 
         NvU8  genericPageKind;
         NvBool requiresVrrSemaphores;
+
+        NvBool supportsInputColorSpace;
+        NvBool supportsInputColorRange;
+        NvBool supportsWindowMode;
     } caps;
 
     NvU64 supportedSurfaceMemoryFormats[NVKMS_KAPI_LAYER_MAX];
@@ -140,12 +149,19 @@ struct NvKmsKapiDevice {
     NvU32 numDisplaySemaphores;
 
     struct {
+        struct NvKmsMode mode;
+    } headState[NVKMS_KAPI_MAX_HEADS];
+
+    struct {
         NvU32 currFlipNotifierIndex;
     } layerState[NVKMS_KAPI_MAX_HEADS][NVKMS_MAX_LAYERS_PER_HEAD];
 
     void *privateData;
 
     void (*eventCallback)(const struct NvKmsKapiEvent *event);
+
+    NvU64 vtFbBaseAddress;
+    NvU64 vtFbSize;
 };
 
 struct NvKmsKapiMemory {
@@ -155,10 +171,13 @@ struct NvKmsKapiMemory {
     struct NvKmsKapiPrivSurfaceParams surfaceParams;
 
     NvBool isVidmem;
+    /* Whether memory can be updated directly on the screen */
+    NvBool noDisplayCaching;
 };
 
 struct NvKmsKapiSurface {
     NvKmsSurfaceHandle hKmsHandle;
+    struct NvKmsSize size;
 };
 
 static inline void *nvKmsKapiCalloc(size_t nmem, size_t size)

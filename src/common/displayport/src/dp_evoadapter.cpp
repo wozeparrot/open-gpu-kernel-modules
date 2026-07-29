@@ -88,7 +88,7 @@ const struct
     {NV_DP_REGKEY_APPLY_MAX_LINK_RATE_OVERRIDES,         &dpRegkeyDatabase.applyMaxLinkRateOverrides,         DP_REG_VAL_U32},
     {NV_DP_REGKEY_DISABLE_DSC,                           &dpRegkeyDatabase.bDscDisabled,                      DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_SKIP_ASSESSLINK_FOR_EDP,               &dpRegkeyDatabase.bAssesslinkForEdpSkipped,          DP_REG_VAL_BOOL},
-    {NV_DP_REGKEY_HDCP_AUTH_ONLY_ON_DEMAND,              &dpRegkeyDatabase.bHdcpAuthOnlyOnDemand,             DP_REG_VAL_BOOL},
+    {NV_DP_REGKEY_MST_AUTO_HDCP_AUTH_AT_ATTACH,          &dpRegkeyDatabase.bMstAutoHdcpAuthAtAttach,          DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_ENABLE_MSA_OVER_MST,                   &dpRegkeyDatabase.bMsaOverMstEnabled,                DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_KEEP_OPT_LINK_ALIVE,                   &dpRegkeyDatabase.bOptLinkKeptAlive,                 DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_KEEP_OPT_LINK_ALIVE_MST,               &dpRegkeyDatabase.bOptLinkKeptAliveMst,              DP_REG_VAL_BOOL},
@@ -96,20 +96,22 @@ const struct
     {NV_DP_REGKEY_FORCE_EDP_ILR,                         &dpRegkeyDatabase.bBypassEDPRevCheck,                DP_REG_VAL_BOOL},
     {NV_DP_DSC_MST_CAP_BUG_3143315,                      &dpRegkeyDatabase.bDscMstCapBug3143315,              DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_POWER_DOWN_PHY,                        &dpRegkeyDatabase.bPowerDownPhyBeforeD3,             DP_REG_VAL_BOOL},
-    {NV_DP_REGKEY_REASSESS_MAX_LINK,                     &dpRegkeyDatabase.bReassessMaxLink,                  DP_REG_VAL_BOOL},
     {NV_DP2X_REGKEY_FPGA_UHBR_SUPPORT,                   &dpRegkeyDatabase.supportInternalUhbrOnFpga,         DP_REG_VAL_U32},
     {NV_DP2X_IGNORE_CABLE_ID_CAPS,                       &dpRegkeyDatabase.bIgnoreCableIdCaps,                DP_REG_VAL_BOOL},
+    {NV_DP2X_REGKEY_VCONN_SOURCE_UNKNOWN_WAR,            &dpRegkeyDatabase.bCableVconnSourceUnknownWar,       DP_REG_VAL_BOOL},
+    {NV_DP2X_REGKEY_DISABLE_EFF_BPP_SST_8b10b,           &dpRegkeyDatabase.bDisableEffBppSST8b10b,            DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_MST_PCON_CAPS_READ_DISABLED,           &dpRegkeyDatabase.bMSTPCONCapsReadDisabled,          DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_DISABLE_TUNNEL_BW_ALLOCATION,          &dpRegkeyDatabase.bForceDisableTunnelBwAllocation,   DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_DISABLE_DOWNSPREAD,                    &dpRegkeyDatabase.bDownspreadDisabled,               DP_REG_VAL_BOOL},
+    {NV_DP_REGKEY_DISABLE_AVOID_HBR3_WAR,                &dpRegkeyDatabase.bDisableAvoidHBR3War,              DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_SKIP_ZERO_OUI_CACHE,                   &dpRegkeyDatabase.bSkipZeroOuiCache,                 DP_REG_VAL_BOOL},
-    {NV_DP_REGKEY_DISABLE_FIX_FOR_5019537,               &dpRegkeyDatabase.bDisable5019537Fix,                DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_ENABLE_FIX_FOR_5147205,                &dpRegkeyDatabase.bEnable5147205Fix,                 DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_FORCE_HEAD_SHUTDOWN,                   &dpRegkeyDatabase.bForceHeadShutdown,                DP_REG_VAL_BOOL},
-    {NV_DP_REGKEY_ENABLE_LOWER_BPP_CHECK_FOR_DSC,        &dpRegkeyDatabase.bEnableLowerBppCheckForDsc,        DP_REG_VAL_BOOL},
-    {NV_DP_REGKEY_SKIP_SETTING_LINK_STATE_DURING_UNPLUG, &dpRegkeyDatabase.bSkipSettingLinkStateDuringUnplug, DP_REG_VAL_BOOL},
     {NV_DP_REGKEY_EXPOSE_DSC_DEVID_WAR,                  &dpRegkeyDatabase.bEnableDevId,                      DP_REG_VAL_BOOL},
-    {NV_DP_REGKEY_HDMI_ON_DP_PLUS_PLUS,                  &dpRegkeyDatabase.bHDMIOnDPPlusPlus,                 DP_REG_VAL_BOOL}
+    {NV_DP_REGKEY_HDMI_ON_DP_PLUS_PLUS,                  &dpRegkeyDatabase.bHDMIOnDPPlusPlus,                 DP_REG_VAL_BOOL},
+    {NV_DP_REGKEY_IGNORE_CAPS_AND_FORCE_HIGHEST_LC,      &dpRegkeyDatabase.bIgnoreCapsAndForceHighestLc,      DP_REG_VAL_BOOL},
+    {NV_DP_REGKEY_OPTIMIZE_DSC_BPP_FOR_TUNNELLING_BW,    &dpRegkeyDatabase.bOptimizeDscBppForTunnellingBw,    DP_REG_VAL_BOOL},
+    {NV_DP_REGKEY_USE_MAX_DSC_COMPRESSION_MST,           &dpRegkeyDatabase.bUseMaxDSCCompressionMST,          DP_REG_VAL_BOOL}
 };
 
 EvoMainLink::EvoMainLink(EvoInterface * provider, Timer * timer) :
@@ -286,10 +288,10 @@ bool EvoMainLink::queryGPUCapability()
     _useDfpMaxLinkRateCaps          = (dpParams.bOverrideLinkBw == NV_TRUE) ? true : false;
     _isLTPhyRepeaterSupported       = (dpParams.bIsTrainPhyRepeater == NV_TRUE) ? true : false;
     _isDownspreadSupported          = (dpParams.bSupportDPDownSpread == NV_TRUE) ? true : false;
+    _bAvoidHBR3                     = (dpParams.bAvoidHBR3 == NV_TRUE) ? true : false;
+    _bIsDpTunnelingHwBugWarEnabled  = (dpParams.bIsDpTunnelingHwBugWarEnabled == NV_TRUE) ? true : false;
 
     _gpuSupportedDpVersions         = dpParams.dpVersionsSupported;
-
-    _minPClkForCompressed           = dpParams.minPClkForCompressed;
 
     if (FLD_TEST_DRF(0073, _CTRL_CMD_DP_GET_CAPS, _MAX_LINK_RATE, _1_62, dpParams.maxLinkRate))
         _maxLinkRateSupportedGpu = dp2LinkRate_1_62Gbps; // in 10Mbps
@@ -921,6 +923,7 @@ void EvoMainLink::applyRegkeyOverrides()
     _enableMSAOverrideOverMST            = dpRegkeyDatabase.bMsaOverMstEnabled;
     _isMSTPCONCapsReadDisabled           = dpRegkeyDatabase.bMSTPCONCapsReadDisabled;
     _isDownspreadDisabledByRegkey        = dpRegkeyDatabase.bDownspreadDisabled;
+    _bAvoidHBR3DisabledByRegkey          = dpRegkeyDatabase.bDisableAvoidHBR3War;
 }
 
 NvU32 EvoMainLink::getRegkeyValue(const char *key)
@@ -1352,7 +1355,6 @@ void EvoMainLink::getLinkConfig(unsigned &laneCount, NvU64 & linkRate)
     if (code == NVOS_STATUS_SUCCESS)
     {
         laneCount = params.laneCount;
-
         if (params.linkBW != 0)
         {
             DP_ASSERT((params.dp2LinkBW == 0) && "dp2LinkBW should be zero if linkBw is not zero");
@@ -1646,6 +1648,42 @@ bool EvoMainLink::getDpLaneData(NvU32 *numLanes, NvU32 *data)
     }
     else
         return false;
+}
+
+void EvoMainLink::getLinkConfigWithFEC(unsigned &laneCount, NvU64 & linkRate, bool &bFECEnabled)
+{
+    NV0073_CTRL_DP_GET_LINK_CONFIG_PARAMS params;
+    dpMemZero(&params, sizeof(params));
+
+    params.subDeviceInstance = subdeviceIndex;
+    params.displayId = displayId;
+
+    NvU32 code = provider->rmControl0073(NV0073_CTRL_CMD_DP_GET_LINK_CONFIG, &params, sizeof(params));
+
+    if (code == NVOS_STATUS_SUCCESS)
+    {
+        laneCount = params.laneCount;
+        if (params.bFECEnabled)
+        {
+            bFECEnabled = true;
+        }
+
+        if (params.linkBW != 0)
+        {
+            DP_ASSERT((params.dp2LinkBW == 0) && "dp2LinkBW should be zero if linkBw is not zero");
+            linkRate = LINK_RATE_270MHZ_TO_10MHZ((NvU64)params.linkBW);
+        }
+        else
+        {
+            // No link rate available.
+            linkRate = 0;
+        }
+    }
+    else
+    {
+        laneCount = 0;
+        linkRate = 0;
+    }
 }
 
 bool EvoMainLink::setDpLaneData(NvU32 numLanes, NvU32 *data)

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2015-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2015-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -582,6 +582,7 @@ clientCopyResource_IMPL
     params.externalClassId = pParams->pSrcRef->externalClassId;
     params.pSecInfo = pParams->pSecInfo;
 
+    params.pClient = pClientDst;
     params.pSrcClient = pParams->pSrcClient;
     params.pSrcRef = pParams->pSrcRef;
     params.pAllocParams = pParams->pShareParams;
@@ -840,7 +841,7 @@ clientFreeResource_IMPL
     _refRemoveAllDependencies(pResourceRef);
 
     status = serverFreeResourceRpcUnderLock(pServer, pParams);
-    NV_ASSERT(status == NV_OK);
+    NV_ASSERT((status == NV_OK) || (status == NV_ERR_GPU_IN_FULLCHIP_RESET));
 
     // NV_PRINTF(LEVEL_INFO, "hClient %x: Freeing hResource: %x\n",
     //          pClient->hClient, pResourceRef->hResource);
@@ -1087,7 +1088,9 @@ clientDestructResourceRef_IMPL
         RS_RES_FREE_PARAMS_INTERNAL params;
         NV_STATUS      tmpStatus;
 
+#if !(RS_STANDALONE_TEST)
         NV_ASSERT(0 == multimapCountItems(&pResourceRef->childRefMap));
+#endif
 
         NV_PRINTF(LEVEL_ERROR, "Resource %x (Class %x) has unfreed children!\n",
                   pResourceRef->hResource, pResourceRef->externalClassId);
@@ -1278,6 +1281,8 @@ _unmapInterMapping
     params.hClient = pClient->hClient;
     params.hMapper = pMapperRef->hResource;
     params.hDevice = pMapping->pContextRef->hResource;
+
+    // This is a bug. Passing NVOS46 flags to virtmemUnmap which checks against NVOS47 flags.
     params.flags = pMapping->flags;
     params.dmaOffset = pMapping->dmaOffset;
     params.size = 0;

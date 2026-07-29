@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2006-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2006-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -539,20 +539,23 @@ typedef struct NV2080_CTRL_CMD_FIFO_GET_USERD_LOCATION_PARAMS {
 #define NV2080_CTRL_FIFO_OBJSCHED_SW_NCOUNTERS                          8
 #define NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_ENTRIES                    200
 
+typedef struct NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_ENTRY {
+    NV_DECLARE_ALIGNED(NvU64 timestampNs, 8);
+    NV_DECLARE_ALIGNED(NvS64 timeRunTotalNs, 8);
+    NvU32 timeRunNs;
+    NvU32 swrlId;
+    NvU32 targetTimeSlice;
+    NV_DECLARE_ALIGNED(NvU64 cumulativePreemptionTime, 8);
+    NV_DECLARE_ALIGNED(NvU64 cumulativeIdleTime, 8);
+    NV_DECLARE_ALIGNED(NvU64 counters[NV2080_CTRL_FIFO_OBJSCHED_SW_NCOUNTERS], 8);
+} NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_ENTRY;
+
 #define NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_PARAMS_MESSAGE_ID (0xEU)
 
 typedef struct NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_PARAMS {
     NvU32 engineId;
     NvU32 count;
-    struct {
-        NV_DECLARE_ALIGNED(NvU64 timestampNs, 8);
-        NV_DECLARE_ALIGNED(NvS64 timeRunTotalNs, 8);
-        NvU32 timeRunNs;
-        NvU32 swrlId;
-        NvU32 targetTimeSlice;
-        NV_DECLARE_ALIGNED(NvU64 cumulativePreemptionTime, 8);
-        NV_DECLARE_ALIGNED(NvU64 counters[NV2080_CTRL_FIFO_OBJSCHED_SW_NCOUNTERS], 8);
-    } entry[NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_ENTRIES];
+    NV_DECLARE_ALIGNED(NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_ENTRY entry[NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_ENTRIES], 8);
     NvU32 schedPolicy;
     NvU32 arrEnabled;
     NvU32 arrAvgFactor;
@@ -560,6 +563,31 @@ typedef struct NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_PARAMS {
 } NV2080_CTRL_FIFO_OBJSCHED_SW_GET_LOG_PARAMS;
 
 
+
+
+/*
+ * NV2080_CTRL_CMD_FIFO_CONFIG_CTXSW_TIMEOUT
+ *
+ * This command can be used to enable and set the engine
+ * context switch timeout
+ *
+ * timeout: Timeout in number of microsec PTIMER ticks
+ * 1 microsec PTIMER tick = 1024 PTIMER nanoseconds
+ * bEnable: TRUE/FALSE
+ *
+ * Possible status values returned are:
+ *   NV_OK
+ *   NV_ERR_INVALID_ARGUMENT
+*/
+
+#define NV2080_CTRL_CMD_FIFO_CONFIG_CTXSW_TIMEOUT (0x20801110) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FIFO_INTERFACE_ID << 8) | NV2080_CTRL_FIFO_CONFIG_CTXSW_TIMEOUT_PARAMS_MESSAGE_ID" */
+
+#define NV2080_CTRL_FIFO_CONFIG_CTXSW_TIMEOUT_PARAMS_MESSAGE_ID (0x10U)
+
+typedef struct NV2080_CTRL_FIFO_CONFIG_CTXSW_TIMEOUT_PARAMS {
+    NvU32  timeout;
+    NvBool bEnable;
+} NV2080_CTRL_FIFO_CONFIG_CTXSW_TIMEOUT_PARAMS;
 
 /*
  *  NV2080_CTRL_CMD_FIFO_GET_DEVICE_INFO_TABLE

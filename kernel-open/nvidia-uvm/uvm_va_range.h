@@ -1,5 +1,5 @@
 /*******************************************************************************
-    Copyright (c) 2015-2024 NVIDIA Corporation
+    Copyright (c) 2015-2025 NVIDIA Corporation
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to
@@ -202,6 +202,15 @@ typedef struct
     // This field is unused for sparse mappings. Since they don't have physical
     // backing there is no RM object to be freed when the mapping is unmapped.
     uvm_deferred_free_object_t deferred_free;
+
+    // Flag indicating whether L2 cache invalidation is needed at unmap time.
+    // This is set by RM during mapping and used during unmap to determine if L2
+    // cache invalidation should be performed. For GPU cached system memory
+    // allocations on systems a write-back cache this is required for
+    // correctness. For GPU cached peer and system memory on systems with a
+    // write-through cache the invalidation could be done by RM at map time
+    // however this introduces overhead during performance sensitive sections.
+    bool need_l2_invalidate_at_unmap;
 } uvm_ext_gpu_map_t;
 
 typedef struct
@@ -711,6 +720,12 @@ static uvm_va_range_device_p2p_t *uvm_va_range_device_p2p_find(uvm_va_space_t *v
     return uvm_va_range_to_device_p2p(va_range);
 }
 
+// Returns true if this va_range can be mapped via the GMMU
+static bool uvm_va_range_is_gmmu_mappable(uvm_va_range_t *va_range)
+{
+    return va_range->type != UVM_VA_RANGE_TYPE_DEVICE_P2P;
+}
+
 static uvm_ext_gpu_map_t *uvm_ext_gpu_map_container(uvm_range_tree_node_t *node)
 {
     if (!node)
@@ -732,9 +747,16 @@ static uvm_ext_gpu_map_t *uvm_ext_gpu_map_container(uvm_range_tree_node_t *node)
 // Returns the first va_range in the range [start, end], if any
 uvm_va_range_t *uvm_va_space_iter_first(uvm_va_space_t *va_space, NvU64 start, NvU64 end);
 
+// Returns the first va_range in [start, end] that is gmmu mappable
+uvm_va_range_t *uvm_va_space_iter_gmmu_mappable_first(uvm_va_space_t *va_space, NvU64 start);
+
 // Returns the va_range following the provided va_range in address order, if
 // that va_range's start <= the provided end.
 uvm_va_range_t *uvm_va_space_iter_next(uvm_va_range_t *va_range, NvU64 end);
+
+// Returns the va_range preceding the provided va_range in address order, if
+// that va_range's start >= the provided start.
+uvm_va_range_t *uvm_va_space_iter_prev(uvm_va_range_t *va_range, NvU64 start);
 
 // Like uvm_va_space_iter_next, but also returns NULL if the next va_range
 // is not adjacent to the provided va_range.
@@ -858,6 +880,30 @@ static uvm_va_range_managed_t *uvm_va_space_iter_managed_next_contig(uvm_va_rang
                                           uvm_va_space_get(vma->vm_file),                   \
                                           vma->vm_start,                                    \
                                           vma->vm_end - 1)
+
+static uvm_va_range_t *uvm_va_range_gmmu_mappable_next(uvm_va_range_t *va_range)
+{
+    for (va_range = uvm_va_space_iter_next(va_range, ~0ULL);
+         va_range;
+         va_range = uvm_va_space_iter_next(va_range, ~0ULL)) {
+        if (uvm_va_range_is_gmmu_mappable(va_range))
+            break;
+    }
+
+    return va_range;
+}
+
+static uvm_va_range_t *uvm_va_range_gmmu_mappable_prev(uvm_va_range_t *va_range)
+{
+    for (va_range = uvm_va_space_iter_prev(va_range, 0ULL);
+         va_range;
+         va_range = uvm_va_space_iter_prev(va_range, 0ULL)) {
+        if (uvm_va_range_is_gmmu_mappable(va_range))
+            break;
+    }
+
+    return va_range;
+}
 
 // Only call this if you're sure that either:
 // 1) You have a reference on the vma's vm_mm and that vma->vm_mm's mmap_lock is
@@ -1068,6 +1114,16 @@ NV_STATUS uvm_va_range_set_read_duplication(uvm_va_range_managed_t *managed_rang
 // LOCKING: If mm != NULL, the caller must hold mm->mmap_lock in at least read
 //          mode.
 NV_STATUS uvm_va_range_unset_read_duplication(uvm_va_range_managed_t *managed_range, struct mm_struct *mm);
+
+// Set discard status for all pages within the overlap of the VA range and
+// [start, end].
+//
+// LOCKING: The VA space lock should be held read mode.
+NV_STATUS uvm_va_range_discard(uvm_va_range_managed_t *va_range,
+                               uvm_va_block_context_t *va_block_context,
+                               NvU64 start,
+                               NvU64 end,
+                               NvU64 flags);
 
 // Create and destroy vma wrappers
 uvm_vma_wrapper_t *uvm_vma_wrapper_alloc(struct vm_area_struct *vma);

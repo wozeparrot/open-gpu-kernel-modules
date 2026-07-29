@@ -133,6 +133,7 @@ NV_STATUS NV_API_CALL nv_acpi_get_powersource(NvU32 *ac_plugged)
     return NV_OK;
 }
 
+#define ACPI_POWER_SOURCE_BUS_CHANGE_EVENT   0x00
 #define ACPI_POWER_SOURCE_CHANGE_EVENT       0x80
 static void nv_acpi_powersource_hotplug_event(acpi_handle handle, u32 event_type, void *data)
 {
@@ -143,7 +144,7 @@ static void nv_acpi_powersource_hotplug_event(acpi_handle handle, u32 event_type
     nv_acpi_t *pNvAcpiObject = data;
     u32 ac_plugged = 0;
 
-    if (event_type == ACPI_POWER_SOURCE_CHANGE_EVENT)
+    if (event_type == ACPI_POWER_SOURCE_CHANGE_EVENT || event_type == ACPI_POWER_SOURCE_BUS_CHANGE_EVENT)
     {
         if (nv_acpi_get_powersource(&ac_plugged) != NV_OK)
             return;
@@ -201,8 +202,16 @@ static nv_acpi_t* nv_install_notifier(
     pNvAcpiObject->sp = sp;
     pNvAcpiObject->notifier_data = notifier_data;
 
-    status = acpi_install_notify_handler(handle, ACPI_DEVICE_NOTIFY,
-              handler, pNvAcpiObject);
+    if (handle == psr_device_handle)
+    {
+        status = acpi_install_notify_handler(handle, ACPI_ALL_NOTIFY,
+                  handler, pNvAcpiObject);
+    }
+    else
+    {
+        status = acpi_install_notify_handler(handle, ACPI_DEVICE_NOTIFY,
+                  handler, pNvAcpiObject);
+    }
     if (!ACPI_FAILURE(status))
     {
         pNvAcpiObject->notify_handler_installed = 1;
@@ -225,7 +234,14 @@ static void nv_uninstall_notifier(nv_acpi_t *pNvAcpiObject, acpi_notify_handler 
 
     if (pNvAcpiObject && pNvAcpiObject->notify_handler_installed)
     {
-        status = acpi_remove_notify_handler(pNvAcpiObject->handle, ACPI_DEVICE_NOTIFY, handler);
+        if (pNvAcpiObject->handle == psr_device_handle)
+        {
+            status = acpi_remove_notify_handler(pNvAcpiObject->handle, ACPI_ALL_NOTIFY, handler);
+        }
+        else
+        {
+            status = acpi_remove_notify_handler(pNvAcpiObject->handle, ACPI_DEVICE_NOTIFY, handler);
+        }
         if (ACPI_FAILURE(status))
         {
             nv_printf(NV_DBG_INFO,
@@ -721,8 +737,6 @@ static NV_STATUS nv_acpi_evaluate_dsm_method(
 
         rmStatus = nv_acpi_extract_object(dsm, pOutData, *pSize, &data_size);
         *pSize = data_size;
-
-        kfree(output.pointer);
     }
     else
     {
@@ -735,6 +749,7 @@ static NV_STATUS nv_acpi_evaluate_dsm_method(
                   "NVRM: %s: DSM data invalid!\n", __FUNCTION__);
     }
 
+    kfree(output.pointer);
     return rmStatus;
 }
 
@@ -1167,6 +1182,7 @@ NvBool nv_acpi_power_resource_method_present(
         (object_package->package.count != 0x1))
     {
         nv_printf(NV_DBG_ERRORS,"NVRM: _PR3 object is not a type 'package'\n");
+        kfree(buf.pointer);
         return NV_FALSE;
     }
 
@@ -1178,8 +1194,10 @@ NvBool nv_acpi_power_resource_method_present(
     {
         nv_printf(NV_DBG_ERRORS,
                      "NVRM: _PR3 object does not contain POWER Reference\n");
+        kfree(buf.pointer);
         return NV_FALSE;
     }
+    kfree(buf.pointer);
     return NV_TRUE;
 }
 
@@ -1309,6 +1327,7 @@ static acpi_status nv_acpi_find_battery_info(
     if (object_package->type != ACPI_TYPE_PACKAGE)
     {
         nv_printf(NV_DBG_INFO, "NVRM: Battery method output is not package\n");
+        kfree(buf.pointer);
         return AE_OK;
     }
 
@@ -1334,11 +1353,13 @@ static acpi_status nv_acpi_find_battery_info(
     if ((object_package->package.elements[battery_technology_offset].type != ACPI_TYPE_INTEGER) ||
         (object_package->package.elements[battery_technology_offset].integer.value != BATTERY_RECHARGABLE))
     {
+        kfree(buf.pointer);
         return AE_OK;
     }
 
     battery_present = NV_TRUE;
 
+    kfree(buf.pointer);
     /* Stop traversing acpi tree. */
     return AE_CTRL_TERMINATE;
 }

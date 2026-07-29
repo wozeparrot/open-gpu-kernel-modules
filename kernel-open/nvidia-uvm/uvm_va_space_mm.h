@@ -30,13 +30,7 @@
 #include "uvm_test_ioctl.h"
 #include "nv-kref.h"
 
-#include <linux/mmu_notifier.h>
-
-#if defined(NV_LINUX_SCHED_MM_H_PRESENT)
 #include <linux/sched/mm.h>
-#elif defined(NV_LINUX_SCHED_H_PRESENT)
-#include <linux/sched.h>
-#endif
 
 typedef enum
 {
@@ -67,10 +61,6 @@ struct uvm_va_space_mm_struct
   // UVM_VA_SPACE_MM_STATE_ALIVE, but should only be considered usable
   // when retained or current.
   struct mm_struct *mm;
-
-#if UVM_CAN_USE_MMU_NOTIFIERS()
-    struct mmu_notifier mmu_notifier;
-#endif
 
     // Lock protecting the state and retained_count fields.
     uvm_spinlock_t lock;
@@ -207,13 +197,6 @@ static void uvm_va_space_mm_or_current_release_unlock(uvm_va_space_t *va_space, 
     }
 }
 
-#if !defined(NV_MMGET_NOT_ZERO_PRESENT)
-static bool mmget_not_zero(struct mm_struct *mm)
-{
-    return atomic_inc_not_zero(&mm->mm_users);
-}
-#endif
-
 #if UVM_CAN_USE_MMU_NOTIFIERS()
 static void uvm_mmput(struct mm_struct *mm)
 {
@@ -222,11 +205,7 @@ static void uvm_mmput(struct mm_struct *mm)
 
 static void uvm_mmgrab(struct mm_struct *mm)
 {
-#if defined(NV_MMGRAB_PRESENT)
     mmgrab(mm);
-#else
-    atomic_inc(&mm->mm_count);
-#endif
 }
 
 static void uvm_mmdrop(struct mm_struct *mm)

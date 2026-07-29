@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2023-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2023-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -35,7 +35,6 @@
 #include "nvrm_registry.h"
 #include "platform/chipset/chipset.h"
 #include "gpu/mem_mgr/heap.h"
-
 
 #include "class/clcba2.h" // HOPPER_SEC2_WORK_LAUNCH_A
 #include "class/cl003e.h" // NV01_MEMORY_SYSTEM
@@ -89,6 +88,7 @@ _sec2AllocAndMapBuffer
     RM_API *pRmApi = rmapiGetInterface(RMAPI_GPU_LOCK_INTERNAL);
     NV_MEMORY_ALLOCATION_PARAMS memAllocParams;
     MemoryManager *pMemoryManager = GPU_GET_MEMORY_MANAGER(pSec2Utils->pGpu);
+    NVOS46_PARAMETERS mapDmaParams = {0};
 
     pSec2Buf->size = size;
 
@@ -98,7 +98,8 @@ _sec2AllocAndMapBuffer
     memAllocParams.type      = NVOS32_TYPE_IMAGE;
     memAllocParams.size      = pSec2Buf->size;
     memAllocParams.attr      = DRF_DEF(OS32, _ATTR, _LOCATION,  _PCI) |
-                               DRF_DEF(OS32, _ATTR, _COHERENCY, _UNCACHED);
+                               DRF_DEF(OS32, _ATTR, _COHERENCY, _UNCACHED) |
+                               DRF_DEF(OS32, _ATTR, _PAGE_SIZE, _BIG);
     memAllocParams.attr2     = DRF_DEF(OS32, _ATTR2, _MEMORY_PROTECTION, _UNPROTECTED);
     memAllocParams.flags     = 0;
     memAllocParams.internalflags = NVOS32_ALLOC_INTERNAL_FLAGS_SKIP_SCRUB;
@@ -141,13 +142,19 @@ _sec2AllocAndMapBuffer
     {
         cacheSnoopFlag = DRF_DEF(OS46, _FLAGS, _CACHE_SNOOP, _ENABLE);
     }
+
+    mapDmaParams.hClient   = pSec2Utils->hClient;
+    mapDmaParams.hDevice   = pSec2Utils->hDevice;
+    mapDmaParams.hDma      = pSec2Buf->hVirtMem;
+    mapDmaParams.hMemory   = pSec2Buf->hPhysMem;
+    mapDmaParams.length    = pSec2Buf->size;
+    mapDmaParams.flags     = DRF_DEF(OS46, _FLAGS, _KERNEL_MAPPING, _ENABLE) | cacheSnoopFlag;
+
     NV_CHECK_OK_OR_RETURN(
         LEVEL_ERROR,
-        pRmApi->Map(pRmApi, pSec2Utils->hClient, pSec2Utils->hDevice,
-                    pSec2Buf->hVirtMem, pSec2Buf->hPhysMem, 0, pSec2Buf->size,
-                    DRF_DEF(OS46, _FLAGS, _KERNEL_MAPPING, _ENABLE) | cacheSnoopFlag,
-                    &pSec2Buf->gpuVA));
+        pRmApi->Map(pRmApi, &mapDmaParams));
 
+    pSec2Buf->gpuVA = mapDmaParams.dmaOffset;
     pSec2Buf->pMemDesc = memmgrMemUtilsGetMemDescFromHandle(pMemoryManager, pSec2Utils->hClient, pSec2Buf->hPhysMem);
     return NV_OK;
 }
@@ -591,16 +598,25 @@ sec2utilsMemset_IMPL
     memsetLength = pParams->length;
     offset = pParams->offset;
 
+    //
+    // We need not just the physical address,
+    // but the physical address to be used by the engine
+    // sec2utils is only used for AT_GPU
+    //
+
     do
     {
-        NvU64 maxContigSize = bContiguous ? memsetLength : (pageGranularity - offset % pageGranularity);
+        //
+        // Use the memdesc phys addr for calculations, but the pte address for the value
+        // programmed into SEC2
+        //
+        NvU64 dstAddr = memdescGetPhysAddr(pMemDesc, AT_GPU, offset);
+        NvU64 maxContigSize = bContiguous ? memsetLength : (pageGranularity - dstAddr % pageGranularity);
         NvU32 memsetSizeContig = (NvU32)NV_MIN(NV_MIN(memsetLength, maxContigSize), NVCBA2_DECRYPT_SCRUB_SIZE_MAX_BYTES);
 
-        channelPbInfo.dstAddr = memdescGetPhysAddr(pMemDesc, AT_GPU, offset);
+        NV_PRINTF(LEVEL_INFO, "Sec2Utils Memset dstAddr: %llx,  size: %x\n", dstAddr, memsetSizeContig);
 
-        NV_PRINTF(LEVEL_INFO, "Sec2Utils Memset dstAddr: %llx,  size: %x\n",
-                  channelPbInfo.dstAddr, memsetSizeContig);
-
+        channelPbInfo.dstAddr = memdescGetPtePhysAddr(pMemDesc, AT_GPU, offset);
         channelPbInfo.size = memsetSizeContig;
 
         status = _sec2utilsSubmitPushBuffer(pSec2Utils, pChannel, memsetSizeContig == memsetLength, nextIndex, &channelPbInfo);

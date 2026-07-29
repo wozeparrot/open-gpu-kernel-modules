@@ -52,7 +52,6 @@
 #include "Nvcm.h"
 #include "diagnostics/gpu_acct.h"
 #include "gpu/perf/kern_cuda_limit.h"
-#include "kernel/gpu/mig_mgr/kernel_mig_manager.h"
 
 static NV_STATUS _deviceTeardown(Device *pDevice, CALL_CONTEXT *pCallContext);
 static NV_STATUS _deviceTeardownRef(Device *pDevice, CALL_CONTEXT *pCallContext);
@@ -178,7 +177,7 @@ deviceConstruct_IMPL
         }
     }
 
-    if (IS_VIRTUAL(pGpu) || IS_GSP_CLIENT(pGpu))
+    if (IS_VIRTUAL(pGpu) || IS_FW_CLIENT(pGpu))
     {
         physicalAllocFlags = flags & ~(NV_DEVICE_ALLOCATION_FLAGS_PLUGIN_CONTEXT
             | NV_DEVICE_ALLOCATION_FLAGS_HOST_VGPU_DEVICE);
@@ -234,7 +233,7 @@ deviceDestruct_IMPL
     {
         OBJGPU *pGpu = GPU_RES_GET_GPU(pDevice);
         // vGpu support
-        if (IS_VIRTUAL(pGpu) || IS_GSP_CLIENT(pGpu))
+        if (IS_VIRTUAL(pGpu) || IS_FW_CLIENT(pGpu))
         {
             RsResourceRef *pResourceRef = pCallContext->pResourceRef;
             NvHandle       hDevice = pResourceRef->hResource;
@@ -375,9 +374,7 @@ _deviceInit
         // RS-TODO: Status code should be NV_ERR_STATE_IN_USE, however keeping
         // existing code from CliAllocElement (for now)
         //
-        // Allow many Device objects on the same deviceInst in MIG mode.
-        //
-        if (!IS_MIG_ENABLED(pGpu) || IS_VIRTUAL(pGpu))
+        if (IS_VIRTUAL(pGpu))
             return NV_ERR_INSUFFICIENT_RESOURCES;
     }
 

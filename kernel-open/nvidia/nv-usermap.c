@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1999-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1999-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -50,7 +50,7 @@ NV_STATUS NV_API_CALL nv_add_mapping_context_to_file(
 
     nvamc = &nvlfp->mmap_context;
 
-    if (nvamc->valid)
+    if (smp_load_acquire(&nvamc->valid))
     {
         status = NV_ERR_STATE_IN_USE;
         goto done;
@@ -62,6 +62,10 @@ NV_STATUS NV_API_CALL nv_add_mapping_context_to_file(
     {
         nvamc->alloc = pAllocPriv;
         nvamc->page_index = pageIndex;
+        {
+            nv_alloc_t *at = (nv_alloc_t *) nvamc->alloc;
+            atomic64_inc(&at->usage_count);
+        }
     }
     else
     {
@@ -90,12 +94,11 @@ NV_STATUS NV_API_CALL nv_add_mapping_context_to_file(
         }
         nvamc->access_start = nvuap->access_start;
         nvamc->access_size = nvuap->access_size;
-        nvamc->remap_prot_extra = nvuap->remap_prot_extra;
     }
 
     nvamc->prot = prot;
-    nvamc->valid = NV_TRUE;
     nvamc->caching = nvuap->caching;
+    smp_store_release(&nvamc->valid, NV_TRUE);
 
 done:
     nv_put_file_private(priv);
@@ -117,56 +120,39 @@ NV_STATUS NV_API_CALL nv_alloc_user_mapping(
     nv_alloc_t *at = pAllocPrivate;
 
     if (at->flags.contig)
-        *pUserAddress = (at->page_table[0]->phys_addr + (pageIndex * PAGE_SIZE) + pageOffset);
+        *pUserAddress = (at->page_table[0].phys_addr + (pageIndex * PAGE_SIZE) + pageOffset);
     else
-        *pUserAddress = (at->page_table[pageIndex]->phys_addr + pageOffset);
+        *pUserAddress = (at->page_table[pageIndex].phys_addr + pageOffset);
 
     return NV_OK;
 }
 
-NV_STATUS NV_API_CALL nv_free_user_mapping(
+void NV_API_CALL nv_free_user_mapping(
     nv_state_t *nv,
     void       *pAllocPrivate,
     NvU64       userAddress,
     void       *pPrivate
 )
 {
-    return NV_OK;
 }
 
 /*
- * This function adjust the {mmap,access}_{start,size} to reflect platform-specific
- * mechanisms for isolating mappings at a finer granularity than the os_page_size
+ * This function checks if a user mapping should be allowed given the GPU's 4K
+ * page isolation requirements.
  */
-NV_STATUS NV_API_CALL nv_get_usermap_access_params(
+NV_STATUS NV_API_CALL nv_check_usermap_access_params(
     nv_state_t *nv,
-    nv_usermap_access_params_t *nvuap
+    const nv_usermap_access_params_t *nvuap
 )
 {
-    NvU64 addr = nvuap->addr;
-    NvU64 size = nvuap->size;
+    const NvU64 addr = nvuap->addr;
+    const NvU64 size = nvuap->size;
 
-    nvuap->remap_prot_extra = 0;
-
-    /*
-     * Do verification and cache encoding based on the original
-     * (ostensibly smaller) mmap request, since accesses should be
-     * restricted to that range.
-     */
     if (rm_gpu_need_4k_page_isolation(nv) &&
         NV_4K_PAGE_ISOLATION_REQUIRED(addr, size))
     {
-#if defined(NV_4K_PAGE_ISOLATION_PRESENT)
-        nvuap->remap_prot_extra = NV_PROT_4K_PAGE_ISOLATION;
-        nvuap->access_start = (NvU64)NV_4K_PAGE_ISOLATION_ACCESS_START(addr);
-        nvuap->access_size = NV_4K_PAGE_ISOLATION_ACCESS_LEN(addr, size);
-
-        nvuap->memArea.pRanges[0].start = (NvU64)NV_4K_PAGE_ISOLATION_MMAP_ADDR(addr);
-        nvuap->memArea.pRanges[0].size = NV_4K_PAGE_ISOLATION_MMAP_LEN(size);
-#else
         NV_DEV_PRINTF(NV_DBG_ERRORS, nv, "4K page isolation required but not available!\n");
         return NV_ERR_OPERATING_SYSTEM;
-#endif
     }
 
     return NV_OK;

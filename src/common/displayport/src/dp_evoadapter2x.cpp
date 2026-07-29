@@ -110,6 +110,7 @@ void EvoMainLink2x::applyDP2xRegkeyOverrides()
     this->bSupportUHBR2_70   = dpRegkeyDatabase.supportInternalUhbrOnFpga & NV_DP2X_REGKEY_FPGA_UHBR_SUPPORT_2_7G;
     this->bSupportUHBR5_00   = dpRegkeyDatabase.supportInternalUhbrOnFpga & NV_DP2X_REGKEY_FPGA_UHBR_SUPPORT_5_0G;
     this->bEnable5147205Fix  = dpRegkeyDatabase.bEnable5147205Fix;
+	this->bCableVconnSourceUnknown = dpRegkeyDatabase.bCableVconnSourceUnknownWar;
 }
 
 NvU32 EvoMainLink2x::headToStream(NvU32 head, bool bSidebandMessageSupported,
@@ -188,6 +189,32 @@ bool EvoMainLink2x::queryAndUpdateDfpParams()
 }
 
 /*!
+* @brief Invalidate all entries with specific link rate in fallbackMandateTable based on request.
+*
+* @param[in]      linkRate     The link rate to be removed.
+*
+* Caller of this function has to complete the capabilities probing before calling
+* into this function.
+*
+* Output: EvoMainLink2x::fallbackMandateTable is updated for each entry to indicate
+*         if a specific link configuration is supported.
+*/
+void EvoMainLink2x::invalidateLinkRatesInFallbackTable(const LinkRate linkRate)
+{
+    NvU32 idx;
+
+    for (idx = 0U; idx < NV_DP2X_VALID_LINK_CONFIGURATION_COUNT; idx++)
+    {
+        if (fallbackMandateTable[idx].linkRate == linkRate)
+        {
+            fallbackMandateTable[idx].bSupported = NV_FALSE;
+            if (fallbackMandateTable[idx].laneCount == 1)
+                return;
+        }
+    }
+}
+
+/*!
  * @brief Update fallbackMandateTable based on the capabilities of GPU, Sink and CableId.
  *
  * @param[in]      maxLaneCount     Max Lanecount supported on the setup.
@@ -258,32 +285,6 @@ void EvoMainLink2x::updateFallbackMap
         else if (fallbackMandateTable[idx].linkRate > maxLinkRate)
         {
             fallbackMandateTable[idx].bSupported = NV_FALSE;
-        }
-    }
-}
-
-/*!
- * @brief Invalidate all entries with specific link rate in fallbackMandateTable based on request.
- *
- * @param[in]      linkRate     The link rate to be removed.
- *
- * Caller of this function has to complete the capabilities probing before calling
- * into this function.
- *
- * Output: EvoMainLink2x::fallbackMandateTable is updated for each entry to indicate
- *         if a specific link configuration is supported.
- */
-void EvoMainLink2x::invalidateLinkRatesInFallbackTable(const LinkRate linkRate)
-{
-    NvU32 idx;
-
-    for (idx = 0U; idx < NV_DP2X_VALID_LINK_CONFIGURATION_COUNT; idx++)
-    {
-        if (fallbackMandateTable[idx].linkRate == linkRate)
-        {
-            fallbackMandateTable[idx].bSupported = NV_FALSE;
-            if (fallbackMandateTable[idx].laneCount == 1)
-                return;
         }
     }
 }
@@ -523,10 +524,12 @@ bool EvoMainLink2x::train(const LinkConfiguration & link, bool force,
             {
                 if (this->isConnectorUSBTypeC() &&
                     requestRmLC.bIs128b132bChannelCoding &&
-                    requestRmLC.peakRate > dp2LinkRate_10_0Gbps)
+                    requestRmLC.peakRate > dp2LinkRate_10_0Gbps &&
+                    bCableVconnSourceUnknown)
                 {
                     //
-                    // Invalidate the link rate from fallback table if the connector type is USB-C to DP.
+                    // Invalidate the link rate from fallback table if the connector type is USB-C to DP
+                    // and VCONN source is unknown.
                     // Source will not retry the same link rate if fallback LT fails again.
                     //
                     invalidateLinkRatesInFallbackTable(requestRmLC.peakRate);
@@ -1408,5 +1411,32 @@ bool EvoMainLink2x::physicalLayerSetDP2xTestPattern(DP2xPatternInfo *patternInfo
     NvU32 code = provider->rmControl0073(NV0073_CTRL_CMD_DP_SET_TESTPATTERN, &params, sizeof(params));
 
     return (code == NVOS_STATUS_SUCCESS);
+}
+
+bool EvoMainLink2x::getUSBCCableIDInfo(NV0073_CTRL_DP_USBC_CABLEID_INFO *cableIDInfo)
+{
+    if (!cableIDInfo)
+    {
+        return false;
+    }
+
+    NV0073_CTRL_DP_USBC_CABLEID_INFO_PARAMS params = { 0 };
+
+    // Setup input parameters for RM Control call to get details from PHY
+    params.subDeviceInstance = this->subdeviceIndex;
+    params.displayId = this->displayId;
+
+    NvU32 code = provider->rmControl0073(NV0073_CTRL_CMD_DP_GET_CABLEID_INFO_FROM_MACRO, &params, sizeof(params));
+    bool success = (code == NVOS_STATUS_SUCCESS);
+    if (success)
+    {
+        cableIDInfo->uhbr10_0_capable   = params.cableIDInfo.uhbr10_0_capable;
+        cableIDInfo->uhbr13_5_capable   = params.cableIDInfo.uhbr13_5_capable;
+        cableIDInfo->uhbr20_0_capable   = params.cableIDInfo.uhbr20_0_capable;
+        cableIDInfo->type               = params.cableIDInfo.type;
+        cableIDInfo->vconn_source       = params.cableIDInfo.vconn_source;
+    }
+
+    return success;
 }
 

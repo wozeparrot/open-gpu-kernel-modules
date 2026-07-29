@@ -110,6 +110,7 @@ enum FailAllocCoreChannelMethod {
 };
 
 NvBool nvkms_test_fail_alloc_core_channel(enum FailAllocCoreChannelMethod method);
+NvBool nvkms_conceal_vrr_caps(void);
 NvBool nvkms_output_rounding_fix(void);
 NvBool nvkms_disable_hdmi_frl(void);
 NvBool nvkms_disable_vrr_memclk_switch(void);
@@ -118,6 +119,7 @@ NvBool nvkms_vblank_sem_control(void);
 NvBool nvkms_opportunistic_display_sync(void);
 enum NvKmsDebugForceColorSpace nvkms_debug_force_color_space(void);
 NvBool nvkms_enable_overlay_layers(void);
+NvBool nvkms_debug_logging(void);
 
 void   nvkms_call_rm    (void *ops);
 void*  nvkms_alloc      (size_t size,

@@ -136,8 +136,7 @@ kbifStateInitLocked_IMPL
     kbifInitDmaCaps(pGpu, pKernelBif);
 
     // Check for OS w/o usable PAT support
-    if ((kbifGetBusIntfType_HAL(pKernelBif) ==
-         NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS) &&
+    if ((gpuGetBusIntfType_HAL(pGpu) == NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS) &&
         pOS->getProperty(pOS, PDB_PROP_OS_PAT_UNSUPPORTED))
     {
         NV_PRINTF(LEVEL_INFO,
@@ -740,23 +739,6 @@ kbifClearConfigErrors_IMPL
 }
 
 /*!
- * @brief The PCI bus family means it has the concept of bus/dev/func
- *        and compatible PCI config space.
- */
-NvBool
-kbifIsPciBusFamily_IMPL
-(
-    KernelBif *pKernelBif
-)
-{
-    NvU32 busType = kbifGetBusIntfType_HAL(pKernelBif);
-
-    return ((busType == NV2080_CTRL_BUS_INFO_TYPE_PCI) ||
-            (busType == NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS) ||
-            (busType == NV2080_CTRL_BUS_INFO_TYPE_FPCI));
-}
-
-/*!
  * @brief Regkey Overrides for Bif
  *
  * @param[in]   pGpu          GPU object pointer
@@ -786,6 +768,12 @@ _kbifInitRegistryOverrides
         (data32 <= NV_REG_STR_RM_FORCE_P2P_TYPE_MAX))
     {
         pKernelBif->forceP2PType = data32;
+    }
+
+    pKernelBif->pcieP2PType = NV_REG_STR_RM_PCIEP2P_TYPE_DEFAULT;
+    if (osReadRegistryDword(pGpu, NV_REG_STR_RM_PCIEP2P_TYPE, &data32) == NV_OK)
+    {
+        pKernelBif->pcieP2PType = data32;
     }
 
     // Peer Mapping override
@@ -855,18 +843,6 @@ _kbifInitRegistryOverrides
         }
     }
 
-    // RmWar5045021 added for bug5045021
-    if (osReadRegistryDword(pGpu, NV_REG_STR_RM_WAR_5045021, &data32) == NV_OK)
-    {
-        if (data32)
-        {
-            pKernelBif->setProperty(pKernelBif, PDB_PROP_KBIF_WAR_5045021_ENABLED, NV_TRUE);
-        }
-        else
-        {
-            pKernelBif->setProperty(pKernelBif, PDB_PROP_KBIF_WAR_5045021_ENABLED, NV_FALSE);
-        }
-    }
 }
 
 /*!
@@ -1084,8 +1060,7 @@ kbifControlGetPCIEInfo_IMPL
     NvU32   index = pBusInfo->index;
     NvU32   data  = 0;
 
-    if ((pKernelBif != NULL) &&
-        (kbifGetBusIntfType_HAL(pKernelBif) != NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS))
+    if (gpuGetBusIntfType_HAL(pGpu) != NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS)
     {
         // KMD cannot handle error codes for this ctrl call, hence returning
         // NV_OK, once KMD fixes the bug:3545197, RM can return NV_ERR_NOT_SUPPORTED
@@ -1530,6 +1505,7 @@ kbifResetFromTimeoutFullChip_IMPL
 
     return status;
 }
+
 
 NV_STATUS
 kbifWaitForConfigAccessAfterReset_IMPL

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -71,6 +71,13 @@
 #include "power/gpu_boost_mgr.h"
 
 #define CONFIG_2X_BUFF_SIZE_MIN                                             (2)
+
+/*!
+ * Define large signed mW values. Adding one of these values will produce a
+ * result that is then MIN/MAX-ed to be within the range allowed by VBIOS.
+ */
+#define QBOOST_LARGE_POSITIVE_MW                                     (10000000)
+#define QBOOST_LARGE_NEGATIVE_MW                                    (-10000000)
 
 //
 // Controller Table v2.2 has removed some params, set them using these
@@ -322,42 +329,6 @@ CliControlSystemEvent
     return status;
 }
 
-
-
-static NV_STATUS
-CliGetSystemEventStatus
-(
-    NvHandle  hClient,
-    NvU32    *pEvent,
-    NvU32    *pStatus
-)
-{
-    NvU32 Head, Tail;
-    RmClient *pClient = serverutilGetClientUnderLock(hClient);
-
-    if (pClient == NULL)
-        return NV_ERR_INVALID_CLIENT;
-
-    Head = pClient->CliSysEventInfo.systemEventsQueue.Head;
-    Tail = pClient->CliSysEventInfo.systemEventsQueue.Tail;
-
-    if (Head == Tail)
-    {
-        *pEvent = NV0000_NOTIFIERS_EVENT_NONE_PENDING;
-        *pStatus = 0;
-    }
-    else
-    {
-        *pEvent  = pClient->CliSysEventInfo.systemEventsQueue.EventQueue[Tail].event;
-        *pStatus = pClient->CliSysEventInfo.systemEventsQueue.EventQueue[Tail].status;
-        pClient->CliSysEventInfo.systemEventsQueue.Tail = (Tail + 1) % NV_SYSTEM_EVENT_QUEUE_SIZE;
-    }
-
-    return NV_OK;
-}
-
-
-
 NV_STATUS
 CliGetSystemP2pCaps
 (
@@ -418,6 +389,11 @@ CliGetSystemP2pCaps
             goto done;
         }
 
+        if (pGpuLocalLoop->getProperty(pGpu, PDB_PROP_GPU_TEGRA_SOC_NVDISPLAY))
+        {
+            continue;
+        }
+
         gpuMask |= NVBIT(gpuGetInstance(pGpuLocalLoop));
 
         for (peerGpuIndex = 0; peerGpuIndex < gpuCount; peerGpuIndex++)
@@ -429,6 +405,11 @@ CliGetSystemP2pCaps
                           gpuIds[peerGpuIndex]);
                 rmStatus = NV_ERR_INVALID_ARGUMENT;
                 goto done;
+            }
+
+            if (pGpuPeer->getProperty(pGpu, PDB_PROP_GPU_TEGRA_SOC_NVDISPLAY))
+            {
+                continue;
             }
 
             if (pBusPeerIds != NULL)
@@ -813,32 +794,11 @@ cliresCtrlCmdSystemGetFeatures_IMPL
 )
 {
     OBJSYS    *pSys         = SYS_GET_INSTANCE();
-    OBJGPU    *pGpu            = NULL;
     NvU32      featuresMask = 0;
-    NvU32      gpuMask  = 0U;
-    NvU32      gpuIndex = 0U;
-    NvBool     bIsEfiInit = NV_FALSE;
 
     NV_ASSERT_OR_RETURN(pSys != NULL, NV_ERR_INVALID_STATE);
 
     NV_ASSERT_OR_RETURN(rmapiLockIsOwner(), NV_ERR_INVALID_LOCK_STATE);
-
-    gpumgrGetGpuAttachInfo(NULL, &gpuMask);
-    while ((pGpu = gpumgrGetNextGpu(gpuMask, &gpuIndex)) != NULL)
-    {
-        // Don't update EFI init on non Display system
-        if (pGpu->getProperty(pGpu, PDB_PROP_GPU_IS_EFI_INIT))
-        {
-            bIsEfiInit = NV_TRUE;
-            break;
-        }
-    }
-
-    if (bIsEfiInit)
-    {
-        featuresMask = FLD_SET_DRF(0000, _CTRL_SYSTEM_GET_FEATURES,
-            _IS_EFI_INIT, _TRUE, featuresMask);
-    }
 
     if (osImexChannelIsSupported() && (osImexChannelCount() != 0))
     {
@@ -1845,15 +1805,20 @@ cliresCtrlCmdEventSetNotification_IMPL
 }
 
 NV_STATUS
-cliresCtrlCmdEventGetSystemEventStatus_IMPL
+cliresCtrlCmdEventGetSystemEventData_IMPL
 (
     RmClientResource *pRmCliRes,
-    NV0000_CTRL_GET_SYSTEM_EVENT_STATUS_PARAMS *pSystemEventStatusParams
+    NV0000_CTRL_GET_SYSTEM_EVENT_DATA_PARAMS *pSystemEventDataParams
 )
 {
     NvHandle hClient = RES_GET_CLIENT_HANDLE(pRmCliRes);
+    RmClient *pClient = serverutilGetClientUnderLock(hClient);
 
-    return CliGetSystemEventStatus(hClient, &pSystemEventStatusParams->event, &pSystemEventStatusParams->status);
+    if (pClient == NULL)
+        return NV_ERR_INVALID_CLIENT;
+
+    return eventSystemDequeueEvent(&pClient->CliSysEventInfo.eventQueue,
+                                   pSystemEventDataParams);
 }
 
 // Find matching pClient and Return init ns pid
@@ -2280,7 +2245,7 @@ static void
 _controllerBuildConfig_StaticTable_v20
 (
     CONTROLLER_STATIC_TABLE_ENTRY_V20 *pEntry,
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
     pParams->samplingMulti   =
@@ -2326,7 +2291,7 @@ static void
 _controllerBuildQboostConfig_StaticTable_v20
 (
     CONTROLLER_STATIC_TABLE_ENTRY_V20 *pEntry,
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
 
@@ -2359,7 +2324,7 @@ static void
 _controllerBuildConfig_StaticTable_v22
 (
     CONTROLLER_STATIC_TABLE_ENTRY_V22 *pEntry,
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
     pParams->samplingMulti          = CONTROLLER_GRP_DEFAULT_SAMPLING_MULTIPLIER;
@@ -2379,7 +2344,7 @@ static void
 _controllerBuildQboostConfig_StaticTable_v22
 (
     CONTROLLER_STATIC_TABLE_ENTRY_V22 *pEntry,
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
     pParams->bIsBoostController = NV_TRUE;
@@ -2405,7 +2370,7 @@ _controllerBuildQboostConfig_StaticTable_v22
 static void
 _controllerBuildCtgpConfig_StaticTable_2x
 (
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
     //
@@ -2447,7 +2412,7 @@ _controllerParseStaticTable_v20
     NvU8 *pData,
     NvU32 dataSize,
     NvU8 *pEntryCount,
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
     const char *pHeaderFmt = NVPCF_CONTROLLER_STATIC_TABLE_HEADER_V20_FMT_SIZE_05;
@@ -2579,7 +2544,7 @@ _controllerParseStaticTable_v22
     NvU8 *pData,
     NvU32 dataSize,
     NvU8 *pEntryCount,
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
     const char *pHeaderFmt = NVPCF_CONTROLLER_STATIC_TABLE_HEADER_V22_FMT_SIZE_04;
@@ -2710,7 +2675,7 @@ _sysDeviceParseStaticTable_2x
     NvU8 *pData,
     NvU32 *dataSize,
     NvU32 *controllerTableOffset,
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
     NV_STATUS                       status              = NV_OK;
@@ -2760,7 +2725,7 @@ _controllerParseStaticTable_2x
 (
     NvU8 *pData,
     NvU32 dataSize,
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
     NvU32       controllerTableOffset   = 0;
@@ -2872,7 +2837,7 @@ NV_STATUS
 cliresCtrlCmdSystemNVPCFGetPowerModeInfo_IMPL
 (
     RmClientResource *pRmCliRes,
-    NV0000_CTRL_CMD_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
+    NV0000_CTRL_SYSTEM_NVPCF_GET_POWER_MODE_INFO_PARAMS *pParams
 )
 {
     NvU32     rc = NV_OK;
@@ -2899,13 +2864,12 @@ cliresCtrlCmdSystemNVPCFGetPowerModeInfo_IMPL
     {
         case NVPCF0100_CTRL_CONFIG_DSM_2X_FUNC_GET_SUPPORTED_CASE:
         {
-            NvU32       supportedFuncs;
-            dsmDataSize = sizeof(supportedFuncs);
+            dsmDataSize = sizeof(pParams->supportedFuncs);
 
             if ((rc = osCallACPI_DSM(pGpu,
                                      acpiDsmFunction,
                                      acpiDsmSubFunction,
-                                     &supportedFuncs,
+                                     &pParams->supportedFuncs,
                                      &dsmDataSize)) != NV_OK)
             {
                 NV_PRINTF(LEVEL_WARNING,
@@ -2916,8 +2880,8 @@ cliresCtrlCmdSystemNVPCFGetPowerModeInfo_IMPL
             else
             {
                 if ((FLD_TEST_DRF(PCF0100, _CTRL_CONFIG_DSM,
-                        _FUNC_GET_SUPPORTED_IS_SUPPORTED, _NO, supportedFuncs)) ||
-                        (dsmDataSize != sizeof(supportedFuncs)))
+                        _FUNC_GET_SUPPORTED_IS_SUPPORTED, _NO, pParams->supportedFuncs)) ||
+                        (dsmDataSize != sizeof(pParams->supportedFuncs)))
                 {
                     NV_PRINTF(LEVEL_WARNING,
                         " NVPCF FUNC_GET_SUPPORTED is not supported"
@@ -2926,15 +2890,16 @@ cliresCtrlCmdSystemNVPCFGetPowerModeInfo_IMPL
                 }
             }
             break;
-
         }
-
         case NVPCF0100_CTRL_CONFIG_DSM_2X_FUNC_GET_DYNAMIC_CASE:
         {
             NvU8 *pData = NULL;
             DYNAMIC_PARAMS_HEADER_2X_PACKED header = {0};
             DYNAMIC_PARAMS_COMMON_2X_PACKED common = {0};
             DYNAMIC_PARAMS_ENTRY_2X_PACKED  entries[NVPCF_DYNAMIC_PARAMS_2X_ENTRY_MAX]= {0};
+            NvBool bRequireDcSysPowerLimitsTable = NV_FALSE;
+            NvBool bAllowDcRestOfSystemReserveOverride = NV_FALSE;
+            NvBool bSupportDcTsp = NV_FALSE;
 
             NvU16 dataSize = sizeof(header) + sizeof(common) + sizeof(entries);
             pData = portMemAllocNonPaged(dataSize);
@@ -2947,11 +2912,11 @@ cliresCtrlCmdSystemNVPCFGetPowerModeInfo_IMPL
             header.entrySize  = NVPCF_DYNAMIC_PARAMS_2X_ENTRY_SIZE_1C;
             header.entryCount = 0;
 
-            pParams->bRequireDcSysPowerLimitsTable =
+            bRequireDcSysPowerLimitsTable =
                 (pParams->version >= NVPCF_CONTROLLER_STATIC_TABLE_VERSION_22);
-            pParams->bAllowDcRestOfSystemReserveOverride =
+            bAllowDcRestOfSystemReserveOverride =
                 (pParams->version >= NVPCF_CONTROLLER_STATIC_TABLE_VERSION_23);
-            pParams->bSupportDcTsp =
+            bSupportDcTsp =
                 (pParams->version >= NVPCF_CONTROLLER_STATIC_TABLE_VERSION_24);
 
             common.param0 = FLD_SET_DRF(PCF_DYNAMIC_PARAMS_COMMON_2X,
@@ -3059,7 +3024,11 @@ cliresCtrlCmdSystemNVPCFGetPowerModeInfo_IMPL
                 pParams->bEnableForDC = !DRF_VAL(PCF_DYNAMIC_PARAMS_ENTRY_2X,
                     _OUTPUT_PARAM0, _CMD0_DISABLE_DC, entriesOut.param0);
 
-                if (!pParams->bRequireDcSysPowerLimitsTable)
+                // SBIOS does not specify TGP range on DC
+                pParams->maxOutputBattOffsetmW = QBOOST_LARGE_POSITIVE_MW;
+                pParams->minOutputBattOffsetmW = 0;
+
+                if (!bRequireDcSysPowerLimitsTable)
                 {
                     // DC CTGP offset
                     pParams->ctgpBattOffsetmW = (NvS32)NVPCF_DYNAMIC_PARAMS_2X_POWER_UNIT_MW *
@@ -3072,13 +3041,13 @@ cliresCtrlCmdSystemNVPCFGetPowerModeInfo_IMPL
                             _OUTPUT_PARAM1, _CMD0_SIGNED1, entriesOut.param1);
                 }
 
-                if (pParams->bAllowDcRestOfSystemReserveOverride)
+                if (bAllowDcRestOfSystemReserveOverride)
                 {
                     pParams->dcRosReserveOverridemW = (NvU32)DRF_VAL(PCF_DYNAMIC_PARAMS_ENTRY_2X,
                             _OUTPUT_PARAM4, _CMD0_UNSIGNED, entriesOut.param4);
                 }
 
-                if (pParams->bSupportDcTsp)
+                if (bSupportDcTsp)
                 {
                     pParams->dcTspLongTimescaleLimitmA = (NvU32)DRF_VAL(PCF_DYNAMIC_PARAMS_ENTRY_2X,
                             _OUTPUT_PARAM5, _CMD0_UNSIGNED, entriesOut.param5);
@@ -3164,9 +3133,8 @@ nvpcf2xGetStaticParams_exit:
                             (NvU32 *)pData,
                             &size)) != NV_OK)
             {
-                NV_PRINTF(LEVEL_ERROR,
-                "Unable to retrieve NVPCF System power limits table data. Possibly not supported by SBIOS"
-                "rc = %x\n", rc);
+                NV_PRINTF(LEVEL_INFO,
+                "Unable to retrieve DC System power limits table data. Possibly not supported by SBIOS. rc = %x\n", rc);
                 status =  NV_ERR_NOT_SUPPORTED;
                 goto nvpcf2xGetSystemPowerTable_exit;
             }
@@ -3551,7 +3519,7 @@ cliresCtrlCmdNvdGetDump_IMPL
 }
 
 /*!
- * @brief Get Timestamp. Returns a standard timestamp, osGetCurrentTime.
+ * @brief Get Timestamp. Returns a standard timestamp, osGetSystemTime.
  *
  * @returns NV_OK
  */
@@ -3572,7 +3540,7 @@ cliresCtrlCmdNvdGetTimestamp_IMPL
             NvU32 sec;
             NvU32 uSec;
 
-            osGetCurrentTime(&sec, &uSec);
+            osGetSystemTime(&sec, &uSec);
             pTimestampParams->timestamp = (((NvU64)sec) * 1000000) + uSec;
             break;
         }
@@ -5331,7 +5299,8 @@ cliresCtrlCmdGpuDisableNvlinkInit_IMPL
         return NV_ERR_INVALID_ARGUMENT;
     }
 
-    return gpumgrSetGpuInitDisabledNvlinks(pParams->gpuId, pParams->mask, pParams->bSkipHwNvlinkDisable);
+    return gpumgrSetGpuInitDisabledNvlinks(pParams->gpuId, pParams->mask,
+                                           &pParams->links, pParams->bSkipHwNvlinkDisable);
 }
 
 NV_STATUS

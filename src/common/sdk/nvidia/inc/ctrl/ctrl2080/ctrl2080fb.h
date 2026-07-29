@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2006-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2006-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -293,127 +293,137 @@
  *     depending on architecture/memory type).
  *   NV2080_CTRL_FB_INFO_INDEX_IS_ZERO_FB
  *      Returns true if FB is not present on this chip
+ *   NV2080_CTRL_FB_INFO_INDEX_ACCESS_COUNTER_BUFFER_COUNT
+ *      Returns the count of access counter buffers supported by GPU
  */
 typedef NVXXXX_CTRL_XXX_INFO NV2080_CTRL_FB_INFO;
 
 /* valid fb info index values */
-#define NV2080_CTRL_FB_INFO_INDEX_TILE_REGION_COUNT                (0x00000000U) // Deprecated
-#define NV2080_CTRL_FB_INFO_INDEX_COMPRESSION_SIZE                 (0x00000001U)
-#define NV2080_CTRL_FB_INFO_INDEX_DRAM_PAGE_STRIDE                 (0x00000002U)
-#define NV2080_CTRL_FB_INFO_INDEX_TILE_REGION_FREE_COUNT           (0x00000003U)
-#define NV2080_CTRL_FB_INFO_INDEX_PARTITION_COUNT                  (0x00000004U)
-#define NV2080_CTRL_FB_INFO_INDEX_BAR1_SIZE                        (0x00000005U)
-#define NV2080_CTRL_FB_INFO_INDEX_BANK_SWIZZLE_ALIGNMENT           (0x00000006U)
-#define NV2080_CTRL_FB_INFO_INDEX_RAM_SIZE                         (0x00000007U)
-#define NV2080_CTRL_FB_INFO_INDEX_TOTAL_RAM_SIZE                   (0x00000008U)
-#define NV2080_CTRL_FB_INFO_INDEX_HEAP_SIZE                        (0x00000009U)
-#define NV2080_CTRL_FB_INFO_INDEX_MAPPABLE_HEAP_SIZE               (0x0000000AU)
-#define NV2080_CTRL_FB_INFO_INDEX_BUS_WIDTH                        (0x0000000BU)
-#define NV2080_CTRL_FB_INFO_INDEX_RAM_CFG                          (0x0000000CU)
-#define NV2080_CTRL_FB_INFO_INDEX_RAM_TYPE                         (0x0000000DU)
-#define NV2080_CTRL_FB_INFO_INDEX_BANK_COUNT                       (0x0000000EU)
-#define NV2080_CTRL_FB_INFO_INDEX_OVERLAY_OFFSET_ADJUSTMENT        (0x0000000FU) // Deprecated (index reused to return 0)
-#define NV2080_CTRL_FB_INFO_INDEX_GPU_VADDR_SPACE_SIZE_KB          (0x0000000FU) // Deprecated (index reused to return 0)
-#define NV2080_CTRL_FB_INFO_INDEX_GPU_VADDR_HEAP_SIZE_KB           (0x0000000FU) // Deprecated (index reused to return 0)
-#define NV2080_CTRL_FB_INFO_INDEX_GPU_VADDR_MAPPBLE_SIZE_KB        (0x0000000FU) // Deprecated (index reused to return 0)
-#define NV2080_CTRL_FB_INFO_INDEX_EFFECTIVE_BW                     (0x0000000FU) // Deprecated (index reused to return 0)
-#define NV2080_CTRL_FB_INFO_INDEX_FB_TAX_SIZE_KB                   (0x00000010U)
-#define NV2080_CTRL_FB_INFO_INDEX_HEAP_BASE_KB                     (0x00000011U)
-#define NV2080_CTRL_FB_INFO_INDEX_LARGEST_FREE_REGION_SIZE_KB      (0x00000012U)
-#define NV2080_CTRL_FB_INFO_INDEX_LARGEST_FREE_REGION_BASE_KB      (0x00000013U)
-#define NV2080_CTRL_FB_INFO_INDEX_PARTITION_MASK                   (0x00000014U)
-#define NV2080_CTRL_FB_INFO_INDEX_VISTA_RESERVED_HEAP_SIZE         (0x00000015U)
-#define NV2080_CTRL_FB_INFO_INDEX_HEAP_FREE                        (0x00000016U)
-#define NV2080_CTRL_FB_INFO_INDEX_RAM_LOCATION                     (0x00000017U)
-#define NV2080_CTRL_FB_INFO_INDEX_FB_IS_BROKEN                     (0x00000018U)
-#define NV2080_CTRL_FB_INFO_INDEX_FBP_COUNT                        (0x00000019U)
-#define NV2080_CTRL_FB_INFO_INDEX_FBP_MASK                         (0x0000001AU)
-#define NV2080_CTRL_FB_INFO_INDEX_L2CACHE_SIZE                     (0x0000001BU)
-#define NV2080_CTRL_FB_INFO_INDEX_MEMORYINFO_VENDOR_ID             (0x0000001CU)
-#define NV2080_CTRL_FB_INFO_INDEX_BAR1_AVAIL_SIZE                  (0x0000001DU)
-#define NV2080_CTRL_FB_INFO_INDEX_HEAP_START                       (0x0000001EU)
-#define NV2080_CTRL_FB_INFO_INDEX_BAR1_MAX_CONTIGUOUS_AVAIL_SIZE   (0x0000001FU)
-#define NV2080_CTRL_FB_INFO_INDEX_USABLE_RAM_SIZE                  (0x00000020U)
-#define NV2080_CTRL_FB_INFO_INDEX_TRAINIG_2T                       (0x00000021U)
-#define NV2080_CTRL_FB_INFO_INDEX_LTC_COUNT                        (0x00000022U)
-#define NV2080_CTRL_FB_INFO_INDEX_LTS_COUNT                        (0x00000023U)
-#define NV2080_CTRL_FB_INFO_INDEX_L2CACHE_ONLY_MODE                (0x00000024U)
-#define NV2080_CTRL_FB_INFO_INDEX_PSEUDO_CHANNEL_MODE              (0x00000025U)
-#define NV2080_CTRL_FB_INFO_INDEX_SMOOTHDISP_RSVD_BAR1_SIZE        (0x00000026U)
-#define NV2080_CTRL_FB_INFO_INDEX_HEAP_OFFLINE_SIZE                (0x00000027U)
-#define NV2080_CTRL_FB_INFO_INDEX_1TO1_COMPTAG_ENABLED             (0x00000028U)
-#define NV2080_CTRL_FB_INFO_INDEX_SUSPEND_RESUME_RSVD_SIZE         (0x00000029U)
-#define NV2080_CTRL_FB_INFO_INDEX_ALLOW_PAGE_RETIREMENT            (0x0000002AU)
-#define NV2080_CTRL_FB_INFO_INDEX_LTC_MASK                         (0x0000002BU)
-#define NV2080_CTRL_FB_INFO_POISON_FUSE_ENABLED                    (0x0000002CU)
-#define NV2080_CTRL_FB_INFO_FBPA_ECC_ENABLED                       (0x0000002DU)
-#define NV2080_CTRL_FB_INFO_DYNAMIC_PAGE_OFFLINING_ENABLED         (0x0000002EU)
-#define NV2080_CTRL_FB_INFO_INDEX_FORCED_BAR1_64KB_MAPPING_ENABLED (0x0000002FU)
-#define NV2080_CTRL_FB_INFO_INDEX_P2P_MAILBOX_SIZE                 (0x00000030U)
-#define NV2080_CTRL_FB_INFO_INDEX_P2P_MAILBOX_ALIGNMENT            (0x00000031U)
-#define NV2080_CTRL_FB_INFO_INDEX_P2P_MAILBOX_BAR1_MAX_OFFSET_64KB (0x00000032U)
-#define NV2080_CTRL_FB_INFO_INDEX_PROTECTED_MEM_SIZE_TOTAL_KB      (0x00000033U)
-#define NV2080_CTRL_FB_INFO_INDEX_PROTECTED_MEM_SIZE_FREE_KB       (0x00000034U)
-#define NV2080_CTRL_FB_INFO_INDEX_ECC_STATUS_SIZE                  (0x00000035U)
-#define NV2080_CTRL_FB_INFO_INDEX_IS_ZERO_FB                       (0x00000036U)
-#define NV2080_CTRL_FB_INFO_INDEX_PARTITION_MASK_0                 (NV2080_CTRL_FB_INFO_INDEX_PARTITION_MASK)
-#define NV2080_CTRL_FB_INFO_INDEX_PARTITION_MASK_1                 (0x00000037U)
-#define NV2080_CTRL_FB_INFO_INDEX_LTC_MASK_0                       (NV2080_CTRL_FB_INFO_INDEX_LTC_MASK)
-#define NV2080_CTRL_FB_INFO_INDEX_LTC_MASK_1                       (0x00000038U)
-#define NV2080_CTRL_FB_INFO_MAX_LIST_SIZE                          (0x00000039U)
+#define NV2080_CTRL_FB_INFO_INDEX_TILE_REGION_COUNT                 (0x00000000U) // Deprecated
+#define NV2080_CTRL_FB_INFO_INDEX_COMPRESSION_SIZE                  (0x00000001U)
+#define NV2080_CTRL_FB_INFO_INDEX_DRAM_PAGE_STRIDE                  (0x00000002U)
+#define NV2080_CTRL_FB_INFO_INDEX_TILE_REGION_FREE_COUNT            (0x00000003U)
+#define NV2080_CTRL_FB_INFO_INDEX_PARTITION_COUNT                   (0x00000004U)
+#define NV2080_CTRL_FB_INFO_INDEX_BAR1_SIZE                         (0x00000005U)
+#define NV2080_CTRL_FB_INFO_INDEX_BANK_SWIZZLE_ALIGNMENT            (0x00000006U)
+#define NV2080_CTRL_FB_INFO_INDEX_RAM_SIZE                          (0x00000007U)
+#define NV2080_CTRL_FB_INFO_INDEX_TOTAL_RAM_SIZE                    (0x00000008U)
+#define NV2080_CTRL_FB_INFO_INDEX_HEAP_SIZE                         (0x00000009U)
+#define NV2080_CTRL_FB_INFO_INDEX_MAPPABLE_HEAP_SIZE                (0x0000000AU)
+#define NV2080_CTRL_FB_INFO_INDEX_BUS_WIDTH                         (0x0000000BU)
+#define NV2080_CTRL_FB_INFO_INDEX_RAM_CFG                           (0x0000000CU)
+#define NV2080_CTRL_FB_INFO_INDEX_RAM_TYPE                          (0x0000000DU)
+#define NV2080_CTRL_FB_INFO_INDEX_BANK_COUNT                        (0x0000000EU)
+#define NV2080_CTRL_FB_INFO_INDEX_OVERLAY_OFFSET_ADJUSTMENT         (0x0000000FU) // Deprecated (index reused to return 0)
+#define NV2080_CTRL_FB_INFO_INDEX_GPU_VADDR_SPACE_SIZE_KB           (0x0000000FU) // Deprecated (index reused to return 0)
+#define NV2080_CTRL_FB_INFO_INDEX_GPU_VADDR_HEAP_SIZE_KB            (0x0000000FU) // Deprecated (index reused to return 0)
+#define NV2080_CTRL_FB_INFO_INDEX_GPU_VADDR_MAPPBLE_SIZE_KB         (0x0000000FU) // Deprecated (index reused to return 0)
+#define NV2080_CTRL_FB_INFO_INDEX_EFFECTIVE_BW                      (0x0000000FU) // Deprecated (index reused to return 0)
+#define NV2080_CTRL_FB_INFO_INDEX_FB_TAX_SIZE_KB                    (0x00000010U)
+#define NV2080_CTRL_FB_INFO_INDEX_HEAP_BASE_KB                      (0x00000011U)
+#define NV2080_CTRL_FB_INFO_INDEX_LARGEST_FREE_REGION_SIZE_KB       (0x00000012U)
+#define NV2080_CTRL_FB_INFO_INDEX_LARGEST_FREE_REGION_BASE_KB       (0x00000013U)
+#define NV2080_CTRL_FB_INFO_INDEX_PARTITION_MASK                    (0x00000014U)
+#define NV2080_CTRL_FB_INFO_INDEX_VISTA_RESERVED_HEAP_SIZE          (0x00000015U)
+#define NV2080_CTRL_FB_INFO_INDEX_HEAP_FREE                         (0x00000016U)
+#define NV2080_CTRL_FB_INFO_INDEX_RAM_LOCATION                      (0x00000017U)
+#define NV2080_CTRL_FB_INFO_INDEX_FB_IS_BROKEN                      (0x00000018U)
+#define NV2080_CTRL_FB_INFO_INDEX_FBP_COUNT                         (0x00000019U)
+#define NV2080_CTRL_FB_INFO_INDEX_FBP_MASK                          (0x0000001AU)
+#define NV2080_CTRL_FB_INFO_INDEX_L2CACHE_SIZE                      (0x0000001BU)
+#define NV2080_CTRL_FB_INFO_INDEX_MEMORYINFO_VENDOR_ID              (0x0000001CU)
+#define NV2080_CTRL_FB_INFO_INDEX_BAR1_AVAIL_SIZE                   (0x0000001DU)
+#define NV2080_CTRL_FB_INFO_INDEX_HEAP_START                        (0x0000001EU)
+#define NV2080_CTRL_FB_INFO_INDEX_BAR1_MAX_CONTIGUOUS_AVAIL_SIZE    (0x0000001FU)
+#define NV2080_CTRL_FB_INFO_INDEX_USABLE_RAM_SIZE                   (0x00000020U)
+#define NV2080_CTRL_FB_INFO_INDEX_TRAINIG_2T                        (0x00000021U)
+#define NV2080_CTRL_FB_INFO_INDEX_LTC_COUNT                         (0x00000022U)
+#define NV2080_CTRL_FB_INFO_INDEX_LTS_COUNT                         (0x00000023U)
+#define NV2080_CTRL_FB_INFO_INDEX_L2CACHE_ONLY_MODE                 (0x00000024U)
+#define NV2080_CTRL_FB_INFO_INDEX_PSEUDO_CHANNEL_MODE               (0x00000025U)
+#define NV2080_CTRL_FB_INFO_INDEX_SMOOTHDISP_RSVD_BAR1_SIZE         (0x00000026U)
+#define NV2080_CTRL_FB_INFO_INDEX_HEAP_OFFLINE_SIZE                 (0x00000027U)
+#define NV2080_CTRL_FB_INFO_INDEX_1TO1_COMPTAG_ENABLED              (0x00000028U)
+#define NV2080_CTRL_FB_INFO_INDEX_SUSPEND_RESUME_RSVD_SIZE          (0x00000029U)
+#define NV2080_CTRL_FB_INFO_INDEX_ALLOW_PAGE_RETIREMENT             (0x0000002AU)
+#define NV2080_CTRL_FB_INFO_INDEX_LTC_MASK                          (0x0000002BU)
+#define NV2080_CTRL_FB_INFO_POISON_FUSE_ENABLED                     (0x0000002CU)
+#define NV2080_CTRL_FB_INFO_FBPA_ECC_ENABLED                        (0x0000002DU)
+#define NV2080_CTRL_FB_INFO_DYNAMIC_PAGE_OFFLINING_ENABLED          (0x0000002EU)
+#define NV2080_CTRL_FB_INFO_INDEX_FORCED_BAR1_64KB_MAPPING_ENABLED  (0x0000002FU)
+#define NV2080_CTRL_FB_INFO_INDEX_P2P_MAILBOX_SIZE                  (0x00000030U)
+#define NV2080_CTRL_FB_INFO_INDEX_P2P_MAILBOX_ALIGNMENT             (0x00000031U)
+#define NV2080_CTRL_FB_INFO_INDEX_P2P_MAILBOX_BAR1_MAX_OFFSET_64KB  (0x00000032U)
+#define NV2080_CTRL_FB_INFO_INDEX_PROTECTED_MEM_SIZE_TOTAL_KB       (0x00000033U)
+#define NV2080_CTRL_FB_INFO_INDEX_PROTECTED_MEM_SIZE_FREE_KB        (0x00000034U)
+#define NV2080_CTRL_FB_INFO_INDEX_ECC_STATUS_SIZE                   (0x00000035U)
+#define NV2080_CTRL_FB_INFO_INDEX_IS_ZERO_FB                        (0x00000036U)
+#define NV2080_CTRL_FB_INFO_INDEX_PARTITION_MASK_0                  (NV2080_CTRL_FB_INFO_INDEX_PARTITION_MASK)
+#define NV2080_CTRL_FB_INFO_INDEX_PARTITION_MASK_1                  (0x00000037U)
+#define NV2080_CTRL_FB_INFO_INDEX_LTC_MASK_0                        (NV2080_CTRL_FB_INFO_INDEX_LTC_MASK)
+#define NV2080_CTRL_FB_INFO_INDEX_LTC_MASK_1                        (0x00000038U)
+#define NV2080_CTRL_FB_INFO_INDEX_ACCESS_COUNTER_BUFFER_COUNT       (0x00000039U)
+#define NV2080_CTRL_FB_INFO_INDEX_COHERENCE_INFO                    (0x0000003AU)
+#define NV2080_CTRL_FB_INFO_INDEX_NUMA_NODE_ID                      (0x0000003BU)
 
-#define NV2080_CTRL_FB_INFO_INDEX_MAX                              (0x38U) /* finn: Evaluated from "(NV2080_CTRL_FB_INFO_MAX_LIST_SIZE - 1)" */
+#define NV2080_CTRL_FB_INFO_INDEX_MAX                               NV2080_CTRL_FB_INFO_INDEX_NUMA_NODE_ID
+
+/* Intentionally picking a value much bigger than NV2080_CTRL_FB_INFO_INDEX_MAX to prevent VGPU plumbing updates */
+#define NV2080_CTRL_FB_INFO_MAX_LIST_SIZE                           (0x00000080U)
 
 /* valid fb RAM type values */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_UNKNOWN                       (0x00000000U)
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_SDRAM                         (0x00000001U)
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_DDR1                          (0x00000002U) /* SDDR and GDDR (aka DDR1 and GDDR1) */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR2                         (0x00000003U) /* SDDR2 Used on NV43 and later */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_DDR2                          NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR2 /* Deprecated alias */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR2                         (0x00000004U) /* GDDR2 Used on NV30 and some NV36 */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR3                         (0x00000005U) /* GDDR3 Used on NV40 and later */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR4                         (0x00000006U) /* GDDR4 Used on G80 and later (deprecated) */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR3                         (0x00000007U) /* SDDR3 Used on G9x and later */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_DDR3                          NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR3 /* Deprecated alias */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR5                         (0x00000008U) /* GDDR5 Used on GT21x and later */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_LPDDR2                        (0x00000009U) /* LPDDR (Low Power SDDR) used on T2x and later. */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_UNKNOWN                        (0x00000000U)
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_SDRAM                          (0x00000001U)
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_DDR1                           (0x00000002U) /* SDDR and GDDR (aka DDR1 and GDDR1) */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR2                          (0x00000003U) /* SDDR2 Used on NV43 and later */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_DDR2                           NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR2 /* Deprecated alias */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR2                          (0x00000004U) /* GDDR2 Used on NV30 and some NV36 */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR3                          (0x00000005U) /* GDDR3 Used on NV40 and later */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR4                          (0x00000006U) /* GDDR4 Used on G80 and later (deprecated) */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR3                          (0x00000007U) /* SDDR3 Used on G9x and later */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_DDR3                           NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR3 /* Deprecated alias */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR5                          (0x00000008U) /* GDDR5 Used on GT21x and later */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_LPDDR2                         (0x00000009U) /* LPDDR (Low Power SDDR) used on T2x and later. */
 
 
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR4                         (0x0000000CU) /* SDDR4 Used on Maxwell and later */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_LPDDR4                        (0x0000000DU) /* LPDDR (Low Power SDDR) used on T21x and later.*/
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_HBM1                          (0x0000000EU) /* HBM1 (High Bandwidth Memory) used on GP100 */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_HBM2                          (0x0000000FU) /* HBM2 (High Bandwidth Memory-pseudo channel) */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR5X                        (0x00000010U) /* GDDR5X Used on GP10x */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR6                         (0x00000011U) /* GDDR6 Used on TU10x */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR6X                        (0x00000012U) /* GDDR6X Used on GA10x */
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_LPDDR5                        (0x00000013U) /* LPDDR (Low Power SDDR) used on T23x and later.*/
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_HBM3                          (0x00000014U) /* HBM3 (High Bandwidth Memory) v3 */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_SDDR4                          (0x0000000CU) /* SDDR4 Used on Maxwell and later */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_LPDDR4                         (0x0000000DU) /* LPDDR (Low Power SDDR) used on T21x and later.*/
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_HBM1                           (0x0000000EU) /* HBM1 (High Bandwidth Memory) used on GP100 */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_HBM2                           (0x0000000FU) /* HBM2 (High Bandwidth Memory-pseudo channel) */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR5X                         (0x00000010U) /* GDDR5X Used on GP10x */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR6                          (0x00000011U) /* GDDR6 Used on TU10x */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR6X                         (0x00000012U) /* GDDR6X Used on GA10x */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_LPDDR5                         (0x00000013U) /* LPDDR (Low Power SDDR) used on T23x and later.*/
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_HBM3                           (0x00000014U) /* HBM3 (High Bandwidth Memory) v3 */
 
-#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR7                         (0x00000015U) /* GDDR7 */
+#define NV2080_CTRL_FB_INFO_RAM_TYPE_GDDR7                          (0x00000015U) /* GDDR7 */
 
 
 
 /* valid RAM LOCATION types */
-#define NV2080_CTRL_FB_INFO_RAM_LOCATION_GPU_DEDICATED             (0x00000000U)
-#define NV2080_CTRL_FB_INFO_RAM_LOCATION_SYS_SHARED                (0x00000001U)
-#define NV2080_CTRL_FB_INFO_RAM_LOCATION_SYS_DEDICATED             (0x00000002U)
+#define NV2080_CTRL_FB_INFO_RAM_LOCATION_GPU_DEDICATED              (0x00000000U)
+#define NV2080_CTRL_FB_INFO_RAM_LOCATION_SYS_SHARED                 (0x00000001U)
+#define NV2080_CTRL_FB_INFO_RAM_LOCATION_SYS_DEDICATED              (0x00000002U)
 
 /* valid Memory Vendor ID values */
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_SAMSUNG           (0x00000001U)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_QIMONDA           (0x00000002U)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_ELPIDA            (0x00000003U)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_ETRON             (0x00000004U)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_NANYA             (0x00000005U)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_HYNIX             (0x00000006U)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_MOSEL             (0x00000007U)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_WINBOND           (0x00000008U)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_ESMT              (0x00000009U)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_MICRON            (0x0000000FU)
-#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_UNKNOWN           (0xFFFFFFFFU)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_SAMSUNG            (0x00000001U)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_QIMONDA            (0x00000002U)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_ELPIDA             (0x00000003U)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_ETRON              (0x00000004U)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_NANYA              (0x00000005U)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_HYNIX              (0x00000006U)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_MOSEL              (0x00000007U)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_WINBOND            (0x00000008U)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_ESMT               (0x00000009U)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_MICRON             (0x0000000FU)
+#define NV2080_CTRL_FB_INFO_MEMORYINFO_VENDOR_ID_UNKNOWN            (0xFFFFFFFFU)
 
-#define NV2080_CTRL_FB_INFO_PSEUDO_CHANNEL_MODE_UNSUPPORTED        (0x00000000U)
-#define NV2080_CTRL_FB_INFO_PSEUDO_CHANNEL_MODE_DISABLED           (0x00000001U)
-#define NV2080_CTRL_FB_INFO_PSEUDO_CHANNEL_MODE_ENABLED            (0x00000002U)
+#define NV2080_CTRL_FB_INFO_PSEUDO_CHANNEL_MODE_UNSUPPORTED         (0x00000000U)
+#define NV2080_CTRL_FB_INFO_PSEUDO_CHANNEL_MODE_DISABLED            (0x00000001U)
+#define NV2080_CTRL_FB_INFO_PSEUDO_CHANNEL_MODE_ENABLED             (0x00000002U)
+
+#define NV2080_CTRL_FB_INFO_INDEX_COHERENCE_INFO_NON_FULLY_COHERENT (0x00000000U)
+#define NV2080_CTRL_FB_INFO_INDEX_COHERENCE_INFO_FULLY_COHERENT     (0x00000001U)
 
 /**
  * NV2080_CTRL_CMD_FB_GET_INFO
@@ -437,7 +447,7 @@ typedef NVXXXX_CTRL_XXX_INFO NV2080_CTRL_FB_INFO;
  *   NV_ERR_INVALID_ARGUMENT
  *   NV_ERR_OPERATING_SYSTEM
  */
-#define NV2080_CTRL_CMD_FB_GET_INFO                                (0x20801301U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_GET_INFO_PARAMS_MESSAGE_ID" */
+#define NV2080_CTRL_CMD_FB_GET_INFO                                 (0x20801301U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_GET_INFO_PARAMS_MESSAGE_ID" */
 
 #define NV2080_CTRL_FB_GET_INFO_PARAMS_MESSAGE_ID (0x1U)
 
@@ -849,7 +859,7 @@ typedef struct NV2080_CTRL_FB_GET_GPU_CACHE_INFO_PARAMS {
  */
 #define NV2080_CTRL_CMD_FB_GET_FB_REGION_INFO                     (0x20801320U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_CMD_FB_GET_FB_REGION_INFO_PARAMS_MESSAGE_ID" */
 
-#define NV2080_CTRL_CMD_FB_GET_FB_REGION_INFO_MEM_TYPES           17U
+#define NV2080_CTRL_CMD_FB_GET_FB_REGION_INFO_MEM_TYPES           18U
 
 typedef NvBool NV2080_CTRL_CMD_FB_GET_FB_REGION_SURFACE_MEM_TYPE_FLAG[NV2080_CTRL_CMD_FB_GET_FB_REGION_INFO_MEM_TYPES];
 
@@ -1811,9 +1821,8 @@ typedef struct NV2080_CTRL_FB_PATCH_PBR_FOR_MINING_PARAMS {
  *
  * Get memory alignment. Replacement for NVOS32_FUNCTION_GET_MEM_ALIGNMENT
  */
-#define NV2080_CTRL_CMD_FB_GET_MEM_ALIGNMENT       (0x20801342U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_GET_MEM_ALIGNMENT_PARAMS_MESSAGE_ID" */
+#define NV2080_CTRL_CMD_FB_GET_MEM_ALIGNMENT (0x20801342U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_GET_MEM_ALIGNMENT_PARAMS_MESSAGE_ID" */
 
-#define NV2080_CTRL_FB_GET_MEM_ALIGNMENT_MAX_BANKS (4U)
 #define NV2080_CTRL_FB_GET_MEM_ALIGNMENT_PARAMS_MESSAGE_ID (0x42U)
 
 typedef struct NV2080_CTRL_FB_GET_MEM_ALIGNMENT_PARAMS {
@@ -1827,8 +1836,6 @@ typedef struct NV2080_CTRL_FB_GET_MEM_ALIGNMENT_PARAMS {
     NvU32 alignPitch;
     NvU32 alignPad;
     NvU32 alignMask;
-    NvU32 alignOutputFlags[NV2080_CTRL_FB_GET_MEM_ALIGNMENT_MAX_BANKS];
-    NvU32 alignBank[NV2080_CTRL_FB_GET_MEM_ALIGNMENT_MAX_BANKS];
     NvU32 alignKind;
     NvU32 alignAdjust;                                // Output -- If non-zero the amount we need to adjust the offset
     NvU32 alignAttr2;
@@ -1864,6 +1871,9 @@ typedef struct NV2080_CTRL_CMD_FB_GET_CBC_BASE_ADDR_PARAMS {
 #define NV2080_CTRL_FB_REMAP_ENTRY_FLAGS_PENDING                             0:0
 #define NV2080_CTRL_FB_REMAP_ENTRY_FLAGS_PENDING_FALSE 0U
 #define NV2080_CTRL_FB_REMAP_ENTRY_FLAGS_PENDING_TRUE  1U
+#define NV2080_CTRL_FB_REMAP_ENTRY_FLAGS_ACTIVE                              1:1
+#define NV2080_CTRL_FB_REMAP_ENTRY_FLAGS_ACTIVE_FALSE  0U
+#define NV2080_CTRL_FB_REMAP_ENTRY_FLAGS_ACTIVE_TRUE   1U
 
 
 
@@ -2038,6 +2048,24 @@ typedef struct NV2080_CTRL_FB_FS_INFO_ROP_MASK_PARAMS {
      */
     NvU32 ropEnMask;
 } NV2080_CTRL_FB_FS_INFO_ROP_MASK_PARAMS;
+
+/*!
+ * Structure holding the in/out params for NV2080_CTRL_FB_FS_INFO_SYS_MASK.
+ */
+typedef struct NV2080_CTRL_FB_FS_INFO_SYS_MASK_PARAMS {
+    /*!
+     * [in]: swizzId
+     * PartitionID associated with a created smc partition. Currently used only for a
+     * device monitoring client to get the physical values of the sys. The client needs to pass
+     * 'NV2080_CTRL_GPU_PARTITION_ID_INVALID' explicitly if it wants RM to ignore the swizzId.
+     * RM will consider this request similar to a legacy case.
+     */
+    NvU32 swizzId;
+    /*!
+     * [out]: physical/local sys mask.
+     */
+    NV_DECLARE_ALIGNED(NvU64 sysEnMask, 8);
+} NV2080_CTRL_FB_FS_INFO_SYS_MASK_PARAMS;
 
 /*!
  * Structure holding the in/out params for NV2080_CTRL_FB_FS_INFO_PROFILER_MON_LTC_MASK.
@@ -2233,6 +2261,7 @@ typedef struct NV2080_CTRL_FB_FS_INFO_PROFILER_MON_LOGICAL_LTC_MASK_PARAMS {
 #define NV2080_CTRL_FB_FS_INFO_LOGICAL_LTC_MASK              0xFU
 #define NV2080_CTRL_FB_FS_INFO_PROFILER_MON_LOGICAL_LTC_MASK 0x10U
 #define NV2080_CTRL_SYSL2_FS_INFO_SYSLTS_MASK                0x11U
+#define NV2080_CTRL_FB_FS_INFO_SYS_MASK                      0x12U
 
 typedef struct NV2080_CTRL_FB_FS_INFO_QUERY {
     NvU16 queryType;
@@ -2257,6 +2286,7 @@ typedef struct NV2080_CTRL_FB_FS_INFO_QUERY {
         NV_DECLARE_ALIGNED(NV2080_CTRL_FB_FS_INFO_LOGICAL_LTC_MASK_PARAMS logicalLtc, 8);
         NV_DECLARE_ALIGNED(NV2080_CTRL_FB_FS_INFO_PROFILER_MON_LOGICAL_LTC_MASK_PARAMS dmLogicalLtc, 8);
         NV_DECLARE_ALIGNED(NV2080_CTRL_SYSL2_FS_INFO_SYSLTS_MASK_PARAMS sysl2Lts, 8);
+        NV_DECLARE_ALIGNED(NV2080_CTRL_FB_FS_INFO_SYS_MASK_PARAMS sys, 8);
     } queryParams;
 } NV2080_CTRL_FB_FS_INFO_QUERY;
 
@@ -2689,6 +2719,7 @@ typedef struct NV2080_CTRL_CMD_FB_STATS_GET_PARAMS {
 
 typedef struct NV2080_CTRL_FB_GET_STATIC_BAR1_INFO_PARAMS {
     NvBool bStaticBar1Enabled;
+    NvBool bStaticBar1WriteCombined;
     NV_DECLARE_ALIGNED(NvU64 staticBar1StartOffset, 8);
     NV_DECLARE_ALIGNED(NvU64 staticBar1Size, 8);
 } NV2080_CTRL_FB_GET_STATIC_BAR1_INFO_PARAMS;
@@ -2749,61 +2780,6 @@ typedef struct NV2080_CTRL_FB_SET_DRAM_ENCRYPTION_CONFIGURATION_PARAMS {
 } NV2080_CTRL_FB_SET_DRAM_ENCRYPTION_CONFIGURATION_PARAMS;
 
 /*
- * NV2080_CTRL_CMD_FB_GET_STATUS
- *
- * This control command is used by clients to get the FB availabilty status,
- * i.e whether the GPU Memory is ready for use or not for MIG and non-MIG cases
- *
- *  fbStatus[OUT]
- *     This parameter returns the various values of FB availability status.
- *     Valid values include:
- *       NV2080_CTRL_FB_STATUS_FAILED
- *          On Non Self hosted (Non NUMA) systems - this status is not expected since
- *              FB memory is available as part of GPU initialization itself.
- *          On Direct connected Self hosted systems - this status is not expected since
- *              FB memory is available as part of GPU initialization itself.
- *          On Nvswitch connected Self hosted systems - this status indicates that either
- *              the memory onlining has failed or fabric probe response has failed.
- *              GPU reset maybe required in such a case.
- *       NV2080_CTRL_FB_STATUS_READY
- *          On Non Self hosted systems - this status is always returned as memory is ready
- *              after GPU initialization is complete.
- *          On Self hosted systems - this status indicates that the FB memory has been onlined
- *              successfully and is available for client/user allocations.
- *       NV2080_CTRL_FB_STATUS_PENDING
- *          On Non Self hosted systems - this status is not expected
- *          On Direct connected Self hosted systems - this status is not expected since
- *              FB memory is available as part of GPU initialization itself.
- *          On Nvswitch connected Self hosted systems - This status indicates memory is yet to
- *              be onlined or is in progress since we are either still waiting for a fabric
- *              probe response or a fabric probe request hasn't been sent yet.
- *       NV2080_CTRL_FB_STATUS_NOT_APPLICABLE
- *          This status indicates that this is a system with no FB memory.
- *
- *
- * @returns Possible status values returned are:
- *   NV_OK
- *   NV_ERR_INVALID_STATE
- *   NV_ERR_NOT_SUPPORTED
- *   NV_ERR_NOT_READY
- *   NV_ERR_INVALID_LOCK_STATE
- */
-#define NV2080_CTRL_CMD_FB_GET_STATUS        (0x20801357U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_GET_STATUS_PARAMS_MESSAGE_ID" */
-
-// NUMA Memory Onlining Status
-#define NV2080_CTRL_FB_STATUS_FAILED         (0x00000000U)
-#define NV2080_CTRL_FB_STATUS_READY          (0x00000001U)
-#define NV2080_CTRL_FB_STATUS_PENDING        (0x00000002U)
-#define NV2080_CTRL_FB_STATUS_NOT_APPLICABLE (0x00000003U)
-
-#define NV2080_CTRL_FB_GET_STATUS_PARAMS_MESSAGE_ID (0x57U)
-
-typedef struct NV2080_CTRL_FB_GET_STATUS_PARAMS {
-
-    NvU32 fbStatus;
-} NV2080_CTRL_FB_GET_STATUS_PARAMS;
-
-/*
  * NV2080_CTRL_CMD_FB_QUERY_DRAM_ENCRYPTION_INFOROM_SUPPORT
  *
  * This command returns whether or not DRAM encryption config object is supported via the InfoROM.
@@ -2818,12 +2794,12 @@ typedef struct NV2080_CTRL_FB_GET_STATUS_PARAMS {
  *   NV_OK
  *   NV_ERR_NOT_SUPPORTED
  */
-#define NV2080_CTRL_CMD_FB_QUERY_DRAM_ENCRYPTION_INFOROM_SUPPORT          (0x20801358U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_DRAM_ENCRYPTION_INFOROM_SUPPORT_PARAMS_MESSAGE_ID" */
+#define NV2080_CTRL_CMD_FB_QUERY_DRAM_ENCRYPTION_INFOROM_SUPPORT          (0x20801357U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_DRAM_ENCRYPTION_INFOROM_SUPPORT_PARAMS_MESSAGE_ID" */
 
 #define NV2080_CTRL_CMD_FB_QUERY_DRAM_ENCRYPTION_INFOROM_SUPPORT_DISABLED (0x00000000U)
 #define NV2080_CTRL_CMD_FB_QUERY_DRAM_ENCRYPTION_INFOROM_SUPPORT_ENABLED  (0x00000001U)
 
-#define NV2080_CTRL_FB_DRAM_ENCRYPTION_INFOROM_SUPPORT_PARAMS_MESSAGE_ID (0x58U)
+#define NV2080_CTRL_FB_DRAM_ENCRYPTION_INFOROM_SUPPORT_PARAMS_MESSAGE_ID (0x57U)
 
 typedef struct NV2080_CTRL_FB_DRAM_ENCRYPTION_INFOROM_SUPPORT_PARAMS {
     NvU32 isSupported;
@@ -2842,15 +2818,133 @@ typedef struct NV2080_CTRL_FB_DRAM_ENCRYPTION_INFOROM_SUPPORT_PARAMS {
  *   NV_ERR_NOT_SUPPORTED
  *   NV_ERR_INVALID_STATE
  */
-#define NV2080_CTRL_CMD_FB_QUERY_DRAM_ENCRYPTION_STATUS          (0x20801359U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_QUERY_DRAM_ENCRYPTION_STATUS_PARAMS_MESSAGE_ID" */
+#define NV2080_CTRL_CMD_FB_QUERY_DRAM_ENCRYPTION_STATUS          (0x20801358U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_QUERY_DRAM_ENCRYPTION_STATUS_PARAMS_MESSAGE_ID" */
 
 #define NV2080_CTRL_CMD_FB_QUERY_DRAM_ENCRYPTION_STATUS_DISABLED (0x00000000U)
 #define NV2080_CTRL_CMD_FB_QUERY_DRAM_ENCRYPTION_STATUS_ENABLED  (0x00000001U)
 
-#define NV2080_CTRL_FB_QUERY_DRAM_ENCRYPTION_STATUS_PARAMS_MESSAGE_ID (0x59U)
+#define NV2080_CTRL_FB_QUERY_DRAM_ENCRYPTION_STATUS_PARAMS_MESSAGE_ID (0x58U)
 
 typedef struct NV2080_CTRL_FB_QUERY_DRAM_ENCRYPTION_STATUS_PARAMS {
     NvU32 currentStatus;
 } NV2080_CTRL_FB_QUERY_DRAM_ENCRYPTION_STATUS_PARAMS;
+
+/*
+ * NV2080_CTRL_CMD_FB_GET_MEMORY_BOOT_TRAINING_FLAGS
+ *
+ * This command returns the memory boot training flags from VBIOS table.
+ *
+ *  flagCollectSchmooData
+ *  flagWrTrHybridVrefEn
+ *  flagWrTrHybridNonVrefEn
+ *  flagRdTrHybridVrefEn
+ *  flagRdTrHybridNonVrefEn
+ *  skipBootTraining
+ *
+ * Possible status return values are:
+ *   NV_OK
+ *   NV_ERR_NOT_SUPPORTED
+ */
+#define NV2080_CTRL_CMD_FB_GET_MEMORY_BOOT_TRAINING_FLAGS (0x20801359U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_GET_MEMORY_BOOT_TRAINING_FLAGS_PARAMS_MESSAGE_ID" */
+
+#define NV2080_CTRL_FB_GET_MEMORY_BOOT_TRAINING_FLAGS_PARAMS_MESSAGE_ID (0x59U)
+
+typedef struct NV2080_CTRL_FB_GET_MEMORY_BOOT_TRAINING_FLAGS_PARAMS {
+    NvBool flagCollectSchmooData;
+    NvBool flagWrTrHybridVrefEn;
+    NvBool flagWrTrHybridNonVrefEn;
+    NvBool flagRdTrHybridVrefEn;
+    NvBool flagRdTrHybridNonVrefEn;
+    NvBool skipBootTraining;
+} NV2080_CTRL_FB_GET_MEMORY_BOOT_TRAINING_FLAGS_PARAMS;
+
+/*
+ * NV2080_CTRL_FB_CMD_GET_CARVEOUT_REGION_INFO
+ *
+ * This command returns the carveout memory region characteristics.
+ *
+ *   numCarveoutRegions
+ *     Number of valid regions returned in carveoutRegion[].
+ *   carveoutRegion[].base
+ *     Base address of carveout memory region.
+ *   carveoutRegion[].size
+ *     size of carveout memory region.
+ *   carveoutType
+ *     carveout type for carveout memory region.
+ *
+ *   Possible status values returned are:
+ *     NV_OK
+ *     NV_ERR_NOT_SUPPORTED
+ */
+#define NV2080_CTRL_CMD_FB_GET_CARVEOUT_REGION_INFO (0x20801360U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_GET_CARVEOUT_REGION_INFO_PARAMS_MESSAGE_ID" */
+
+typedef enum NV2080_CTRL_FB_GET_CARVEOUT_REGION_CARVEOUT_TYPE {
+    NV2080_CTRL_FB_GET_CARVEOUT_REGION_CARVEOUT_TYPE_DISPLAY_FRM = 0,
+    NV2080_CTRL_FB_GET_CARVEOUT_REGION_CARVEOUT_TYPE_DISPLAY_FRM_RESERVED = 1,
+    NV2080_CTRL_FB_GET_CARVEOUT_REGION_CARVEOUT_TYPE_UEFI = 2,
+} NV2080_CTRL_FB_GET_CARVEOUT_REGION_CARVEOUT_TYPE;
+
+typedef struct NV2080_CTRL_FB_GET_CARVEOUT_REGION_INFO {
+    NV_DECLARE_ALIGNED(NvU64 base, 8);
+    NV_DECLARE_ALIGNED(NvU64 size, 8);
+    NV2080_CTRL_FB_GET_CARVEOUT_REGION_CARVEOUT_TYPE carveoutType;
+} NV2080_CTRL_FB_GET_CARVEOUT_REGION_INFO;
+
+#define NV2080_CTRL_FB_GET_CARVEOUT_REGION_INFO_MAX_ENTRIES 8U
+
+#define NV2080_CTRL_FB_GET_CARVEOUT_REGION_INFO_PARAMS_MESSAGE_ID (0x60U)
+
+typedef struct NV2080_CTRL_FB_GET_CARVEOUT_REGION_INFO_PARAMS {
+    NvU32 numCarveoutRegions;
+    NV_DECLARE_ALIGNED(NV2080_CTRL_FB_GET_CARVEOUT_REGION_INFO carveoutRegion[NV2080_CTRL_FB_GET_CARVEOUT_REGION_INFO_MAX_ENTRIES], 8);
+} NV2080_CTRL_FB_GET_CARVEOUT_REGION_INFO_PARAMS;
+
+/*
+ * NV2080_CTRL_CMD_FB_GET_CPU_COHERENT_RANGE
+ *
+ * This command returns the CPU-coherent FB range.
+ * Only applicable on self-hosted platforms.
+ *
+ *   coherentCpuFbBase
+ *     FB offset of the start of the CPU-coherent range
+ *   coherentCpuFbEnd
+ *     FB offset of the end (exclusive) of the CPU-coherent range
+ */
+#define NV2080_CTRL_CMD_FB_GET_CPU_COHERENT_RANGE (0x20801361U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_GET_CPU_COHERENT_RANGE_PARAMS_MESSAGE_ID" */
+
+#define NV2080_CTRL_FB_GET_CPU_COHERENT_RANGE_PARAMS_MESSAGE_ID (0x61U)
+
+typedef struct NV2080_CTRL_FB_GET_CPU_COHERENT_RANGE_PARAMS {
+    NV_DECLARE_ALIGNED(NvU64 coherentCpuFbBase, 8);
+    NV_DECLARE_ALIGNED(NvU64 coherentCpuFbEnd, 8);
+} NV2080_CTRL_FB_GET_CPU_COHERENT_RANGE_PARAMS;
+
+/*
+ * NV2080_CTRL_CMD_FB_GET_WPR_REGION_INFO
+ *
+ * This command returns information about WPR regions.
+ *
+ *   wpr1Start
+ *     FB offset of the start of WPR1
+ *   wpr1End
+ *     FB offset of the end (exclusive) of WPR1
+ *   wpr2Start
+ *     FB offset of the start of WPR1
+ *   wpr2End
+ *     FB offset of the end (exclusive) of WPR1
+ *   fbRegionOfWpr2Start
+ *     FB offset of the start of the FB region (as tracked by RM) that contains WPR2
+ */
+#define NV2080_CTRL_CMD_FB_GET_WPR_REGION_INFO (0x20801362U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_FB_INTERFACE_ID << 8) | NV2080_CTRL_FB_GET_WPR_REGION_INFO_PARAMS_MESSAGE_ID" */
+
+#define NV2080_CTRL_FB_GET_WPR_REGION_INFO_PARAMS_MESSAGE_ID (0x62U)
+
+typedef struct NV2080_CTRL_FB_GET_WPR_REGION_INFO_PARAMS {
+    NV_DECLARE_ALIGNED(NvU64 wpr1Start, 8);
+    NV_DECLARE_ALIGNED(NvU64 wpr1End, 8);
+    NV_DECLARE_ALIGNED(NvU64 wpr2Start, 8);
+    NV_DECLARE_ALIGNED(NvU64 wpr2End, 8);
+    NV_DECLARE_ALIGNED(NvU64 fbRegionOfWpr2Start, 8);
+} NV2080_CTRL_FB_GET_WPR_REGION_INFO_PARAMS;
 
 /* _ctrl2080fb_h_ */

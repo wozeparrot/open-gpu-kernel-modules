@@ -1,13 +1,15 @@
 
 #ifndef _G_GENERIC_ENGINE_NVOC_H_
 #define _G_GENERIC_ENGINE_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,15 +64,19 @@ extern "C" {
 #endif
 
 
-// Metadata including vtable
+// Metadata with per-class RTTI and vtable with ancestor(s)
+struct NVOC_METADATA__GenericEngineApi;
+struct NVOC_METADATA__GpuResource;
 struct NVOC_VTABLE__GenericEngineApi;
 
 
 struct GenericEngineApi {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
-    const struct NVOC_VTABLE__GenericEngineApi *__nvoc_vtable;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__GenericEngineApi *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct GpuResource __nvoc_base_GpuResource;
@@ -82,19 +88,11 @@ struct GenericEngineApi {
     struct RmResource *__nvoc_pbase_RmResource;    // rmres super^2
     struct GpuResource *__nvoc_pbase_GpuResource;    // gpures super
     struct GenericEngineApi *__nvoc_pbase_GenericEngineApi;    // genapi
-
-    // Vtable with 4 per-object function pointers
-    NV_STATUS (*__genapiCtrlCmdMasterGetErrorIntrOffsetMask__)(struct GenericEngineApi * /*this*/, NV90E6_CTRL_MASTER_GET_ERROR_INTR_OFFSET_MASK_PARAMS *);  // exported (id=0x90e60101)
-    NV_STATUS (*__genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask__)(struct GenericEngineApi * /*this*/, NV90E6_CTRL_MASTER_GET_VIRTUAL_FUNCTION_ERROR_CONT_INTR_MASK_PARAMS *);  // exported (id=0x90e60102)
-    NV_STATUS (*__genapiCtrlCmdBBXGetLastFlushTime__)(struct GenericEngineApi * /*this*/, NV90E7_CTRL_BBX_GET_LAST_FLUSH_TIME_PARAMS *);  // exported (id=0x90e70113)
-    NV_STATUS (*__genapiCtrlCmdBBXIsNVMFlushEnabled__)(struct GenericEngineApi * /*this*/, NV90E7_CTRL_BBX_IS_NVM_FLUSH_ENABLED_PARAMS *);  // exported (id=0x90e70119)
 };
 
 
-// Metadata including vtable with 25 function pointers plus superclass metadata
+// Vtable with 25 per-class function pointers
 struct NVOC_VTABLE__GenericEngineApi {
-    const struct NVOC_VTABLE__GpuResource GpuResource;    // (gpures) 25 function pointers
-
     NV_STATUS (*__genapiMap__)(struct GenericEngineApi * /*this*/, struct CALL_CONTEXT *, struct RS_CPU_MAP_PARAMS *, struct RsCpuMapping *);  // virtual override (res) base (gpures)
     NV_STATUS (*__genapiGetMapAddrSpace__)(struct GenericEngineApi * /*this*/, struct CALL_CONTEXT *, NvU32, NV_ADDRESS_SPACE *);  // virtual override (gpures) base (gpures)
     NV_STATUS (*__genapiControl__)(struct GenericEngineApi * /*this*/, struct CALL_CONTEXT *, struct RS_RES_CONTROL_PARAMS_INTERNAL *);  // virtual override (res) base (gpures)
@@ -122,6 +120,13 @@ struct NVOC_VTABLE__GenericEngineApi {
     void (*__genapiAddAdditionalDependants__)(struct RsClient *, struct GenericEngineApi * /*this*/, RsResourceRef *);  // virtual inherited (res) base (gpures)
 };
 
+// Metadata with per-class RTTI and vtable with ancestor(s)
+struct NVOC_METADATA__GenericEngineApi {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__GpuResource metadata__GpuResource;
+    const struct NVOC_VTABLE__GenericEngineApi vtable;
+};
+
 #ifndef __NVOC_CLASS_GenericEngineApi_TYPEDEF__
 #define __NVOC_CLASS_GenericEngineApi_TYPEDEF__
 typedef struct GenericEngineApi GenericEngineApi;
@@ -138,194 +143,218 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_GenericEngineApi;
     ((pThis)->__nvoc_pbase_GenericEngineApi)
 
 #ifdef __nvoc_generic_engine_h_disabled
-#define __dynamicCast_GenericEngineApi(pThis) ((GenericEngineApi*)NULL)
+#define __dynamicCast_GenericEngineApi(pThis) ((GenericEngineApi*) NULL)
 #else //__nvoc_generic_engine_h_disabled
 #define __dynamicCast_GenericEngineApi(pThis) \
-    ((GenericEngineApi*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(GenericEngineApi)))
+    ((GenericEngineApi*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(GenericEngineApi)))
 #endif //__nvoc_generic_engine_h_disabled
 
 NV_STATUS __nvoc_objCreateDynamic_GenericEngineApi(GenericEngineApi**, Dynamic*, NvU32, va_list);
 
-NV_STATUS __nvoc_objCreate_GenericEngineApi(GenericEngineApi**, Dynamic*, NvU32, struct CALL_CONTEXT * arg_pCallContext, struct RS_RES_ALLOC_PARAMS_INTERNAL * arg_pParams);
+NV_STATUS __nvoc_objCreate_GenericEngineApi(GenericEngineApi**, Dynamic*, NvU32, struct CALL_CONTEXT *arg_pCallContext, struct RS_RES_ALLOC_PARAMS_INTERNAL *arg_pParams);
 #define __objCreate_GenericEngineApi(ppNewObj, pParent, createFlags, arg_pCallContext, arg_pParams) \
     __nvoc_objCreate_GenericEngineApi((ppNewObj), staticCast((pParent), Dynamic), (createFlags), arg_pCallContext, arg_pParams)
 
 
-// Wrapper macros
-#define genapiMap_FNPTR(pGenericEngineApi) pGenericEngineApi->__nvoc_vtable->__genapiMap__
+// Wrapper macros for implementation functions
+NV_STATUS genapiConstruct_IMPL(struct GenericEngineApi *arg_pGenericEngineApi, struct CALL_CONTEXT *arg_pCallContext, struct RS_RES_ALLOC_PARAMS_INTERNAL *arg_pParams);
+#define __nvoc_genapiConstruct(arg_pGenericEngineApi, arg_pCallContext, arg_pParams) genapiConstruct_IMPL(arg_pGenericEngineApi, arg_pCallContext, arg_pParams)
+
+void genapiDestruct_IMPL(struct GenericEngineApi *pGenericEngineApi);
+#define __nvoc_genapiDestruct(pGenericEngineApi) genapiDestruct_IMPL(pGenericEngineApi)
+
+NV_STATUS genapiCtrlCmdMasterGetErrorIntrOffsetMask_IMPL(struct GenericEngineApi *pGenericEngineApi, NV90E6_CTRL_MASTER_GET_ERROR_INTR_OFFSET_MASK_PARAMS *pParams);
+#ifdef __nvoc_generic_engine_h_disabled
+static inline NV_STATUS genapiCtrlCmdMasterGetErrorIntrOffsetMask(struct GenericEngineApi *pGenericEngineApi, NV90E6_CTRL_MASTER_GET_ERROR_INTR_OFFSET_MASK_PARAMS *pParams) {
+    NV_ASSERT_FAILED_PRECOMP("GenericEngineApi was disabled!");
+    return NV_ERR_NOT_SUPPORTED;
+}
+#else // __nvoc_generic_engine_h_disabled
+#define genapiCtrlCmdMasterGetErrorIntrOffsetMask(pGenericEngineApi, pParams) genapiCtrlCmdMasterGetErrorIntrOffsetMask_IMPL(pGenericEngineApi, pParams)
+#endif // __nvoc_generic_engine_h_disabled
+
+NV_STATUS genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask_IMPL(struct GenericEngineApi *pGenericEngineApi, NV90E6_CTRL_MASTER_GET_VIRTUAL_FUNCTION_ERROR_CONT_INTR_MASK_PARAMS *pParams);
+#ifdef __nvoc_generic_engine_h_disabled
+static inline NV_STATUS genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask(struct GenericEngineApi *pGenericEngineApi, NV90E6_CTRL_MASTER_GET_VIRTUAL_FUNCTION_ERROR_CONT_INTR_MASK_PARAMS *pParams) {
+    NV_ASSERT_FAILED_PRECOMP("GenericEngineApi was disabled!");
+    return NV_ERR_NOT_SUPPORTED;
+}
+#else // __nvoc_generic_engine_h_disabled
+#define genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask(pGenericEngineApi, pParams) genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask_IMPL(pGenericEngineApi, pParams)
+#endif // __nvoc_generic_engine_h_disabled
+
+NV_STATUS genapiCtrlCmdBBXGetLastFlushTime_IMPL(struct GenericEngineApi *pGenericEngineApi, NV90E7_CTRL_BBX_GET_LAST_FLUSH_TIME_PARAMS *pParams);
+#ifdef __nvoc_generic_engine_h_disabled
+static inline NV_STATUS genapiCtrlCmdBBXGetLastFlushTime(struct GenericEngineApi *pGenericEngineApi, NV90E7_CTRL_BBX_GET_LAST_FLUSH_TIME_PARAMS *pParams) {
+    NV_ASSERT_FAILED_PRECOMP("GenericEngineApi was disabled!");
+    return NV_ERR_NOT_SUPPORTED;
+}
+#else // __nvoc_generic_engine_h_disabled
+#define genapiCtrlCmdBBXGetLastFlushTime(pGenericEngineApi, pParams) genapiCtrlCmdBBXGetLastFlushTime_IMPL(pGenericEngineApi, pParams)
+#endif // __nvoc_generic_engine_h_disabled
+
+NV_STATUS genapiCtrlCmdBBXIsNVMFlushEnabled_IMPL(struct GenericEngineApi *pGenericEngineApi, NV90E7_CTRL_BBX_IS_NVM_FLUSH_ENABLED_PARAMS *pParams);
+#ifdef __nvoc_generic_engine_h_disabled
+static inline NV_STATUS genapiCtrlCmdBBXIsNVMFlushEnabled(struct GenericEngineApi *pGenericEngineApi, NV90E7_CTRL_BBX_IS_NVM_FLUSH_ENABLED_PARAMS *pParams) {
+    NV_ASSERT_FAILED_PRECOMP("GenericEngineApi was disabled!");
+    return NV_ERR_NOT_SUPPORTED;
+}
+#else // __nvoc_generic_engine_h_disabled
+#define genapiCtrlCmdBBXIsNVMFlushEnabled(pGenericEngineApi, pParams) genapiCtrlCmdBBXIsNVMFlushEnabled_IMPL(pGenericEngineApi, pParams)
+#endif // __nvoc_generic_engine_h_disabled
+
+
+// Wrapper macros for halified functions
+#define genapiMap_FNPTR(pGenericEngineApi) pGenericEngineApi->__nvoc_metadata_ptr->vtable.__genapiMap__
 #define genapiMap(pGenericEngineApi, pCallContext, pParams, pCpuMapping) genapiMap_DISPATCH(pGenericEngineApi, pCallContext, pParams, pCpuMapping)
-#define genapiGetMapAddrSpace_FNPTR(pGenericEngineApi) pGenericEngineApi->__nvoc_vtable->__genapiGetMapAddrSpace__
+#define genapiGetMapAddrSpace_FNPTR(pGenericEngineApi) pGenericEngineApi->__nvoc_metadata_ptr->vtable.__genapiGetMapAddrSpace__
 #define genapiGetMapAddrSpace(pGenericEngineApi, pCallContext, mapFlags, pAddrSpace) genapiGetMapAddrSpace_DISPATCH(pGenericEngineApi, pCallContext, mapFlags, pAddrSpace)
-#define genapiControl_FNPTR(pGenericEngineApi) pGenericEngineApi->__nvoc_vtable->__genapiControl__
+#define genapiControl_FNPTR(pGenericEngineApi) pGenericEngineApi->__nvoc_metadata_ptr->vtable.__genapiControl__
 #define genapiControl(pGenericEngineApi, pCallContext, pParams) genapiControl_DISPATCH(pGenericEngineApi, pCallContext, pParams)
-#define genapiCtrlCmdMasterGetErrorIntrOffsetMask_FNPTR(pGenericEngineApi) pGenericEngineApi->__genapiCtrlCmdMasterGetErrorIntrOffsetMask__
-#define genapiCtrlCmdMasterGetErrorIntrOffsetMask(pGenericEngineApi, pParams) genapiCtrlCmdMasterGetErrorIntrOffsetMask_DISPATCH(pGenericEngineApi, pParams)
-#define genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask_FNPTR(pGenericEngineApi) pGenericEngineApi->__genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask__
-#define genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask(pGenericEngineApi, pParams) genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask_DISPATCH(pGenericEngineApi, pParams)
-#define genapiCtrlCmdBBXGetLastFlushTime_FNPTR(pGenericEngineApi) pGenericEngineApi->__genapiCtrlCmdBBXGetLastFlushTime__
-#define genapiCtrlCmdBBXGetLastFlushTime(pGenericEngineApi, pParams) genapiCtrlCmdBBXGetLastFlushTime_DISPATCH(pGenericEngineApi, pParams)
-#define genapiCtrlCmdBBXIsNVMFlushEnabled_FNPTR(pGenericEngineApi) pGenericEngineApi->__genapiCtrlCmdBBXIsNVMFlushEnabled__
-#define genapiCtrlCmdBBXIsNVMFlushEnabled(pGenericEngineApi, pParams) genapiCtrlCmdBBXIsNVMFlushEnabled_DISPATCH(pGenericEngineApi, pParams)
-#define genapiUnmap_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_vtable->__gpuresUnmap__
+#define genapiUnmap_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_metadata_ptr->vtable.__gpuresUnmap__
 #define genapiUnmap(pGpuResource, pCallContext, pCpuMapping) genapiUnmap_DISPATCH(pGpuResource, pCallContext, pCpuMapping)
-#define genapiShareCallback_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_vtable->__gpuresShareCallback__
+#define genapiShareCallback_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_metadata_ptr->vtable.__gpuresShareCallback__
 #define genapiShareCallback(pGpuResource, pInvokingClient, pParentRef, pSharePolicy) genapiShareCallback_DISPATCH(pGpuResource, pInvokingClient, pParentRef, pSharePolicy)
-#define genapiGetRegBaseOffsetAndSize_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_vtable->__gpuresGetRegBaseOffsetAndSize__
+#define genapiGetRegBaseOffsetAndSize_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_metadata_ptr->vtable.__gpuresGetRegBaseOffsetAndSize__
 #define genapiGetRegBaseOffsetAndSize(pGpuResource, pGpu, pOffset, pSize) genapiGetRegBaseOffsetAndSize_DISPATCH(pGpuResource, pGpu, pOffset, pSize)
-#define genapiInternalControlForward_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_vtable->__gpuresInternalControlForward__
+#define genapiInternalControlForward_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_metadata_ptr->vtable.__gpuresInternalControlForward__
 #define genapiInternalControlForward(pGpuResource, command, pParams, size) genapiInternalControlForward_DISPATCH(pGpuResource, command, pParams, size)
-#define genapiGetInternalObjectHandle_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_vtable->__gpuresGetInternalObjectHandle__
+#define genapiGetInternalObjectHandle_FNPTR(pGpuResource) pGpuResource->__nvoc_base_GpuResource.__nvoc_metadata_ptr->vtable.__gpuresGetInternalObjectHandle__
 #define genapiGetInternalObjectHandle(pGpuResource) genapiGetInternalObjectHandle_DISPATCH(pGpuResource)
-#define genapiAccessCallback_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_vtable->__rmresAccessCallback__
+#define genapiAccessCallback_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_metadata_ptr->vtable.__rmresAccessCallback__
 #define genapiAccessCallback(pResource, pInvokingClient, pAllocParams, accessRight) genapiAccessCallback_DISPATCH(pResource, pInvokingClient, pAllocParams, accessRight)
-#define genapiGetMemInterMapParams_FNPTR(pRmResource) pRmResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_vtable->__rmresGetMemInterMapParams__
+#define genapiGetMemInterMapParams_FNPTR(pRmResource) pRmResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_metadata_ptr->vtable.__rmresGetMemInterMapParams__
 #define genapiGetMemInterMapParams(pRmResource, pParams) genapiGetMemInterMapParams_DISPATCH(pRmResource, pParams)
-#define genapiCheckMemInterUnmap_FNPTR(pRmResource) pRmResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_vtable->__rmresCheckMemInterUnmap__
+#define genapiCheckMemInterUnmap_FNPTR(pRmResource) pRmResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_metadata_ptr->vtable.__rmresCheckMemInterUnmap__
 #define genapiCheckMemInterUnmap(pRmResource, bSubdeviceHandleProvided) genapiCheckMemInterUnmap_DISPATCH(pRmResource, bSubdeviceHandleProvided)
-#define genapiGetMemoryMappingDescriptor_FNPTR(pRmResource) pRmResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_vtable->__rmresGetMemoryMappingDescriptor__
+#define genapiGetMemoryMappingDescriptor_FNPTR(pRmResource) pRmResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_metadata_ptr->vtable.__rmresGetMemoryMappingDescriptor__
 #define genapiGetMemoryMappingDescriptor(pRmResource, ppMemDesc) genapiGetMemoryMappingDescriptor_DISPATCH(pRmResource, ppMemDesc)
-#define genapiControlSerialization_Prologue_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_vtable->__rmresControlSerialization_Prologue__
+#define genapiControlSerialization_Prologue_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_metadata_ptr->vtable.__rmresControlSerialization_Prologue__
 #define genapiControlSerialization_Prologue(pResource, pCallContext, pParams) genapiControlSerialization_Prologue_DISPATCH(pResource, pCallContext, pParams)
-#define genapiControlSerialization_Epilogue_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_vtable->__rmresControlSerialization_Epilogue__
+#define genapiControlSerialization_Epilogue_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_metadata_ptr->vtable.__rmresControlSerialization_Epilogue__
 #define genapiControlSerialization_Epilogue(pResource, pCallContext, pParams) genapiControlSerialization_Epilogue_DISPATCH(pResource, pCallContext, pParams)
-#define genapiControl_Prologue_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_vtable->__rmresControl_Prologue__
+#define genapiControl_Prologue_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_metadata_ptr->vtable.__rmresControl_Prologue__
 #define genapiControl_Prologue(pResource, pCallContext, pParams) genapiControl_Prologue_DISPATCH(pResource, pCallContext, pParams)
-#define genapiControl_Epilogue_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_vtable->__rmresControl_Epilogue__
+#define genapiControl_Epilogue_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_metadata_ptr->vtable.__rmresControl_Epilogue__
 #define genapiControl_Epilogue(pResource, pCallContext, pParams) genapiControl_Epilogue_DISPATCH(pResource, pCallContext, pParams)
-#define genapiCanCopy_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_vtable->__resCanCopy__
+#define genapiCanCopy_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_metadata_ptr->vtable.__resCanCopy__
 #define genapiCanCopy(pResource) genapiCanCopy_DISPATCH(pResource)
-#define genapiIsDuplicate_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_vtable->__resIsDuplicate__
+#define genapiIsDuplicate_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_metadata_ptr->vtable.__resIsDuplicate__
 #define genapiIsDuplicate(pResource, hMemory, pDuplicate) genapiIsDuplicate_DISPATCH(pResource, hMemory, pDuplicate)
-#define genapiPreDestruct_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_vtable->__resPreDestruct__
+#define genapiPreDestruct_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_metadata_ptr->vtable.__resPreDestruct__
 #define genapiPreDestruct(pResource) genapiPreDestruct_DISPATCH(pResource)
-#define genapiControlFilter_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_vtable->__resControlFilter__
+#define genapiControlFilter_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_metadata_ptr->vtable.__resControlFilter__
 #define genapiControlFilter(pResource, pCallContext, pParams) genapiControlFilter_DISPATCH(pResource, pCallContext, pParams)
-#define genapiIsPartialUnmapSupported_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_vtable->__resIsPartialUnmapSupported__
+#define genapiIsPartialUnmapSupported_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_metadata_ptr->vtable.__resIsPartialUnmapSupported__
 #define genapiIsPartialUnmapSupported(pResource) genapiIsPartialUnmapSupported_DISPATCH(pResource)
-#define genapiMapTo_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_vtable->__resMapTo__
+#define genapiMapTo_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_metadata_ptr->vtable.__resMapTo__
 #define genapiMapTo(pResource, pParams) genapiMapTo_DISPATCH(pResource, pParams)
-#define genapiUnmapFrom_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_vtable->__resUnmapFrom__
+#define genapiUnmapFrom_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_metadata_ptr->vtable.__resUnmapFrom__
 #define genapiUnmapFrom(pResource, pParams) genapiUnmapFrom_DISPATCH(pResource, pParams)
-#define genapiGetRefCount_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_vtable->__resGetRefCount__
+#define genapiGetRefCount_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_metadata_ptr->vtable.__resGetRefCount__
 #define genapiGetRefCount(pResource) genapiGetRefCount_DISPATCH(pResource)
-#define genapiAddAdditionalDependants_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_vtable->__resAddAdditionalDependants__
+#define genapiAddAdditionalDependants_FNPTR(pResource) pResource->__nvoc_base_GpuResource.__nvoc_base_RmResource.__nvoc_base_RsResource.__nvoc_metadata_ptr->vtable.__resAddAdditionalDependants__
 #define genapiAddAdditionalDependants(pClient, pResource, pReference) genapiAddAdditionalDependants_DISPATCH(pClient, pResource, pReference)
 
 // Dispatch functions
 static inline NV_STATUS genapiMap_DISPATCH(struct GenericEngineApi *pGenericEngineApi, struct CALL_CONTEXT *pCallContext, struct RS_CPU_MAP_PARAMS *pParams, struct RsCpuMapping *pCpuMapping) {
-    return pGenericEngineApi->__nvoc_vtable->__genapiMap__(pGenericEngineApi, pCallContext, pParams, pCpuMapping);
+    return pGenericEngineApi->__nvoc_metadata_ptr->vtable.__genapiMap__(pGenericEngineApi, pCallContext, pParams, pCpuMapping);
 }
 
 static inline NV_STATUS genapiGetMapAddrSpace_DISPATCH(struct GenericEngineApi *pGenericEngineApi, struct CALL_CONTEXT *pCallContext, NvU32 mapFlags, NV_ADDRESS_SPACE *pAddrSpace) {
-    return pGenericEngineApi->__nvoc_vtable->__genapiGetMapAddrSpace__(pGenericEngineApi, pCallContext, mapFlags, pAddrSpace);
+    return pGenericEngineApi->__nvoc_metadata_ptr->vtable.__genapiGetMapAddrSpace__(pGenericEngineApi, pCallContext, mapFlags, pAddrSpace);
 }
 
 static inline NV_STATUS genapiControl_DISPATCH(struct GenericEngineApi *pGenericEngineApi, struct CALL_CONTEXT *pCallContext, struct RS_RES_CONTROL_PARAMS_INTERNAL *pParams) {
-    return pGenericEngineApi->__nvoc_vtable->__genapiControl__(pGenericEngineApi, pCallContext, pParams);
-}
-
-static inline NV_STATUS genapiCtrlCmdMasterGetErrorIntrOffsetMask_DISPATCH(struct GenericEngineApi *pGenericEngineApi, NV90E6_CTRL_MASTER_GET_ERROR_INTR_OFFSET_MASK_PARAMS *pParams) {
-    return pGenericEngineApi->__genapiCtrlCmdMasterGetErrorIntrOffsetMask__(pGenericEngineApi, pParams);
-}
-
-static inline NV_STATUS genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask_DISPATCH(struct GenericEngineApi *pGenericEngineApi, NV90E6_CTRL_MASTER_GET_VIRTUAL_FUNCTION_ERROR_CONT_INTR_MASK_PARAMS *pParams) {
-    return pGenericEngineApi->__genapiCtrlCmdMasterGetVirtualFunctionErrorContIntrMask__(pGenericEngineApi, pParams);
-}
-
-static inline NV_STATUS genapiCtrlCmdBBXGetLastFlushTime_DISPATCH(struct GenericEngineApi *pGenericEngineApi, NV90E7_CTRL_BBX_GET_LAST_FLUSH_TIME_PARAMS *pParams) {
-    return pGenericEngineApi->__genapiCtrlCmdBBXGetLastFlushTime__(pGenericEngineApi, pParams);
-}
-
-static inline NV_STATUS genapiCtrlCmdBBXIsNVMFlushEnabled_DISPATCH(struct GenericEngineApi *pGenericEngineApi, NV90E7_CTRL_BBX_IS_NVM_FLUSH_ENABLED_PARAMS *pParams) {
-    return pGenericEngineApi->__genapiCtrlCmdBBXIsNVMFlushEnabled__(pGenericEngineApi, pParams);
+    return pGenericEngineApi->__nvoc_metadata_ptr->vtable.__genapiControl__(pGenericEngineApi, pCallContext, pParams);
 }
 
 static inline NV_STATUS genapiUnmap_DISPATCH(struct GenericEngineApi *pGpuResource, struct CALL_CONTEXT *pCallContext, struct RsCpuMapping *pCpuMapping) {
-    return pGpuResource->__nvoc_vtable->__genapiUnmap__(pGpuResource, pCallContext, pCpuMapping);
+    return pGpuResource->__nvoc_metadata_ptr->vtable.__genapiUnmap__(pGpuResource, pCallContext, pCpuMapping);
 }
 
 static inline NvBool genapiShareCallback_DISPATCH(struct GenericEngineApi *pGpuResource, struct RsClient *pInvokingClient, struct RsResourceRef *pParentRef, RS_SHARE_POLICY *pSharePolicy) {
-    return pGpuResource->__nvoc_vtable->__genapiShareCallback__(pGpuResource, pInvokingClient, pParentRef, pSharePolicy);
+    return pGpuResource->__nvoc_metadata_ptr->vtable.__genapiShareCallback__(pGpuResource, pInvokingClient, pParentRef, pSharePolicy);
 }
 
 static inline NV_STATUS genapiGetRegBaseOffsetAndSize_DISPATCH(struct GenericEngineApi *pGpuResource, struct OBJGPU *pGpu, NvU32 *pOffset, NvU32 *pSize) {
-    return pGpuResource->__nvoc_vtable->__genapiGetRegBaseOffsetAndSize__(pGpuResource, pGpu, pOffset, pSize);
+    return pGpuResource->__nvoc_metadata_ptr->vtable.__genapiGetRegBaseOffsetAndSize__(pGpuResource, pGpu, pOffset, pSize);
 }
 
 static inline NV_STATUS genapiInternalControlForward_DISPATCH(struct GenericEngineApi *pGpuResource, NvU32 command, void *pParams, NvU32 size) {
-    return pGpuResource->__nvoc_vtable->__genapiInternalControlForward__(pGpuResource, command, pParams, size);
+    return pGpuResource->__nvoc_metadata_ptr->vtable.__genapiInternalControlForward__(pGpuResource, command, pParams, size);
 }
 
 static inline NvHandle genapiGetInternalObjectHandle_DISPATCH(struct GenericEngineApi *pGpuResource) {
-    return pGpuResource->__nvoc_vtable->__genapiGetInternalObjectHandle__(pGpuResource);
+    return pGpuResource->__nvoc_metadata_ptr->vtable.__genapiGetInternalObjectHandle__(pGpuResource);
 }
 
 static inline NvBool genapiAccessCallback_DISPATCH(struct GenericEngineApi *pResource, struct RsClient *pInvokingClient, void *pAllocParams, RsAccessRight accessRight) {
-    return pResource->__nvoc_vtable->__genapiAccessCallback__(pResource, pInvokingClient, pAllocParams, accessRight);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiAccessCallback__(pResource, pInvokingClient, pAllocParams, accessRight);
 }
 
 static inline NV_STATUS genapiGetMemInterMapParams_DISPATCH(struct GenericEngineApi *pRmResource, RMRES_MEM_INTER_MAP_PARAMS *pParams) {
-    return pRmResource->__nvoc_vtable->__genapiGetMemInterMapParams__(pRmResource, pParams);
+    return pRmResource->__nvoc_metadata_ptr->vtable.__genapiGetMemInterMapParams__(pRmResource, pParams);
 }
 
 static inline NV_STATUS genapiCheckMemInterUnmap_DISPATCH(struct GenericEngineApi *pRmResource, NvBool bSubdeviceHandleProvided) {
-    return pRmResource->__nvoc_vtable->__genapiCheckMemInterUnmap__(pRmResource, bSubdeviceHandleProvided);
+    return pRmResource->__nvoc_metadata_ptr->vtable.__genapiCheckMemInterUnmap__(pRmResource, bSubdeviceHandleProvided);
 }
 
 static inline NV_STATUS genapiGetMemoryMappingDescriptor_DISPATCH(struct GenericEngineApi *pRmResource, struct MEMORY_DESCRIPTOR **ppMemDesc) {
-    return pRmResource->__nvoc_vtable->__genapiGetMemoryMappingDescriptor__(pRmResource, ppMemDesc);
+    return pRmResource->__nvoc_metadata_ptr->vtable.__genapiGetMemoryMappingDescriptor__(pRmResource, ppMemDesc);
 }
 
 static inline NV_STATUS genapiControlSerialization_Prologue_DISPATCH(struct GenericEngineApi *pResource, struct CALL_CONTEXT *pCallContext, struct RS_RES_CONTROL_PARAMS_INTERNAL *pParams) {
-    return pResource->__nvoc_vtable->__genapiControlSerialization_Prologue__(pResource, pCallContext, pParams);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiControlSerialization_Prologue__(pResource, pCallContext, pParams);
 }
 
 static inline void genapiControlSerialization_Epilogue_DISPATCH(struct GenericEngineApi *pResource, struct CALL_CONTEXT *pCallContext, struct RS_RES_CONTROL_PARAMS_INTERNAL *pParams) {
-    pResource->__nvoc_vtable->__genapiControlSerialization_Epilogue__(pResource, pCallContext, pParams);
+    pResource->__nvoc_metadata_ptr->vtable.__genapiControlSerialization_Epilogue__(pResource, pCallContext, pParams);
 }
 
 static inline NV_STATUS genapiControl_Prologue_DISPATCH(struct GenericEngineApi *pResource, struct CALL_CONTEXT *pCallContext, struct RS_RES_CONTROL_PARAMS_INTERNAL *pParams) {
-    return pResource->__nvoc_vtable->__genapiControl_Prologue__(pResource, pCallContext, pParams);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiControl_Prologue__(pResource, pCallContext, pParams);
 }
 
 static inline void genapiControl_Epilogue_DISPATCH(struct GenericEngineApi *pResource, struct CALL_CONTEXT *pCallContext, struct RS_RES_CONTROL_PARAMS_INTERNAL *pParams) {
-    pResource->__nvoc_vtable->__genapiControl_Epilogue__(pResource, pCallContext, pParams);
+    pResource->__nvoc_metadata_ptr->vtable.__genapiControl_Epilogue__(pResource, pCallContext, pParams);
 }
 
 static inline NvBool genapiCanCopy_DISPATCH(struct GenericEngineApi *pResource) {
-    return pResource->__nvoc_vtable->__genapiCanCopy__(pResource);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiCanCopy__(pResource);
 }
 
 static inline NV_STATUS genapiIsDuplicate_DISPATCH(struct GenericEngineApi *pResource, NvHandle hMemory, NvBool *pDuplicate) {
-    return pResource->__nvoc_vtable->__genapiIsDuplicate__(pResource, hMemory, pDuplicate);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiIsDuplicate__(pResource, hMemory, pDuplicate);
 }
 
 static inline void genapiPreDestruct_DISPATCH(struct GenericEngineApi *pResource) {
-    pResource->__nvoc_vtable->__genapiPreDestruct__(pResource);
+    pResource->__nvoc_metadata_ptr->vtable.__genapiPreDestruct__(pResource);
 }
 
 static inline NV_STATUS genapiControlFilter_DISPATCH(struct GenericEngineApi *pResource, struct CALL_CONTEXT *pCallContext, struct RS_RES_CONTROL_PARAMS_INTERNAL *pParams) {
-    return pResource->__nvoc_vtable->__genapiControlFilter__(pResource, pCallContext, pParams);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiControlFilter__(pResource, pCallContext, pParams);
 }
 
 static inline NvBool genapiIsPartialUnmapSupported_DISPATCH(struct GenericEngineApi *pResource) {
-    return pResource->__nvoc_vtable->__genapiIsPartialUnmapSupported__(pResource);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiIsPartialUnmapSupported__(pResource);
 }
 
 static inline NV_STATUS genapiMapTo_DISPATCH(struct GenericEngineApi *pResource, RS_RES_MAP_TO_PARAMS *pParams) {
-    return pResource->__nvoc_vtable->__genapiMapTo__(pResource, pParams);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiMapTo__(pResource, pParams);
 }
 
 static inline NV_STATUS genapiUnmapFrom_DISPATCH(struct GenericEngineApi *pResource, RS_RES_UNMAP_FROM_PARAMS *pParams) {
-    return pResource->__nvoc_vtable->__genapiUnmapFrom__(pResource, pParams);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiUnmapFrom__(pResource, pParams);
 }
 
 static inline NvU32 genapiGetRefCount_DISPATCH(struct GenericEngineApi *pResource) {
-    return pResource->__nvoc_vtable->__genapiGetRefCount__(pResource);
+    return pResource->__nvoc_metadata_ptr->vtable.__genapiGetRefCount__(pResource);
 }
 
 static inline void genapiAddAdditionalDependants_DISPATCH(struct RsClient *pClient, struct GenericEngineApi *pResource, RsResourceRef *pReference) {
-    pResource->__nvoc_vtable->__genapiAddAdditionalDependants__(pClient, pResource, pReference);
+    pResource->__nvoc_metadata_ptr->vtable.__genapiAddAdditionalDependants__(pClient, pResource, pReference);
 }
 
 NV_STATUS genapiMap_IMPL(struct GenericEngineApi *pGenericEngineApi, struct CALL_CONTEXT *pCallContext, struct RS_CPU_MAP_PARAMS *pParams, struct RsCpuMapping *pCpuMapping);
@@ -342,12 +371,6 @@ NV_STATUS genapiCtrlCmdBBXGetLastFlushTime_IMPL(struct GenericEngineApi *pGeneri
 
 NV_STATUS genapiCtrlCmdBBXIsNVMFlushEnabled_IMPL(struct GenericEngineApi *pGenericEngineApi, NV90E7_CTRL_BBX_IS_NVM_FLUSH_ENABLED_PARAMS *pParams);
 
-NV_STATUS genapiConstruct_IMPL(struct GenericEngineApi *arg_pGenericEngineApi, struct CALL_CONTEXT *arg_pCallContext, struct RS_RES_ALLOC_PARAMS_INTERNAL *arg_pParams);
-
-#define __nvoc_genapiConstruct(arg_pGenericEngineApi, arg_pCallContext, arg_pParams) genapiConstruct_IMPL(arg_pGenericEngineApi, arg_pCallContext, arg_pParams)
-void genapiDestruct_IMPL(struct GenericEngineApi *pGenericEngineApi);
-
-#define __nvoc_genapiDestruct(pGenericEngineApi) genapiDestruct_IMPL(pGenericEngineApi)
 #undef PRIVATE_FIELD
 
 

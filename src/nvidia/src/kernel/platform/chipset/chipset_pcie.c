@@ -347,8 +347,9 @@ objClInitPcieChipset(OBJGPU *pGpu, OBJCL *pCl)
         // Skip reading MCFG table for old SLI chipsets.
         //
 
-        if (!(pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_ACCESSIBLE) &&
-             (pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_SKIP_MCFG_READ))))
+        if (!(pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_ACCESSIBLE)       &&
+             (pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_SKIP_MCFG_READ))) &&
+             !(IS_SIM_MODS(GPU_GET_OS(pGpu))))
         {
             if (clStorePcieConfigSpaceBaseFromMcfg(pCl) == NV_OK)
             {
@@ -553,7 +554,7 @@ clCheckUpstreamLtrSupport_IMPL
     if (!pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_ACCESSIBLE))
     {
         {
-            NV_PRINTF(LEVEL_ERROR, "PCIE config space is inaccessible!\n");
+            NV_PRINTF(LEVEL_NOTICE, "PCIE config space is inaccessible!\n");
             status = NV_ERR_NOT_SUPPORTED;
             goto clCheckUpstreamLtrSupport_exit;
         }
@@ -933,7 +934,7 @@ clUpdatePcieConfig_IMPL(OBJGPU *pGpu, OBJCL *pCl)
     OBJPFM    *pPfm       = SYS_GET_PFM(pSys);
     KernelBif *pKernelBif = GPU_GET_KERNEL_BIF(pGpu);
     NvBool     bIsMultiGpu;
-    NvU32      busIntfType = kbifGetBusIntfType_HAL(pKernelBif);
+    NvU32      busIntfType = gpuGetBusIntfType_HAL(pGpu);
 
     // verify we're an PCI Express graphics card
     if (busIntfType != NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS &&
@@ -986,6 +987,7 @@ clUpdatePcieConfig_IMPL(OBJGPU *pGpu, OBJCL *pCl)
     // discovery to build the allow list for enabling PCIe atomics feature.
     //
     kbifProbePcieReqAtomicCaps_HAL(pGpu, pKernelBif);
+
     //
     // Read device atomic completer capabilities early so they can be
     // passed to GSP.
@@ -1104,7 +1106,7 @@ NV_STATUS clInitPcie_IMPL
         return NV_ERR_NOT_SUPPORTED;
     }
 
-    busIntfType = kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu));
+    busIntfType = gpuGetBusIntfType_HAL(pGpu);
 
     // verify we're an PCI Express graphics card
     if (busIntfType != NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS &&
@@ -1160,7 +1162,7 @@ objClInitGpuPortData
     if (pGpu->gpuClData.upstreamPort.addr.valid)
         return NV_TRUE;
 
-    NV_ASSERT(gpuGetDBDF(pGpu));
+    NV_ASSERT(gpuIsDBDFValid(pGpu));
 
     domain = gpuGetDomain(pGpu);
     gpuBus = gpuGetBus(pGpu);
@@ -1190,8 +1192,7 @@ objClInitGpuPortData
         //
         // For MODS debug breakpoints are always fatal and MODS is sometimes run
         // on systems where the up stream port cannot be determined
-        if ((kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu)) !=
-             NV2080_CTRL_BUS_INFO_TYPE_FPCI) &&
+        if ((gpuGetBusIntfType_HAL(pGpu) != NV2080_CTRL_BUS_INFO_TYPE_FPCI) &&
             (!pHypervisor || !pHypervisor->bDetected) &&
             !RMCFG_FEATURE_MODS_FEATURES)
         {
@@ -1570,7 +1571,7 @@ objClGpuMapEnhCfgSpace
     NV_ASSERT_OR_RETURN_VOID(!pOS->getProperty(pOS, PDB_PROP_OS_DOES_NOT_ALLOW_DIRECT_PCIE_MAPPINGS));
 
     if (!pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_ACCESSIBLE) ||
-        (pGpu->gpuCfgAddr != NULL) || (gpuGetDBDF(pGpu) == 0))
+        (pGpu->gpuCfgAddr != NULL) || !gpuIsDBDFValid(pGpu))
     {
         return;
     }
@@ -1719,6 +1720,9 @@ objClSetPortPcieEnhancedCapsOffsets
             case PCIE_CAP_ID_L1_PM_SUBSTATES:
                 pPort->PCIEL1SsCapPtr = cap_next;
                 break;
+            case PCIE_CAP_ID_ACS:
+                pPort->PCIEAcsCapPtr = cap_next;
+                break;
         }
         cap_next = REF_VAL(PCIE_CAP_HEADER_NEXT, value);
     }
@@ -1736,14 +1740,14 @@ clPcieReadPortConfigReg_IMPL
     NvU32    *value
 )
 {
-    if ((kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu)) !=
+    if ((gpuGetBusIntfType_HAL(pGpu) !=
          NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS) ||
         !pPort->addr.valid)
     {
         return NV_ERR_GENERIC;
     }
 
-    if ((offset >= CL_PCIE_BEGIN) && (offset + sizeof(NvU32) <= CL_PCIE_END))
+    if ((offset >= CL_PCIE_BEGIN) && (offset <= CL_PCIE_END))
     {
         if (pPort->PCIECapPtr)
             *value = osPciReadDword(pPort->addr.handle,
@@ -1751,11 +1755,11 @@ clPcieReadPortConfigReg_IMPL
         else
             return NV_ERR_GENERIC;
     }
-    else if ((offset >= CL_AER_BEGIN) && (offset + sizeof(NvU32) <= CL_AER_END))
+    else if ((offset >= CL_AER_BEGIN) && (offset <= CL_AER_END))
     {
         if (pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_ACCESSIBLE) && pPort->PCIEErrorCapPtr)
             *value = clPcieReadDword(pCl,
-                pPort->addr.domain,
+                                     pPort->addr.domain,
                                      pPort->addr.bus,
                                      pPort->addr.device,
                                      pPort->addr.func,
@@ -1763,7 +1767,7 @@ clPcieReadPortConfigReg_IMPL
         else
             return NV_ERR_GENERIC;
     }
-    else if ((offset >= CL_VC_BEGIN) && (offset + sizeof(NvU32) <= CL_VC_END))
+    else if ((offset >= CL_VC_BEGIN) && (offset <= CL_VC_END))
     {
         if (pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_ACCESSIBLE) && pPort->PCIEVCCapPtr)
             *value = clPcieReadDword(pCl,
@@ -1775,7 +1779,7 @@ clPcieReadPortConfigReg_IMPL
         else
             return NV_ERR_GENERIC;
     }
-    else if ((offset >= CL_L1_SS_BEGIN) && (offset + sizeof(NvU32) <= CL_L1_SS_END))
+    else if ((offset >= CL_L1_SS_BEGIN) && (offset <= CL_L1_SS_END))
     {
         if (pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_ACCESSIBLE) && pPort->PCIEL1SsCapPtr)
             *value = clPcieReadDword(pCl,
@@ -1784,6 +1788,39 @@ clPcieReadPortConfigReg_IMPL
                                      pPort->addr.device,
                                      pPort->addr.func,
                                      offset - CL_L1_SS_BEGIN + pPort->PCIEL1SsCapPtr);
+        else
+            return NV_ERR_GENERIC;
+    }
+    else if ((offset >= CL_ACS_BEGIN) && (offset <= CL_ACS_END))
+    {
+        if (pCl->getProperty(pCl, PDB_PROP_CL_PCIE_CONFIG_ACCESSIBLE) && pPort->PCIEAcsCapPtr)
+        {
+            // ACS config space registers are a mix of 16 and 32 bit registers.
+            switch (offset)
+            {
+                case CL_ACS_BEGIN:
+                case CL_ACS_EGRESS_CTL_V:
+                {
+                    *value = clPcieReadDword(pCl,
+                                             pPort->addr.domain,
+                                             pPort->addr.bus,
+                                             pPort->addr.device,
+                                             pPort->addr.func,
+                                             offset - CL_ACS_BEGIN + pPort->PCIEAcsCapPtr);
+                    break;
+                }
+                case CL_ACS_CAP:
+                case CL_ACS_CTRL:
+                {
+                    *value = (NvU32) clPcieReadWord(pCl,
+                                                    pPort->addr.domain,
+                                                    pPort->addr.bus,
+                                                    pPort->addr.device,
+                                                    pPort->addr.func,
+                                                    offset - CL_ACS_BEGIN + pPort->PCIEAcsCapPtr);
+                }
+            }
+        }
         else
             return NV_ERR_GENERIC;
     }
@@ -1809,7 +1846,7 @@ objClBR03Exists
     NvU32 gpuDomain;
     NvU16 vendor, device;
 
-    if ((kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu)) !=
+    if ((gpuGetBusIntfType_HAL(pGpu) !=
          NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS) ||
         !pGpu->gpuClData.upstreamPort.addr.valid)
     {
@@ -1848,7 +1885,7 @@ objClBR04Exists
     NvU32 gpuDomain;
     NvU16 vendor, device;
 
-    if ((kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu)) !=
+    if ((gpuGetBusIntfType_HAL(pGpu) !=
          NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS) ||
         !pGpu->gpuClData.upstreamPort.addr.valid)
     {
@@ -1894,7 +1931,7 @@ clFindBrdgUpstreamPort_IMPL
     NvU32 domain = 0;
     NvU16 vendor = 0, device = 0;
 
-    if ((kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu)) !=
+    if ((gpuGetBusIntfType_HAL(pGpu) !=
          NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS) ||
         !pGpu->gpuClData.upstreamPort.addr.valid)
     {
@@ -2647,7 +2684,7 @@ clPcieWriteRootPortConfigReg_IMPL
     NvU32   value
 )
 {
-    if ((kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu)) !=
+    if ((gpuGetBusIntfType_HAL(pGpu) !=
          NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS) ||
         !pGpu->gpuClData.rootPort.addr.valid)
     {
@@ -2943,7 +2980,7 @@ objClPcieMapEnhCfgSpace
             return pGpu->gpuClData.rootPort.vAddr;
         }
         else if ((pGpu->gpuCfgAddr != NULL) &&
-                 (gpuGetDBDF(pGpu) != 0) &&
+                 (gpuIsDBDFValid(pGpu)) &&
                  (domain == gpuGetDomain(pGpu)) &&
                  (bus == gpuGetBus(pGpu)) &&
                  (device == gpuGetDevice(pGpu)) &&
@@ -3507,7 +3544,7 @@ clPcieGetMaxCapableLinkWidth_IMPL
     // Taking care only mobile systems about system max capable link width issue
     // of bug 427155.
     //
-    if ((kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu)) ==
+    if ((gpuGetBusIntfType_HAL(pGpu) ==
          NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS) &&
         pGpu->gpuClData.rootPort.addr.valid)
     {
@@ -3801,14 +3838,11 @@ GetMcfgTableFromOS
 
             // Second call to actually get the table
             if (osGetAcpiTable(NV_ACPI_TABLE_SIGNATURE_GFCM, ppMcfgTable,
-                               *pTableSize, &retSize) == NV_OK)
-            {
-                pOS->setProperty(pOS, PDB_PROP_OS_GET_ACPI_TABLE_FROM_UEFI, NV_TRUE);
-            }
-            else
+                               *pTableSize, &retSize) != NV_OK)
             {
                 portMemFree(*ppMcfgTable);
                 *pTableSize = 0;
+                return NV_FALSE;
             }
         }
 
@@ -3986,13 +4020,12 @@ typedef struct
 /*
  * @brief Store PCI-E config space base addresses for all domain numbers
  *
- * @param[in]  pOS            OBJOS pointer
  * @param[in]  pCl            OBJCL pointer
  * @param[in]  pMcfgTable     Pointer to buffer for MCFG table
  * @param[in]  len            Length of MCFG table
  *
  */
-static NV_STATUS storePcieGetConfigSpaceBaseFromMcfgTable(OBJOS *pOS, OBJCL *pCl, NvU8 *pMcfgTable, NvU32 len)
+static NV_STATUS storePcieGetConfigSpaceBaseFromMcfgTable(OBJCL *pCl, NvU8 *pMcfgTable, NvU32 len)
 {
     MCFG_ADDRESS_ALLOCATION_STRUCTURE *pMcfgAddressAllocationStructure;
     MCFG_ADDRESS_ALLOCATION_STRUCTURE mcfgAddressAllocationStructure;
@@ -4109,7 +4142,13 @@ clStorePcieConfigSpaceBaseFromMcfg_IMPL(OBJCL *pCl)
         return NV_ERR_INVALID_DATA;
     }
 
-    if (GetMcfgTableFromOS(pCl, pOS, (void **)&pData, &len) == NV_FALSE)
+    if (GetMcfgTableFromOS(pCl, pOS, (void **)&pData, &len))
+    {
+        status = storePcieGetConfigSpaceBaseFromMcfgTable(pCl, pData, len);
+        portMemFree(pData);
+        return status;
+    }
+    else
     {
         //
         // If OS api doesn't provide MCFG table then MCFG table address
@@ -4170,21 +4209,14 @@ clStorePcieConfigSpaceBaseFromMcfg_IMPL(OBJCL *pCl)
             goto clStorePcieConfigSpaceBaseFromMcfg_exit;
         }
 
+        status = storePcieGetConfigSpaceBaseFromMcfgTable(pCl, pData, len);
     }
 
-    status = storePcieGetConfigSpaceBaseFromMcfgTable(pOS, pCl, pData, len);
-
 clStorePcieConfigSpaceBaseFromMcfg_exit:
-    if (pData)
+
+    if (pData != NULL)
     {
-        if (pOS->getProperty(pOS, PDB_PROP_OS_GET_ACPI_TABLE_FROM_UEFI))
-        {
-            portMemFree(pData);
-        }
-        else
-        {
-            osUnmapKernelSpace((void*)pData, len);
-        }
+        osUnmapKernelSpace(pData, len);
     }
 
     return status;
@@ -5336,7 +5368,7 @@ NvU16 _clPcieGetDiagnosticData(OBJGPU *pGpu, CL_PCIE_DC_DIAGNOSTIC_COLLECTION_EN
  * @brief   Retrieve diagnostic information to be used to identify the cause of GPU Lost
  *
  * @param[in]   pGpu        GPU object pointer
- * @param[in]   pBif        BIF object pointer
+ * @param[in]   pCl         CL object pointer
  * @param[out]  pBuffer     pointer to diagnostic output buffer
  * @param[in]   bufferSize  size of diagnostic output buffer
  *
@@ -5358,4 +5390,62 @@ NvU16 clPcieGetGpuLostDiagnosticData_IMPL(OBJGPU *pGpu, OBJCL *pCl, NvU8 * pBuff
     return _clPcieGetDiagnosticData(pGpu,
         gpuLostCollectionScript, NV_ARRAY_ELEMENTS(gpuLostCollectionScript),
         pBuffer, size);
+}
+
+/*!
+ * @brief Parse config space for ACS redirect configuration.
+ *
+ * @param[in]  pGpu                GPU object pointer
+ * @param[in]  pCl                 CL object pointer
+ * @param[in]  domain              DBDF domain
+ * @param[in]  bus                 DBDF bus
+ * @param[in]  device              DBDF device
+ * @param[in]  func                DBDF function
+ * @param[out] pAcsRoutingConfig  ACS routing ctrl value filtered by capability field.
+ *
+ * @returns NV_OK on success, NV_ERR_INVALID_STATE in case config space is inaccessible, NV_ERR_GENERIC if ACS is unsupported.
+ */
+NV_STATUS
+clGetPortAcsRedirectConfig_IMPL
+(
+    OBJGPU *pGpu,
+    OBJCL  *pCl,
+    NvU32   domain,
+    NvU8    bus,
+    NvU8    device,
+    NvU8    func,
+    NvU32  *pAcsRoutingConfig
+)
+{
+    PORTDATA portData = {0};
+    NvU32 acsCtrl;
+    NvU32 acsCap;
+
+    *pAcsRoutingConfig = 0;
+
+    // Initialize portData struct for the PCI node.
+    portData.addr.domain = domain;
+    portData.addr.bus    = bus;
+    portData.addr.device = device;
+    portData.addr.func   = func;
+    portData.addr.valid  = 0x1;
+    portData.addr.handle = osPciInitHandle(domain, bus, device, func, 0, 0);
+
+    // This could be faster if RM implemented caching of extended config space.
+    NV_ASSERT_OK_OR_RETURN(objClSetPortPcieEnhancedCapsOffsets(pCl, &portData));
+
+    // If ACS is not implemented by the bridge or RC, RM will return here. This is not an error.
+    if (clPcieReadPortConfigReg(pGpu, pCl, &portData, CL_ACS_CAP, &acsCap) != NV_OK)
+    {
+        return NV_OK;
+    }
+    if (clPcieReadPortConfigReg(pGpu, pCl, &portData, CL_ACS_CTRL, &acsCtrl) != NV_OK)
+    {
+        return NV_OK;
+    }
+
+    // Ctrl bits set without a corresponding capability bit are filtered.
+    *pAcsRoutingConfig = acsCtrl & acsCap;
+
+    return NV_OK;
 }

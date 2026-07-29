@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2015-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2015-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -68,19 +68,61 @@ pmaRegmapPrint(PMA_REGMAP *pMap)
     }
 }
 
-// Returns the longest string of zeros.
-static NvU32
-maxZerosGet(NvU64 bits)
-{
-    NvU32 y = 0;
+// Returns the longest string of zeros and its starting bit position
+static NvU32 maxZerosGet(NvU64 bits, NvU32* pStartPos) {
+    NvU32 maxZeros = 0;
+    NvU32 bestStartPos = 0;
+    NvU32 currentPos = 0;
+    NvU64 remainingBits = bits;
 
-    bits = ~bits;
-    while (bits != 0)
-    {
-        bits = bits & (bits << 1);
-        y++;
+    if (bits == 0) {
+        *pStartPos = 0;
+        return FRAME_TO_U64_SIZE;
     }
-    return y;
+
+    // First count leading zeros
+    NvU32 leadingZeros = portUtilCountLeadingZeros64(bits);
+    maxZeros = leadingZeros;
+    bestStartPos = FRAME_TO_U64_SIZE - leadingZeros;  // Start from MSB
+    currentPos = leadingZeros;
+    remainingBits <<= leadingZeros;
+
+    // Now look for internal sequences of zeros
+    while (currentPos < FRAME_TO_U64_SIZE) {
+        // Skip ones
+        NvU32 ones = portUtilCountTrailingZeros64(~remainingBits);
+        if (ones == FRAME_TO_U64_SIZE) {
+            // All ones, no more zeros to find
+            break;
+        }
+        currentPos += ones;
+        if (ones < FRAME_TO_U64_SIZE) {
+            remainingBits >>= ones;
+        } else {
+            break;
+        }
+
+        if (currentPos >= FRAME_TO_U64_SIZE) {
+            break;
+        }
+
+        // Count zeros
+        NvU32 zeros = portUtilCountTrailingZeros64(remainingBits);
+        if (zeros > maxZeros) {
+            maxZeros = zeros;
+            bestStartPos = currentPos;  // Start from LSB
+        }
+
+        currentPos += zeros;
+        if (zeros < FRAME_TO_U64_SIZE) {
+            remainingBits >>= zeros;
+        } else {
+            break;
+        }
+    }
+
+    *pStartPos = bestStartPos;
+    return maxZeros;
 }
 
 static NvS64
@@ -688,6 +730,8 @@ static NvS64 _scanContiguousSearchLoop
     NvU64 latestFree[PMA_BITS_PER_PAGE];
     NvU64 i;
 
+    // _scanContiguousSearchLoop can only be called for <32MB localized memory, enforced by PMA
+
     // can't allocate contiguous memory > stride. This is guaranteed by the caller, but be sure here
     if ((localStride != 0) && (numFrames > localStride))
     {
@@ -734,6 +778,48 @@ loop_begin:
         }
     }
 
+    if (localStride != 0)
+    {
+        //
+        // Find a region that is either
+        // 1. already localized or
+        // 2. completely free within the 64MB region
+        //
+        while (frameBaseIdx <= localEnd)
+        {
+            // If one bit is localized, the entire region must be localized
+            if ((pRegmap->map[MAP_IDX_LOCALIZED][PAGE_MAPIDX(frameBaseIdx)] & NVBIT64(PAGE_BITIDX(frameBaseIdx))) != 0)
+            {
+                break;
+            }
+            else
+            {
+                // check for localized availability. Do a contiguous scan of only the region of interest
+                NvU64 strideRegionStart = alignDownToMod(frameBaseIdx,       (localStride * 2), strideRegionAlignmentPadding);
+                NvU64 strideRegionEnd   =   alignUpToMod((frameBaseIdx + 1), (localStride * 2), strideRegionAlignmentPadding) - 1;
+                NvS64 frameFound = _scanContiguousSearchLoop(pRegmap, (localStride * 2), strideRegionStart, strideRegionEnd,
+                                                             frameAlignment, frameAlignmentPadding, 0, 0, 0, 0, NV_FALSE);
+
+                if (frameFound >= 0)
+                {
+                    break;
+                }
+                else
+                {
+                    // align up to the next entire stride region
+                    frameBaseIdx = alignUpToMod(frameBaseIdx + 1, (localStride * 2), strideRegionAlignmentPadding);
+
+                    // Put the address into the correct strideStart
+                    if ((((frameBaseIdx - frameAlignmentPadding) / localStride) % 2) != strideStart)
+                    {
+                        // align up to next stride
+                        frameBaseIdx = alignUpToMod((frameBaseIdx + 1), localStride, strideAlignmentPadding);
+                    }
+                }
+            }
+        }
+    }
+
     //
     // Always start a loop iteration with an updated frameBaseIdx by ensuring that latestFree is always >= frameBaseIdx
     // frameBaseIdx == latestFree[i] means that there are no observed 0s so far in the current run
@@ -752,8 +838,18 @@ loop_begin:
     }
     for (i = 0; i < PMA_BITS_PER_PAGE; i++)
     {
+        //
         // TODO, merge logic so we don't need multiple calls for unpin
-        if (i == MAP_IDX_ALLOC_UNPIN && bSearchEvictable)
+        //
+        // Persistent pages may still be evictable, so skip checking for ATTRIB_PERSISTENT here as well.
+        //
+        if (((i == MAP_IDX_ALLOC_UNPIN) || (i == MAP_IDX_PERSISTENT)) && bSearchEvictable)
+        {
+            continue;
+        }
+
+        // ignore checking localized for localized request
+        if (i == MAP_IDX_LOCALIZED && (localStride != 0))
         {
             continue;
         }
@@ -852,8 +948,12 @@ loop_begin:
     }
     for (i = 0; i < PMA_BITS_PER_PAGE; i++)
     {
+        //
         // TODO, merge logic so we don't need multiple calls for unpin
-        if (i == MAP_IDX_ALLOC_UNPIN && bSearchEvictable)
+        //
+        // Persistent pages may still be evictable, so skip checking for ATTRIB_PERSISTENT here as well.
+        //
+        if (((i == MAP_IDX_ALLOC_UNPIN) || (i == MAP_IDX_PERSISTENT)) && bSearchEvictable)
         {
             continue;
         }
@@ -979,6 +1079,48 @@ loop_begin:
         }
     }
 
+    if (localStride != 0)
+    {
+        //
+        // Find a region that is either
+        // 1. already localized or
+        // 2. completely free within the 64MB region
+        //
+        while (frameBaseIdx <= localEnd)
+        {
+            // If one bit is localized, the entire region must be localized
+            if ((pRegmap->map[MAP_IDX_LOCALIZED][PAGE_MAPIDX(frameBaseIdx)] & NVBIT64(PAGE_BITIDX(frameBaseIdx))) != 0)
+            {
+                break;
+            }
+            else
+            {
+                // check for localized availability. Do a contiguous scan of only the region of interest
+                NvU64 strideRegionStart = alignDownToMod(frameBaseIdx,       (localStride * 2), strideRegionAlignmentPadding);
+                NvU64 strideRegionEnd   =   alignUpToMod((frameBaseIdx + 1), (localStride * 2), strideRegionAlignmentPadding) - 1;
+                NvS64 frameFound = _scanContiguousSearchLoop(pRegmap, (localStride * 2), strideRegionStart, strideRegionEnd,
+                                                             frameAlignment, frameAlignmentPadding, 0, 0, 0, 0, NV_FALSE);
+
+                if (frameFound >= 0)
+                {
+                    break;
+                }
+                else
+                {
+                    // align up to the next entire stride region
+                    frameBaseIdx = alignUpToMod(frameBaseIdx + 1, (localStride * 2), strideRegionAlignmentPadding);
+
+                    // Put the address into the correct strideStart
+                    if ((((frameBaseIdx - frameAlignmentPadding) / localStride) % 2) != strideStart)
+                    {
+                        // align up to next stride
+                        frameBaseIdx = alignUpToMod((frameBaseIdx + 1), localStride, strideAlignmentPadding);
+                    }
+                }
+            }
+        }
+    }
+
     //
     // Always start a loop iteration with an updated frameBaseIdx by ensuring that latestFree is always >= frameBaseIdx
     // frameBaseIdx == latestFree[i] means that there are no observed 0s so far in the current run
@@ -1003,9 +1145,18 @@ loop_begin:
 
     for (i = 0; i < PMA_BITS_PER_PAGE; i++)
     {
+        // ignore checking localized for localized request
+        if (i == MAP_IDX_LOCALIZED && (localStride != 0))
+        {
+            continue;
+        }
 
+        //
         // If array is not already full of evictable and free pages, go to evictable loop
-        if ((i != MAP_IDX_ALLOC_UNPIN) || (curEvictPage <= totalFound))
+        //
+        // Persistent pages may still be evictable, so go to evictable loop for ATTRIB_PERSISTENT.
+        //
+        if (((i != MAP_IDX_ALLOC_UNPIN) && (i != MAP_IDX_PERSISTENT)) || (curEvictPage <= totalFound))
         {
             while (latestFree[i] < (frameBaseIdx + framesPerPage))
             {
@@ -1158,8 +1309,12 @@ loop_begin:
 
     for (i = 0; i < PMA_BITS_PER_PAGE; i++)
     {
+        //
         // If array is not already full of evictable and free pages, go to evictable loop
-        if ((i != MAP_IDX_ALLOC_UNPIN) || (curEvictPage <= totalFound))
+        //
+        // Persistent pages may still be evictable, so go to evictable loop for ATTRIB_PERSISTENT.
+        //
+        if (((i != MAP_IDX_ALLOC_UNPIN) && (i != MAP_IDX_PERSISTENT)) || (curEvictPage <= totalFound))
         {
             while (latestFree[i] > (frameBaseIdx - framesPerPage))
             {
@@ -1547,7 +1702,8 @@ void
 pmaRegmapGetLargestFree
 (
     void  *pMap,
-    NvU64 *pLargestFree
+    NvU64 *pLargestFree,
+    NvU64 *pLargestFreeOffset
 )
 {
     NvU64 mapIndex       = 0;
@@ -1556,12 +1712,15 @@ pmaRegmapGetLargestFree
     NvU32 regionMaxZeros = 0;
     NvU64 mapMaxIndex;
     PMA_REGMAP *pRegmap = (PMA_REGMAP *)pMap;
+    //global bit offset for the start of the max zero chunk
+    NvU64 regionMaxZeroStartingOffset = 0;
 
     mapMaxIndex = PAGE_MAPIDX(pRegmap->totalFrames - 1);
 
     while (mapIndex <= mapMaxIndex)
     {
         NvU64 bitmap = pRegmap->map[MAP_IDX_ALLOC_UNPIN][mapIndex] | pRegmap->map[MAP_IDX_ALLOC_PIN][mapIndex];
+        NvU32 startingPos;
 
         // If the last map[] is only partially used, mask the valid bits
         if (mapIndex == mapMaxIndex && (PAGE_BITIDX(pRegmap->totalFrames) != 0))
@@ -1569,23 +1728,49 @@ pmaRegmapGetLargestFree
             bitmap |= (~0ULL) << PAGE_BITIDX(pRegmap->totalFrames);
         }
 
-        if (maxZerosGet(bitmap) == FRAME_TO_U64_SIZE)
+        if (maxZerosGet(bitmap, &startingPos) == FRAME_TO_U64_SIZE)
         {
             mapTrailZeros += FRAME_TO_U64_SIZE;
         }
         else
         {
+            //max zeros found in current iteration
+            NvU32 currMaxZeros;
+            //indicates if the max zero chunk is in the current bitmap
+            NvBool bMaxInCurrBitmap;
+
             mapTrailZeros += portUtilCountTrailingZeros64(bitmap);
-            mapMaxZeros = maxZerosGet(bitmap);
-            regionMaxZeros = NV_MAX(regionMaxZeros,
-                                    NV_MAX(mapMaxZeros, mapTrailZeros));
+            mapMaxZeros = maxZerosGet(bitmap, &startingPos);
+            currMaxZeros = NV_MAX(mapMaxZeros, mapTrailZeros);
+            bMaxInCurrBitmap = (mapMaxZeros >= mapTrailZeros) ? NV_TRUE : NV_FALSE;
+
+            //new region max found
+            if (currMaxZeros > regionMaxZeros)
+            {
+                regionMaxZeros = currMaxZeros;
+                if (bMaxInCurrBitmap)
+                {
+                    regionMaxZeroStartingOffset = mapIndex * FRAME_TO_U64_SIZE + startingPos;
+                }
+                else
+                {
+                    regionMaxZeroStartingOffset =
+                        mapIndex * FRAME_TO_U64_SIZE - regionMaxZeros + portUtilCountTrailingZeros64(bitmap);
+                }
+            }
             mapTrailZeros = portUtilCountLeadingZeros64(bitmap);
         }
 
         mapIndex++;
     }
-    regionMaxZeros = NV_MAX(regionMaxZeros, mapTrailZeros);
+    //new region max found
+    if (regionMaxZeros < mapTrailZeros)
+    {
+        regionMaxZeros = mapTrailZeros;
+        regionMaxZeroStartingOffset = mapIndex * FRAME_TO_U64_SIZE - regionMaxZeros;
+    }
     *pLargestFree = ((NvU64) regionMaxZeros) << PMA_PAGE_SHIFT;
+    *pLargestFreeOffset = ((NvU64) regionMaxZeroStartingOffset) << PMA_PAGE_SHIFT;
 }
 
 NvU64 pmaRegmapGetEvictingFrames(void *pMap)

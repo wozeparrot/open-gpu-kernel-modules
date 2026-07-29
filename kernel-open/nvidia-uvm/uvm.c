@@ -1,5 +1,5 @@
 /*******************************************************************************
-    Copyright (c) 2015-2024 NVIDIA Corporation
+    Copyright (c) 2015-2025 NVIDIA Corporation
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to
@@ -33,10 +33,12 @@
 #include "uvm_va_block.h"
 #include "uvm_tools.h"
 #include "uvm_common.h"
+#include "uvm_fd_type.h"
 #include "uvm_linux_ioctl.h"
 #include "uvm_hmm.h"
 #include "uvm_mem.h"
 #include "uvm_kvmalloc.h"
+#include "uvm_test_file.h"
 
 #define NVIDIA_UVM_DEVICE_NAME          "nvidia-uvm"
 
@@ -49,55 +51,9 @@ bool uvm_file_is_nvidia_uvm(struct file *filp)
     return (filp != NULL) && (filp->f_op == &uvm_fops);
 }
 
-uvm_fd_type_t uvm_fd_type(struct file *filp, void **ptr_val)
+bool uvm_file_is_nvidia_uvm_va_space(struct file *filp)
 {
-    unsigned long uptr;
-    uvm_fd_type_t type;
-    void *ptr;
-
-    UVM_ASSERT(uvm_file_is_nvidia_uvm(filp));
-
-    uptr = atomic_long_read_acquire((atomic_long_t *) (&filp->private_data));
-    type = (uvm_fd_type_t)(uptr & UVM_FD_TYPE_MASK);
-    ptr = (void *)(uptr & ~UVM_FD_TYPE_MASK);
-    BUILD_BUG_ON(UVM_FD_COUNT > UVM_FD_TYPE_MASK + 1);
-
-    switch (type) {
-        case UVM_FD_UNINITIALIZED:
-        case UVM_FD_INITIALIZING:
-            UVM_ASSERT(!ptr);
-            break;
-
-        case UVM_FD_VA_SPACE:
-            UVM_ASSERT(ptr);
-            BUILD_BUG_ON(__alignof__(uvm_va_space_t) < (1UL << UVM_FD_TYPE_BITS));
-            break;
-
-        case UVM_FD_MM:
-            UVM_ASSERT(ptr);
-            BUILD_BUG_ON(__alignof__(struct file) < (1UL << UVM_FD_TYPE_BITS));
-            break;
-
-        default:
-            UVM_ASSERT(0);
-    }
-
-    if (ptr_val)
-        *ptr_val = ptr;
-
-    return type;
-}
-
-void *uvm_fd_get_type(struct file *filp, uvm_fd_type_t type)
-{
-    void *ptr;
-
-    UVM_ASSERT(uvm_file_is_nvidia_uvm(filp));
-
-    if (uvm_fd_type(filp, &ptr) == type)
-        return ptr;
-    else
-        return NULL;
+    return uvm_file_is_nvidia_uvm(filp) && uvm_fd_type(filp, NULL) == UVM_FD_VA_SPACE;
 }
 
 static NV_STATUS uvm_api_mm_initialize(UVM_MM_INITIALIZE_PARAMS *params, struct file *filp)
@@ -105,7 +61,6 @@ static NV_STATUS uvm_api_mm_initialize(UVM_MM_INITIALIZE_PARAMS *params, struct 
     uvm_va_space_t *va_space;
     uvm_va_space_mm_t *va_space_mm;
     struct file *uvm_file;
-    uvm_fd_type_t old_fd_type;
     struct mm_struct *mm;
     NV_STATUS status;
 
@@ -127,14 +82,9 @@ static NV_STATUS uvm_api_mm_initialize(UVM_MM_INITIALIZE_PARAMS *params, struct 
         goto err;
     }
 
-    old_fd_type = atomic_long_cmpxchg((atomic_long_t *)&filp->private_data,
-                                      UVM_FD_UNINITIALIZED,
-                                      UVM_FD_INITIALIZING);
-    old_fd_type &= UVM_FD_TYPE_MASK;
-    if (old_fd_type != UVM_FD_UNINITIALIZED) {
-        status = NV_ERR_IN_USE;
+    status = uvm_fd_type_init(filp);
+    if (status != NV_OK)
         goto err;
-    }
 
     va_space_mm = &va_space->va_space_mm;
     uvm_spin_lock(&va_space_mm->lock);
@@ -173,13 +123,13 @@ static NV_STATUS uvm_api_mm_initialize(UVM_MM_INITIALIZE_PARAMS *params, struct 
             break;
     }
     uvm_spin_unlock(&va_space_mm->lock);
-    atomic_long_set_release((atomic_long_t *)&filp->private_data, (long)uvm_file | UVM_FD_MM);
+    uvm_fd_type_set(filp, UVM_FD_MM, uvm_file);
 
     return NV_OK;
 
 err_release_unlock:
     uvm_spin_unlock(&va_space_mm->lock);
-    atomic_long_set_release((atomic_long_t *)&filp->private_data, UVM_FD_UNINITIALIZED);
+    uvm_fd_type_set(filp, UVM_FD_UNINITIALIZED, NULL);
 
 err:
     if (uvm_file)
@@ -249,44 +199,10 @@ static void uvm_release_deferred(void *data)
     uvm_up_read(&g_uvm_global.pm.lock);
 }
 
-static void uvm_mm_release(struct file *filp, struct file *uvm_file)
+static void uvm_release_va_space(struct file *filp, uvm_va_space_t *va_space)
 {
-    uvm_va_space_t *va_space = uvm_va_space_get(uvm_file);
-    uvm_va_space_mm_t *va_space_mm = &va_space->va_space_mm;
-    struct mm_struct *mm = va_space_mm->mm;
-
-    if (uvm_va_space_mm_enabled(va_space)) {
-        uvm_va_space_mm_unregister(va_space);
-
-        if (uvm_va_space_mm_enabled(va_space))
-            uvm_mmput(mm);
-
-        va_space_mm->mm = NULL;
-        fput(uvm_file);
-    }
-}
-
-static int uvm_release(struct inode *inode, struct file *filp)
-{
-    void *ptr;
-    uvm_va_space_t *va_space;
-    uvm_fd_type_t fd_type;
     int ret;
 
-    fd_type = uvm_fd_type(filp, &ptr);
-    UVM_ASSERT(fd_type != UVM_FD_INITIALIZING);
-    if (fd_type == UVM_FD_UNINITIALIZED) {
-        uvm_kvfree(filp->f_mapping);
-        return 0;
-    }
-    else if (fd_type == UVM_FD_MM) {
-        uvm_kvfree(filp->f_mapping);
-        uvm_mm_release(filp, (struct file *)ptr);
-        return 0;
-    }
-
-    UVM_ASSERT(fd_type == UVM_FD_VA_SPACE);
-    va_space = (uvm_va_space_t *)ptr;
     filp->private_data = NULL;
     filp->f_mapping = NULL;
 
@@ -309,6 +225,52 @@ static int uvm_release(struct inode *inode, struct file *filp)
         nv_kthread_q_item_init(&va_space->deferred_release_q_item, uvm_release_deferred, va_space);
         ret = nv_kthread_q_schedule_q_item(&g_uvm_global.deferred_release_q, &va_space->deferred_release_q_item);
         UVM_ASSERT(ret != 0);
+    }
+}
+
+static void uvm_release_mm(struct file *filp, struct file *uvm_file)
+{
+    uvm_va_space_t *va_space = uvm_va_space_get(uvm_file);
+    uvm_va_space_mm_t *va_space_mm = &va_space->va_space_mm;
+    struct mm_struct *mm = va_space_mm->mm;
+
+    uvm_kvfree(filp->f_mapping);
+
+    if (uvm_va_space_mm_enabled(va_space)) {
+        uvm_va_space_mm_unregister(va_space);
+
+        if (uvm_va_space_mm_enabled(va_space))
+            uvm_mmput(mm);
+
+        va_space_mm->mm = NULL;
+        fput(uvm_file);
+    }
+}
+
+static int uvm_release(struct inode *inode, struct file *filp)
+{
+    void *ptr;
+    uvm_fd_type_t fd_type = uvm_fd_type(filp, &ptr);
+
+    switch (fd_type) {
+        case UVM_FD_UNINITIALIZED:
+            uvm_kvfree(filp->f_mapping);
+            break;
+
+        case UVM_FD_VA_SPACE:
+            uvm_release_va_space(filp, (uvm_va_space_t *)ptr);
+            break;
+
+        case UVM_FD_MM:
+            uvm_release_mm(filp, (struct file *)ptr);
+            break;
+
+        case UVM_FD_TEST:
+            uvm_test_file_release(filp, (uvm_test_file_t *)ptr);
+            break;
+
+        default:
+            UVM_ASSERT_MSG(0, "Unexpected fd type: %d\n", fd_type);
     }
 
     return 0;
@@ -360,41 +322,23 @@ static void uvm_destroy_vma_semaphore_pool(struct vm_area_struct *vma)
     uvm_mem_unmap_cpu_user(semaphore_pool_range->mem);
 }
 
-// If a fault handler is not set, paths like handle_pte_fault in older kernels
-// assume the memory is anonymous. That would make debugging this failure harder
-// so we force it to fail instead.
-static vm_fault_t uvm_vm_fault_sigbus(struct vm_area_struct *vma, struct vm_fault *vmf)
+// The kernel will also SIGBUS faults to vmas with valid ops but no fault
+// handler, but it didn't always do that. Make it explicit so we don't rely on
+// the kernel's implementation.
+static vm_fault_t uvm_vm_fault_sigbus(struct vm_fault *vmf)
 {
-    UVM_DBG_PRINT_RL("Fault to address 0x%lx in disabled vma\n", nv_page_fault_va(vmf));
+    UVM_DBG_PRINT_RL("Fault to address 0x%lx in disabled vma\n", vmf->address);
     return VM_FAULT_SIGBUS;
 }
 
-static vm_fault_t uvm_vm_fault_sigbus_entry(struct vm_area_struct *vma, struct vm_fault *vmf)
+static vm_fault_t uvm_vm_fault_sigbus_entry(struct vm_fault *vmf)
 {
-    UVM_ENTRY_RET(uvm_vm_fault_sigbus(vma, vmf));
-}
-
-static vm_fault_t uvm_vm_fault_sigbus_wrapper(struct vm_fault *vmf)
-{
-#if defined(NV_VM_OPS_FAULT_REMOVED_VMA_ARG)
-    return uvm_vm_fault_sigbus(vmf->vma, vmf);
-#else
-    return uvm_vm_fault_sigbus(NULL, vmf);
-#endif
-}
-
-static vm_fault_t uvm_vm_fault_sigbus_wrapper_entry(struct vm_fault *vmf)
-{
-    UVM_ENTRY_RET(uvm_vm_fault_sigbus_wrapper(vmf));
+    UVM_ENTRY_RET(uvm_vm_fault_sigbus(vmf));
 }
 
 static struct vm_operations_struct uvm_vm_ops_disabled =
 {
-#if defined(NV_VM_OPS_FAULT_REMOVED_VMA_ARG)
-    .fault = uvm_vm_fault_sigbus_wrapper_entry
-#else
-    .fault = uvm_vm_fault_sigbus_entry
-#endif
+    .fault = uvm_vm_fault_sigbus_entry,
 };
 
 static void uvm_disable_vma(struct vm_area_struct *vma)
@@ -611,44 +555,23 @@ static void uvm_vm_close_managed_entry(struct vm_area_struct *vma)
     UVM_ENTRY_VOID(uvm_vm_close_managed(vma));
 }
 
-static vm_fault_t uvm_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+static vm_fault_t uvm_vm_fault(struct vm_fault *vmf)
 {
-    uvm_va_space_t *va_space = uvm_va_space_get(vma->vm_file);
-
-    return uvm_va_space_cpu_fault_managed(va_space, vma, vmf);
+    uvm_va_space_t *va_space = uvm_va_space_get(vmf->vma->vm_file);
+    return uvm_va_space_cpu_fault_managed(va_space, vmf);
 }
 
-static vm_fault_t uvm_vm_fault_entry(struct vm_area_struct *vma, struct vm_fault *vmf)
+static vm_fault_t uvm_vm_fault_entry(struct vm_fault *vmf)
 {
-    UVM_ENTRY_RET(uvm_vm_fault(vma, vmf));
-}
-
-static vm_fault_t uvm_vm_fault_wrapper(struct vm_fault *vmf)
-{
-#if defined(NV_VM_OPS_FAULT_REMOVED_VMA_ARG)
-    return uvm_vm_fault(vmf->vma, vmf);
-#else
-    return uvm_vm_fault(NULL, vmf);
-#endif
-}
-
-static vm_fault_t uvm_vm_fault_wrapper_entry(struct vm_fault *vmf)
-{
-    UVM_ENTRY_RET(uvm_vm_fault_wrapper(vmf));
+    UVM_ENTRY_RET(uvm_vm_fault(vmf));
 }
 
 static struct vm_operations_struct uvm_vm_ops_managed =
 {
     .open         = uvm_vm_open_managed_entry,
     .close        = uvm_vm_close_managed_entry,
-
-#if defined(NV_VM_OPS_FAULT_REMOVED_VMA_ARG)
-    .fault        = uvm_vm_fault_wrapper_entry,
-    .page_mkwrite = uvm_vm_fault_wrapper_entry,
-#else
     .fault        = uvm_vm_fault_entry,
     .page_mkwrite = uvm_vm_fault_entry,
-#endif
 };
 
 // vm operations on semaphore pool allocations only control CPU mappings. Unmapping GPUs,
@@ -744,12 +667,7 @@ static struct vm_operations_struct uvm_vm_ops_semaphore_pool =
 {
     .open         = uvm_vm_open_semaphore_pool_entry,
     .close        = uvm_vm_close_semaphore_pool_entry,
-
-#if defined(NV_VM_OPS_FAULT_REMOVED_VMA_ARG)
-    .fault        = uvm_vm_fault_sigbus_wrapper_entry,
-#else
     .fault        = uvm_vm_fault_sigbus_entry,
-#endif
 };
 
 static void uvm_vm_open_device_p2p(struct vm_area_struct *vma)
@@ -791,7 +709,7 @@ static void uvm_vm_open_device_p2p(struct vm_area_struct *vma)
         origin_vma->vm_private_data = NULL;
         origin_vma->vm_ops = &uvm_vm_ops_disabled;
         vma->vm_ops = &uvm_vm_ops_disabled;
-        unmap_mapping_range(va_space->mapping, va_range->node.start, va_range->node.end - va_range->node.start + 1, 1);
+        unmap_mapping_range(va_space->mapping, va_range->node.start, uvm_va_range_size(va_range), 1);
     }
 
     uvm_va_space_up_write(va_space);
@@ -819,16 +737,28 @@ static struct vm_operations_struct uvm_vm_ops_device_p2p =
 {
     .open         = uvm_vm_open_device_p2p_entry,
     .close        = uvm_vm_close_device_p2p_entry,
-
-#if defined(NV_VM_OPS_FAULT_REMOVED_VMA_ARG)
-    .fault        = uvm_vm_fault_sigbus_wrapper_entry,
-#else
     .fault        = uvm_vm_fault_sigbus_entry,
-#endif
 };
+
+static bool va_range_type_expects_mmap(uvm_va_range_type_t type)
+{
+    switch (type) {
+        case UVM_VA_RANGE_TYPE_SEMAPHORE_POOL:
+        case UVM_VA_RANGE_TYPE_DEVICE_P2P:
+            return true;
+
+        // Although UVM_VA_RANGE_TYPE_MANAGED does support mmap, it doesn't
+        // expect mmap to be called on a pre-existing range. mmap itself creates
+        // the managed va range.
+
+        default:
+            return false;
+    }
+}
 
 static int uvm_mmap(struct file *filp, struct vm_area_struct *vma)
 {
+    void *fd_type_ptr;
     uvm_va_space_t *va_space;
     NV_STATUS status = uvm_global_get_status();
     int ret = 0;
@@ -837,9 +767,17 @@ static int uvm_mmap(struct file *filp, struct vm_area_struct *vma)
     if (status != NV_OK)
         return -nv_status_to_errno(status);
 
-    va_space = uvm_fd_va_space(filp);
-    if (!va_space)
-        return -EBADFD;
+    switch (uvm_fd_type(filp, &fd_type_ptr)) {
+        case UVM_FD_VA_SPACE:
+            va_space = (uvm_va_space_t *)fd_type_ptr;
+            break;
+
+        case UVM_FD_TEST:
+            return uvm_test_file_mmap((uvm_test_file_t *)fd_type_ptr, vma);
+
+        default:
+            return -EBADFD;
+    }
 
     // When the VA space is associated with an mm, all vmas under the VA space
     // must come from that mm.
@@ -920,28 +858,38 @@ static int uvm_mmap(struct file *filp, struct vm_area_struct *vma)
     status = uvm_va_range_create_mmap(va_space, current->mm, vma->vm_private_data, NULL);
 
     if (status == NV_ERR_UVM_ADDRESS_IN_USE) {
-        uvm_va_range_semaphore_pool_t *semaphore_pool_range;
-        uvm_va_range_device_p2p_t *device_p2p_range;
-        // If the mmap is for a semaphore pool, the VA range will have been
-        // allocated by a previous ioctl, and the mmap just creates the CPU
-        // mapping.
-        semaphore_pool_range = uvm_va_range_semaphore_pool_find(va_space, vma->vm_start);
-        device_p2p_range = uvm_va_range_device_p2p_find(va_space, vma->vm_start);
-        if (semaphore_pool_range && semaphore_pool_range->va_range.node.start == vma->vm_start &&
-                semaphore_pool_range->va_range.node.end + 1 == vma->vm_end) {
+        uvm_va_range_t *existing_range = uvm_va_range_find(va_space, vma->vm_start);
+
+        // Does the existing range exactly match the vma and expects mmap?
+        if (existing_range &&
+            existing_range->node.start == vma->vm_start &&
+            existing_range->node.end + 1 == vma->vm_end &&
+            va_range_type_expects_mmap(existing_range->type)) {
+
+            // We speculatively initialized the managed vma before checking for
+            // collisions because we expect successful insertion to be the
+            // common case. Undo that.
             uvm_vma_wrapper_destroy(vma->vm_private_data);
             vma_wrapper_allocated = false;
             vma->vm_private_data = vma;
-            vma->vm_ops = &uvm_vm_ops_semaphore_pool;
-            status = uvm_mem_map_cpu_user(semaphore_pool_range->mem, semaphore_pool_range->va_range.va_space, vma);
-        }
-        else if (device_p2p_range && device_p2p_range->va_range.node.start == vma->vm_start &&
-                 device_p2p_range->va_range.node.end + 1 == vma->vm_end) {
-            uvm_vma_wrapper_destroy(vma->vm_private_data);
-            vma_wrapper_allocated = false;
-            vma->vm_private_data = vma;
-            vma->vm_ops = &uvm_vm_ops_device_p2p;
-            status = uvm_va_range_device_p2p_map_cpu(va_space, vma, device_p2p_range);
+
+            switch (existing_range->type) {
+                case UVM_VA_RANGE_TYPE_SEMAPHORE_POOL:
+                    vma->vm_ops = &uvm_vm_ops_semaphore_pool;
+                    status = uvm_mem_map_cpu_user(uvm_va_range_to_semaphore_pool(existing_range)->mem, va_space, vma);
+                    break;
+
+                case UVM_VA_RANGE_TYPE_DEVICE_P2P:
+                    vma->vm_ops = &uvm_vm_ops_device_p2p;
+                    status = uvm_va_range_device_p2p_map_cpu(va_space,
+                                                             vma,
+                                                             uvm_va_range_to_device_p2p(existing_range));
+                    break;
+
+                default:
+                    UVM_ASSERT(0);
+                    break;
+            }
         }
     }
 
@@ -999,33 +947,40 @@ static NV_STATUS uvm_api_initialize(UVM_INITIALIZE_PARAMS *params, struct file *
     // attempt to be made. This is safe because other threads will have only had
     // a chance to observe UVM_FD_INITIALIZING and not UVM_FD_VA_SPACE in this
     // case.
-    old_fd_type = atomic_long_cmpxchg((atomic_long_t *)&filp->private_data,
-                                      UVM_FD_UNINITIALIZED,
-                                      UVM_FD_INITIALIZING);
-    old_fd_type &= UVM_FD_TYPE_MASK;
-    if (old_fd_type == UVM_FD_UNINITIALIZED) {
-        status = uvm_va_space_create(filp->f_mapping, &va_space, params->flags);
-        if (status != NV_OK) {
-            atomic_long_set_release((atomic_long_t *)&filp->private_data, UVM_FD_UNINITIALIZED);
-            return status;
-        }
+    old_fd_type = uvm_fd_type_init_cas(filp);
+    switch (old_fd_type) {
+        case UVM_FD_UNINITIALIZED:
+            status = uvm_va_space_create(filp->f_mapping, &va_space, params->flags);
+            if (status != NV_OK) {
+                uvm_fd_type_set(filp, UVM_FD_UNINITIALIZED, NULL);
+                return status;
+            }
 
-        atomic_long_set_release((atomic_long_t *)&filp->private_data, (long)va_space | UVM_FD_VA_SPACE);
-    }
-    else if (old_fd_type == UVM_FD_VA_SPACE) {
-        va_space = uvm_va_space_get(filp);
+            uvm_fd_type_set(filp, UVM_FD_VA_SPACE, va_space);
+            break;
 
-        if (params->flags != va_space->initialization_flags)
+        case UVM_FD_VA_SPACE:
+            va_space = uvm_va_space_get(filp);
+            if (params->flags != va_space->initialization_flags)
+                status = NV_ERR_INVALID_ARGUMENT;
+            else
+                status = NV_OK;
+
+            break;
+
+        case UVM_FD_MM:
+        case UVM_FD_TEST:
             status = NV_ERR_INVALID_ARGUMENT;
-        else
-            status = NV_OK;
-    }
-    else if (old_fd_type == UVM_FD_MM) {
-        status = NV_ERR_INVALID_ARGUMENT;
-    }
-    else {
-        UVM_ASSERT(old_fd_type == UVM_FD_INITIALIZING);
-        status = NV_ERR_BUSY_RETRY;
+            break;
+
+        case UVM_FD_INITIALIZING:
+            status = NV_ERR_BUSY_RETRY;
+            break;
+
+        default:
+            UVM_ASSERT(0);
+            status = NV_ERR_INVALID_STATE; // Quiet compiler warnings
+            break;
     }
 
     return status;
@@ -1061,6 +1016,7 @@ static long uvm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         UVM_ROUTE_CMD_ALLOC_INIT_CHECK(UVM_MAP_EXTERNAL_ALLOCATION,        uvm_api_map_external_allocation);
         UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_MAP_EXTERNAL_SPARSE,            uvm_api_map_external_sparse);
         UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_FREE,                           uvm_api_free);
+        UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_DISCARD,                        uvm_api_discard);
         UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_PREVENT_MIGRATION_RANGE_GROUPS, uvm_api_prevent_migration_range_groups);
         UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_ALLOW_MIGRATION_RANGE_GROUPS,   uvm_api_allow_migration_range_groups);
         UVM_ROUTE_CMD_STACK_INIT_CHECK(UVM_SET_PREFERRED_LOCATION,         uvm_api_set_preferred_location);
@@ -1276,3 +1232,4 @@ module_exit(uvm_exit_entry);
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_INFO(supported, "external");
 MODULE_VERSION(NV_VERSION_STRING);
+MODULE_DESCRIPTION("NVIDIA Unified Virtual Memory kernel module");

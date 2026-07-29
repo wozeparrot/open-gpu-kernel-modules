@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -90,6 +90,7 @@ rmclientConstruct_IMPL
     pClient->pSecurityToken  = NULL;
     pClient->pOSInfo         = pSecInfo->clientOSInfo;
     pClient->imexChannel     = -1;
+    pClient->clientGfid      = GPU_GFID_PF;
 
     pClient->cachedPrivilege = pSecInfo->privLevel;
 
@@ -219,6 +220,8 @@ rmclientConstruct_IMPL
     if (status == NV_OK && pParams->pAllocParams != NULL)
         *(NvHandle*)(pParams->pAllocParams) = pParams->hClient;
 
+    eventSystemInitEventQueue(&pClient->CliSysEventInfo.eventQueue);
+
     NV_PRINTF(LEVEL_INFO, "New RM Client: hClient=0x%08x (%c), ProcID=%u, name='%s'\n",
         pRsClient->hClient, (pRsClient->type == CLIENT_TYPE_USER) ? 'U' : 'K', pClient->ProcID, pClient->name);
 
@@ -259,6 +262,8 @@ rmclientDestruct_IMPL
     CliUnregisterFromThirdPartyP2P(pClient);
 
     osPutPidInfo(pClient->pOsPidInfo);
+
+    eventSystemClearEventQueue(&pClient->CliSysEventInfo.eventQueue);
 
     // Updating the client list just before client handle unregister //
     // in case child free functions need to iterate over all clients //
@@ -317,12 +322,14 @@ rmclientInterMap_IMPL
     // Use virtual MapTo to perform the class-specific mapping to pMapperRef
     portMemSet(&mapToParams, 0, sizeof(mapToParams));
 
-    mapToParams.pMemoryRef = pMappableRef;
-    mapToParams.offset     = pParams->offset;
-    mapToParams.length     = pParams->length;
-    mapToParams.flags      = pParams->flags;
-    mapToParams.pDmaOffset = &pParams->dmaOffset;
-    mapToParams.ppMemDesc = (MEMORY_DESCRIPTOR**)&pParams->pMemDesc;
+    mapToParams.pMemoryRef   = pMappableRef;
+    mapToParams.offset       = pParams->offset;
+    mapToParams.length       = pParams->length;
+    mapToParams.flags        = pParams->flags;
+    mapToParams.flags2       = pParams->flags2;
+    mapToParams.kindOverride = pParams->kindOverride;
+    mapToParams.pDmaOffset   = &pParams->dmaOffset;
+    mapToParams.ppMemDesc    = (MEMORY_DESCRIPTOR**)&pParams->pMemDesc;
 
     mapToParams.pGpu             = pPrivate->pGpu;
     mapToParams.pSrcGpu          = pPrivate->pSrcGpu;

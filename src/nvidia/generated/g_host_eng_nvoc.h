@@ -1,20 +1,22 @@
 
 #ifndef _G_HOST_ENG_NVOC_H_
 #define _G_HOST_ENG_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2013-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2013-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -66,24 +68,39 @@ extern "C" {
 #endif
 
 
-// Metadata including vtable
+// Metadata with per-class RTTI and vtable
+struct NVOC_METADATA__OBJHOSTENG;
 struct NVOC_VTABLE__OBJHOSTENG;
 
 
 struct OBJHOSTENG {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
-    const struct NVOC_VTABLE__OBJHOSTENG *__nvoc_vtable;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__OBJHOSTENG *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Ancestor object pointers for `staticCast` feature
     struct OBJHOSTENG *__nvoc_pbase_OBJHOSTENG;    // hosteng
+
+    // 1 PDB property
+    NvBool PDB_PROP_HOSTENG_ENSURE_HALT_SUCCEEDS_BEFORE_RESET;
+
+    // Data members
+    NvBool bHostengHaltBeforeResetFailed;
 };
 
 
-// Metadata including vtable with 1 function pointer
+// Vtable with 1 per-class function pointer
 struct NVOC_VTABLE__OBJHOSTENG {
     NV_STATUS (*__hostengHaltAndReset__)(struct OBJGPU *, struct OBJHOSTENG * /*this*/, RMTIMEOUT *);  // virtual
+};
+
+// Metadata with per-class RTTI and vtable
+struct NVOC_METADATA__OBJHOSTENG {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_VTABLE__OBJHOSTENG vtable;
 };
 
 #ifndef __NVOC_CLASS_OBJHOSTENG_TYPEDEF__
@@ -102,11 +119,16 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_OBJHOSTENG;
     ((pThis)->__nvoc_pbase_OBJHOSTENG)
 
 #ifdef __nvoc_host_eng_h_disabled
-#define __dynamicCast_OBJHOSTENG(pThis) ((OBJHOSTENG*)NULL)
+#define __dynamicCast_OBJHOSTENG(pThis) ((OBJHOSTENG*) NULL)
 #else //__nvoc_host_eng_h_disabled
 #define __dynamicCast_OBJHOSTENG(pThis) \
-    ((OBJHOSTENG*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJHOSTENG)))
+    ((OBJHOSTENG*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJHOSTENG)))
 #endif //__nvoc_host_eng_h_disabled
+
+// Property macros
+#define PDB_PROP_HOSTENG_ENSURE_HALT_SUCCEEDS_BEFORE_RESET_BASE_CAST
+#define PDB_PROP_HOSTENG_ENSURE_HALT_SUCCEEDS_BEFORE_RESET_BASE_NAME PDB_PROP_HOSTENG_ENSURE_HALT_SUCCEEDS_BEFORE_RESET
+
 
 NV_STATUS __nvoc_objCreateDynamic_OBJHOSTENG(OBJHOSTENG**, Dynamic*, NvU32, va_list);
 
@@ -115,13 +137,15 @@ NV_STATUS __nvoc_objCreate_OBJHOSTENG(OBJHOSTENG**, Dynamic*, NvU32);
     __nvoc_objCreate_OBJHOSTENG((ppNewObj), staticCast((pParent), Dynamic), (createFlags))
 
 
-// Wrapper macros
-#define hostengHaltAndReset_FNPTR(pHosteng) pHosteng->__nvoc_vtable->__hostengHaltAndReset__
+// Wrapper macros for implementation functions
+
+// Wrapper macros for halified functions
+#define hostengHaltAndReset_FNPTR(pHosteng) pHosteng->__nvoc_metadata_ptr->vtable.__hostengHaltAndReset__
 #define hostengHaltAndReset(pGpu, pHosteng, pRmTimeout) hostengHaltAndReset_DISPATCH(pGpu, pHosteng, pRmTimeout)
 
 // Dispatch functions
 static inline NV_STATUS hostengHaltAndReset_DISPATCH(struct OBJGPU *pGpu, struct OBJHOSTENG *pHosteng, RMTIMEOUT *pRmTimeout) {
-    return pHosteng->__nvoc_vtable->__hostengHaltAndReset__(pGpu, pHosteng, pRmTimeout);
+    return pHosteng->__nvoc_metadata_ptr->vtable.__hostengHaltAndReset__(pGpu, pHosteng, pRmTimeout);
 }
 
 NV_STATUS hostengHaltAndReset_IMPL(struct OBJGPU *pGpu, struct OBJHOSTENG *pHosteng, RMTIMEOUT *pRmTimeout);

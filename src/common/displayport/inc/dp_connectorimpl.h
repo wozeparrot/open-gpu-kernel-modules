@@ -197,7 +197,6 @@ namespace DisplayPort
         unsigned compoundQueryLocalLinkPBN;
         NvU64 compoundQueryUsedTunnelingBw;
         bool compoundQueryForceEnableFEC;
-        // WAR
         bool bDP2XPreferNonDSCForLowPClk;
 
         unsigned freeSlots;
@@ -266,6 +265,12 @@ namespace DisplayPort
         //
         bool        bHDMIOnDPPlusPlus;
 
+        //
+        // Flag to enable accounting available DP tunnelling BW while generating PPS
+        // for the mode
+        //
+        bool        bOptimizeDscBppForTunnellingBw;
+
         bool        bSkipResetLinkStateDuringPlug;
 
         // Flag to check if LT should be skipped.
@@ -329,6 +334,15 @@ namespace DisplayPort
         //
         bool        bDisableDscMaxBppLimit;
 
+        //
+        // Set to true when we want to force head shutdown
+        // when DSC mode or bpc is changed but LT is still same
+        //
+        bool        bForceHeadShutdownOnModeTransition;
+
+        // Set to true when we want to skip reset MST_EN before LT
+        bool        bSkipResetMSTMBeforeLt;
+
         bool        bReportDeviceLostBeforeNew;
         bool        bDisableSSC;
         bool        bEnableFastLT;
@@ -340,20 +354,18 @@ namespace DisplayPort
         //
         NvU32       LT2FecLatencyMs;
 
+        bool        bIgnoreCapsAndForceHighestLc;
+
         // On eDP, do not cache the source OUI if it reads 0. See bug 4793112
         bool        bSkipZeroOuiCache;
-
-        bool        bDisable5019537Fix;
 
         bool        bForceHeadShutdownFromRegkey;
 
         bool        bForceHeadShutdownPerMonitor;
 
-        bool        bEnableLowerBppCheckForDsc;
+        // Use max DSC compression for MST topologies
+        bool        bUseMaxDSCCompressionMST;
 
-        bool        bSkipSettingLinkStateDuringUnplug;
-
-        //
         // Dual SST Partner connector object pointer
         ConnectorImpl *pCoupledConnector;
 
@@ -393,6 +405,7 @@ namespace DisplayPort
         NvU64       allocatedDpTunnelBw;
         NvU64       allocatedDpTunnelBwShadow;
         bool        bForceDisableTunnelBwAllocation;
+        bool        bDisableEffBppSST8b10b;
 
         // Use regkey DP_DSC_DEVID_WAR to toggle this flag.
         bool        bEnableDevId;
@@ -432,7 +445,7 @@ namespace DisplayPort
         virtual void hardwareWasReset();
         virtual LinkConfiguration getMaxLinkConfig();
         virtual LinkConfiguration getActiveLinkConfig();
-        virtual void powerdownLink(bool bPowerdownPanel = false);
+        void powerdownLink(bool bPowerdownPanel = false);
         LinkConfiguration initMaxLinkConfig();
 
         GroupImpl * getActiveGroupForSST();
@@ -527,6 +540,14 @@ namespace DisplayPort
                                             DscParams *pDscParams = NULL,              // DSC parameters
                                             DP_IMP_ERROR *pErrorCode = NULL);          // Error Status code
 
+        virtual bool compoundQueryAttachSSTIsDscPossible(const DpModesetParams &modesetParams,
+                                                         DscParams *pDscParams = NULL);
+
+        virtual bool compoundQueryAttachSSTDsc(const DpModesetParams &modesetParams,
+                                               LinkConfiguration lc,
+                                               DscParams *pDscParams = NULL,
+                                               DP_IMP_ERROR *pErrorCode = NULL);
+
 
         //
         //  Timer callback tags.
@@ -613,6 +634,7 @@ namespace DisplayPort
         bool     allocateMaxDpTunnelBw();
         NvU64    getMaxTunnelBw();
         void     enableDpTunnelingBwAllocationSupport();
+        void     cancelDpTunnelBwAllocation();
 
         void assessLink(LinkTrainingType trainType = NORMAL_LINK_TRAINING);
 
@@ -635,8 +657,8 @@ namespace DisplayPort
         }
         bool trainLinkOptimized(LinkConfiguration lConfig);
         bool trainLinkOptimizedSingleHeadMultipleSST(GroupImpl * group);
-        bool getValidLowestLinkConfig(LinkConfiguration &lConfig, LinkConfiguration &lowestSelected,
-                                      ModesetInfo queryModesetInfo, const DscParams *pDscParams = NULL);
+        virtual bool getValidLowestLinkConfig(LinkConfiguration &lConfig, LinkConfiguration &lowestSelected,
+                                              ModesetInfo queryModesetInfo, const DscParams *pDscParams = NULL);
         bool postLTAdjustment(const LinkConfiguration &, bool force);
         void populateUpdatedLaneSettings(NvU8* voltageSwingLane, NvU8* preemphasisLane, NvU32 *data);
         void populateDscCaps(DSC_INFO* dscInfo, DeviceImpl * dev, DSC_INFO::FORCED_DSC_PARAMS* forcedParams);
@@ -750,6 +772,7 @@ namespace DisplayPort
         }
 
         void getCurrentLinkConfig(unsigned &laneCount, NvU64 &linkRate);  // CurrentLink Configuration
+        void getCurrentLinkConfigWithFEC(unsigned &laneCount, NvU64 &linkRate, bool &bFECEnabled);
         unsigned getPanelDataClockMultiplier();
         unsigned getGpuDataClockMultiplier();
         void configurePowerState(bool bPowerUp);

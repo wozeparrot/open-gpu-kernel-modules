@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2020-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,6 +24,7 @@
 #include "mem_mgr/video_mem.h"
 #include "gpu/mem_mgr/mem_desc.h"
 #include "gpu/mem_mgr/heap.h"
+#include "gpu/mem_mgr/phys_mem_allocator/phys_mem_allocator.h"
 #include "gpu/mem_mgr/mem_mgr.h"
 #include "gpu/mem_mgr/mem_utils.h"
 #include "gpu/mem_sys/kern_mem_sys.h"
@@ -125,7 +126,7 @@ _vidmemPmaAllocate
     NV_MEMORY_ALLOCATION_PARAMS *pAllocData     = pAllocRequest->pUserParams;
     OBJGPU                      *pGpu           = pAllocRequest->pGpu;
     MemoryManager               *pMemoryManager = GPU_GET_MEMORY_MANAGER(pGpu);
-    PMA                         *pPma           = &pHeap->pmaObject;
+    PMA                         *pPma           = pHeap->pPmaObject;
     NvU64                        size           = 0;
     NvU32                        pageCount      = 0;
     NvU32                        pmaInfoSize;
@@ -265,6 +266,15 @@ _vidmemPmaAllocate
     allocOptions.flags |= PMA_ALLOCATE_FORCE_ALIGNMENT;
     allocOptions.alignment = NV_MAX(sizeAlign, pageSize);
 
+    if (FLD_TEST_DRF(OS32, _ATTR2, _ENABLE_LOCALIZED_MEMORY, _UGPU0, pAllocData->attr2))
+    {
+        allocOptions.flags |= PMA_ALLOCATE_LOCALIZED_UGPU0;
+    }
+    else if (FLD_TEST_DRF(OS32, _ATTR2, _ENABLE_LOCALIZED_MEMORY, _UGPU1, pAllocData->attr2))
+    {
+        allocOptions.flags |= PMA_ALLOCATE_LOCALIZED_UGPU1;
+    }
+
     // Get the number of pages to be allocated by PMA
     NV_CHECK_OR_RETURN(LEVEL_ERROR,
         (NV_DIV_AND_CEIL(size, pageSize) <= NV_U32_MAX),
@@ -363,7 +373,7 @@ vidmemPmaFree
     NvU32           flags
 )
 {
-    PMA   *pPma  = &pHeap->pmaObject;
+    PMA   *pPma  = pHeap->pPmaObject;
     NvU32 pmaFreeFlags = flags;
 
     NV_ASSERT_OR_RETURN_VOID(NULL != pPmaAllocInfo);
@@ -455,9 +465,31 @@ vidmemCopyConstruct
     OBJGPU            *pGpu         = pMemorySrc->pGpu;
     MEMORY_DESCRIPTOR *pMemDesc     = pMemorySrc->pMemDesc;
     NV_STATUS          status       = NV_ERR_INVALID_ARGUMENT;
+    KernelBus         *pKernelBus    = GPU_GET_KERNEL_BUS(pGpu);
+
+    // No flags specified on the initial static BAR1 mapping 
+    status = kbusIncreaseStaticBar1Refcount_HAL(pGpu, pKernelBus,
+                   pMemDesc, BUS_MAP_FB_FLAGS_NONE);
+
+    if (status == NV_OK)
+    {
+        // nothing
+    }
+    else if (status == NV_ERR_NOT_SUPPORTED)
+    {
+        status = NV_OK;
+    }
+    else
+    {
+        return status;
+    }
 
     switch (memdescGetCustomHeap(pMemDesc))
     {
+        case MEMDESC_CUSTOM_HEAP_SCANOUT_CARVEOUT:
+            status = memmgrDuplicateFromScanoutCarveoutRegion(pGpu,
+                        GPU_GET_MEMORY_MANAGER(pGpu), pMemDesc);
+            break;
         case MEMDESC_CUSTOM_HEAP_NONE:
             SLI_LOOP_START(SLI_LOOP_FLAGS_BC_ONLY)
                 MEMORY_DESCRIPTOR *pSrcMemDesc = memdescGetMemDescFromGpu(pMemorySrc->pMemDesc, pGpu);
@@ -518,7 +550,7 @@ vidmemConstruct_IMPL
     NvBool                       bRsvdHeap             = NV_FALSE;
     MEMORY_DESCRIPTOR           *pTopLevelMemDesc      = NULL;
     MEMORY_DESCRIPTOR           *pTempMemDesc          = NULL;
-    HWRESOURCE_INFO              hwResource;
+    HWRESOURCE_INFO              hwResource            = {0};
     RsClient                    *pRsClient             = pCallContext->pClient;
     RmClient                    *pRmClient             = dynamicCast(pRsClient, RmClient);
     RsResourceRef               *pResourceRef          = pCallContext->pResourceRef;
@@ -622,6 +654,7 @@ vidmemConstruct_IMPL
     bIsPmaAlloc = memmgrIsPmaInitialized(pMemoryManager) &&
                   !bSubheap &&
                   !bRsvdHeap &&
+                  !FLD_TEST_DRF(OS32, _ATTR2, _USE_SCANOUT_CARVEOUT, _TRUE, attr2) &&
                   !(pAllocData->flags & NVOS32_ALLOC_FLAGS_WPR1) &&
                   !(pAllocData->flags & NVOS32_ALLOC_FLAGS_WPR2) &&
                   (!(pAllocData->flags & NVOS32_ALLOC_FLAGS_FIXED_ADDRESS_ALLOCATE) ||
@@ -631,6 +664,16 @@ vidmemConstruct_IMPL
     NV_CHECK_OR_RETURN(LEVEL_WARNING,
         !memmgrIsScrubOnFreeEnabled(pMemoryManager) || bIsPmaAlloc || bSubheap || bRsvdHeap,
         NV_ERR_INVALID_STATE);
+
+    if (!FLD_TEST_DRF(OS32, _ATTR2, _ENABLE_LOCALIZED_MEMORY, _DEFAULT, pAllocData->attr2))
+    {
+        if (!bIsPmaAlloc)
+        {
+            // heap does not support localized allocations
+            rmStatus = NV_ERR_NOT_SUPPORTED;
+            goto done;
+        }
+    }
 
     // Get the allocation from PMA if enabled.
     if (bIsPmaAlloc)
@@ -680,6 +723,7 @@ vidmemConstruct_IMPL
 
     // Don't allow FB allocations if FB is broken unless it is a virtual allocation or running in L2 cache only mode
     if (pGpu->getProperty(pGpu, PDB_PROP_GPU_BROKEN_FB) &&
+        !FLD_TEST_DRF(OS32, _ATTR2, _USE_SCANOUT_CARVEOUT, _TRUE, pAllocData->attr2) &&
         !gpuIsCacheOnlyModeEnabled(pGpu))
     {
         NV_ASSERT_FAILED("Video memory requested despite BROKEN FB");
@@ -836,6 +880,7 @@ vidmemConstruct_IMPL
         SLI_LOOP_END;
     }
 
+    if (!memdescGetFlag(pTempMemDesc, MEMDESC_FLAGS_ALLOC_FROM_SCANOUT_CARVEOUT))
     {
         //
         // Video memory is always locally transparently cached.  It does not require
@@ -1000,11 +1045,13 @@ vidmemConstruct_IMPL
         }
     }
 
-    rmStatus = kbusIncreaseStaticBar1Refcount_HAL(pGpu, pKernelBus, pMemory->pMemDesc);
+    // No flags specified on the initial static BAR1 mapping 
+    rmStatus = kbusIncreaseStaticBar1Refcount_HAL(pGpu, pKernelBus,
+                   pMemory->pMemDesc, BUS_MAP_FB_FLAGS_NONE);
 
     if (rmStatus == NV_OK)
     {
-        memdescSetFlag(pMemory->pMemDesc, MEMDESC_FLAGS_RESTORE_PTE_KIND_ON_FREE, NV_TRUE);
+        // nothing
     }
     else if (rmStatus == NV_ERR_NOT_SUPPORTED)
     {
@@ -1072,6 +1119,15 @@ vidmemDestruct_IMPL
     CliUnregisterMemoryFromThirdPartyP2P(pMemory);
 
     memDestructCommon(pMemory);
+
+    //
+    // static BAR1: memory must be released from the static BAR1 mapping
+    // to restore the static BAR1 mapping to a default state since it can
+    // immediately be allocated by UVM after PMA free
+    //
+    (void)kbusDecreaseStaticBar1Refcount_HAL(pGpu,
+                    GPU_GET_KERNEL_BUS(pGpu), pMemDesc,
+                    NULL);
 
     // free the video memory based on how it was alloced ... a non-zero
     // heapOwner indicates it was heapAlloc-ed.
@@ -1143,6 +1199,11 @@ vidmemDestruct_IMPL
             NV_ASSERT(status == NV_OK);
 
         }
+    }
+    else if (customHeap == MEMDESC_CUSTOM_HEAP_SCANOUT_CARVEOUT)
+    {
+        MemoryManager      *pMemoryManager = GPU_GET_MEMORY_MANAGER(pGpu);
+        memmgrFreeFromScanoutCarveoutRegion(pGpu, pMemoryManager, pMemDesc);
     }
 }
 
@@ -1221,6 +1282,39 @@ vidmemAllocResources
         goto failed;
     }
 
+    if (pGpu->getProperty(pGpu, PDB_PROP_GPU_IS_SOC_SDM))
+    {
+        if (FLD_TEST_DRF(OS32, _ATTR2, _USE_SCANOUT_CARVEOUT, _TRUE, pVidHeapAlloc->attr2))
+        {
+            NvU32 heapFlag  = NVOS32_ALLOC_FLAGS_FORCE_MEM_GROWS_DOWN;
+
+            status = memmgrAllocFromScanoutCarveoutRegion(pGpu,
+                    pMemoryManager,
+                    pFbAllocInfo->hClient,
+                    pVidHeapAlloc,
+                    &heapFlag,
+                    &pAllocRequest->pMemDesc);
+
+            if (status == NV_OK)
+            {
+                pMemDesc = pAllocRequest->pMemDesc;
+                pMemDesc->pHeap = (Heap *)pMemoryManager->pScanoutHeap;
+                memdescSetCustomHeap(pMemDesc, MEMDESC_CUSTOM_HEAP_SCANOUT_CARVEOUT);
+                // Force the format to whatever is required by client.
+                memdescSetPteKind(pMemDesc, pFbAllocInfo->format);
+                NV_PRINTF(LEVEL_INFO, "Allocated surface in scanout region\n");
+            }
+            else
+            {
+                NV_PRINTF(LEVEL_WARNING,
+                        "Failed to allocate surface in scanout region\n");
+                goto failed;
+            }
+
+            goto pre_alloc_done;
+        }
+    }
+
     // Prior to this change, heap was silently ignoring non-contig Vidmem allocation requests.
     // With this change to allow non-contig vidmem allocation, I was getting a DVS Extended Sanity failures & regression on Windows.
     // It seems Windows is making some allocations with non-contig flag, but was expecting contig allocation.
@@ -1275,6 +1369,21 @@ vidmemAllocResources
                          pAllocRequest->pPmaAllocInfo[subdeviceInst]->pageArray,
                          pAllocRequest->pPmaAllocInfo[subdeviceInst]->pageCount,
                          pAllocRequest->pPmaAllocInfo[subdeviceInst]->pageSize);
+        }
+        if (!FLD_TEST_DRF(OS32, _ATTR2, _ENABLE_LOCALIZED_MEMORY, _DEFAULT, pVidHeapAlloc->attr2))
+        {
+            if (pMemoryManager->bLocalizedMemorySupported &&
+                !IS_MIG_ENABLED(pGpu))
+            {
+                memdescSetFlag(pAllocRequest->pMemDesc, MEMDESC_FLAGS_ALLOC_AS_LOCALIZED, NV_TRUE);
+                pAllocRequest->pMemDesc->localizedMask = pMemoryManager->localizedMask;
+            }
+            else
+            {
+                NV_PRINTF(LEVEL_ERROR, "Localized memory requested when localized memory not enabled\n");
+                status = NV_ERR_INVALID_ARGUMENT;
+                goto failed;
+            }
         }
     }
     else
@@ -1383,6 +1492,8 @@ vidmemAllocResources
         pHwResource->comprCovg  = pFbAllocInfo->comprCovg;
         pHwResource->ctagOffset = pFbAllocInfo->ctagOffset;
     }
+
+pre_alloc_done:
 
     pVidHeapAlloc->offset = pFbAllocInfo->offset;
 

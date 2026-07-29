@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -31,6 +31,7 @@
 #include "gpu/fsp/kern_fsp.h"
 #include "gpu/gsp/kernel_gsp.h"
 #include "gpu/pmu/kern_pmu.h"
+#include "gpu/sec2/kernel_sec2.h"
 #include "gpu/mem_sys/kern_mem_sys.h"
 #include "gsp/gspifpub.h"
 #include "vgpu/rpc.h"
@@ -201,7 +202,7 @@ kgspFreeBootArgs_GH100
     if (pKernelGsp->pGspFmcArgumentsCached != NULL)
     {
         memdescUnmap(pKernelGsp->pGspFmcArgumentsDescriptor,
-                     NV_TRUE, osGetCurrentProcess(),
+                     NV_TRUE,
                      (void *)pKernelGsp->pGspFmcArgumentsCached,
                      pKernelGsp->pGspFmcArgumentsMappingPriv);
         pKernelGsp->pGspFmcArgumentsCached = NULL;
@@ -253,7 +254,7 @@ kgspWaitForGfwBootOk_GH100
 }
 
 /*!
- * Calculate the FB layout. On Hopper, this consists of determining the
+ * Populate WPR meta structure. On Hopper, this consists of determining the
  * minimum sizes of various regions that Client RM provides as inputs.
  * The actual offsets are determined by secure ACR ucode and patched
  * into the GspFwWprMeta structure provided to GSP-RM, so most of the
@@ -291,7 +292,7 @@ kgspWaitForGfwBootOk_GH100
  * @param       pFbRegionInfo Pointer to fb region table to fill in.
  */
 NV_STATUS
-kgspCalculateFbLayout_GH100
+kgspPopulateWprMeta_GH100
 (
     OBJGPU         *pGpu,
     KernelGsp      *pKernelGsp,
@@ -358,7 +359,7 @@ kgspCalculateFbLayout_GH100
 
     // Number of VF partitions allocating sub-heaps from the WPR heap
     pWprMeta->gspFwHeapVfPartitionCount =
-        pGpu->bVgpuGspPluginOffloadEnabled ? MAX_PARTITIONS_WITH_GFID : 0;
+        pGpu->bVgpuGspPluginOffloadEnabled ? kgspVgpuNumVgpuPartitions_HAL(pGpu, pKernelGsp) : 0;
 
     // CrashCat queue (if allocated in sysmem)
     KernelCrashCatEngine *pKernelCrashCatEng = staticCast(pKernelGsp, KernelCrashCatEngine);
@@ -374,13 +375,13 @@ kgspCalculateFbLayout_GH100
     pWprMeta->revision = GSP_FW_WPR_META_REVISION;
     pWprMeta->magic = GSP_FW_WPR_META_MAGIC;
 
-	if (gpuIsCCMultiGpuProtectedPcieModeEnabled(pGpu))
-	{
-		pWprMeta->flags |= GSP_FW_FLAGS_PPCIE_ENABLED;
-	}
+    if (gpuIsCCMultiGpuProtectedPcieModeEnabled(pGpu))
+    {
+        pWprMeta->flags |= GSP_FW_FLAGS_PPCIE_ENABLED;
+    }
     else
     {
-		pWprMeta->flags &= ~GSP_FW_FLAGS_PPCIE_ENABLED;
+        pWprMeta->flags &= ~GSP_FW_FLAGS_PPCIE_ENABLED;
     }
 
     return NV_OK;
@@ -423,12 +424,22 @@ kgspSetupGspFmcArgs_GH100
     if (pCC != NULL)
     {
         pGspFmcBootParams->initParams.regkeys = pCC->gspProxyRegkeys;
+        pGspFmcBootParams->gspRmMemParams.flushSysmemAddrValLo = 0;
+        pGspFmcBootParams->gspRmMemParams.flushSysmemAddrValHi = 0;
+
+        if (pCC->getProperty(pConfCompute, PDB_PROP_CONFCOMPUTE_WAR_5107790_SYSMEM_FLUSH_ADDR))
+        {
+            KernelMemorySystem *pKernelMemorySystem = GPU_GET_KERNEL_MEMORY_SYSTEM(pGpu);
+
+            pGspFmcBootParams->gspRmMemParams.flushSysmemAddrValLo = NvU64_LO32(pKernelMemorySystem->sysmemFlushBuffer);
+            pGspFmcBootParams->gspRmMemParams.flushSysmemAddrValHi = NvU64_HI32(pKernelMemorySystem->sysmemFlushBuffer);
+        }
     }
 
     KernelNvlink *pKernelNvlink = GPU_GET_KERNEL_NVLINK(pGpu);
     if (pKernelNvlink != NULL)
     {
-        pGspFmcBootParams->initParams.regkeys |= pKernelNvlink->gspProxyRegkeys;
+        pGspFmcBootParams->initParams.regkeys |= knvlinkGetGSPProxyRegkeys(pGpu, pKernelNvlink);
     }
 
     if (bootMode == KGSP_BOOT_MODE_SR_RESUME)
@@ -449,22 +460,18 @@ kgspSetupGspFmcArgs_GH100
     pGspFmcBootParams->gspRmParams.bootArgsOffset = memdescGetPhysAddr(pKernelGsp->pLibosInitArgumentsDescriptor, AT_GPU, 0);
     pGspFmcBootParams->gspRmParams.target = _kgspMemdescToDmaTarget(pKernelGsp->pLibosInitArgumentsDescriptor);
 
-    if (pCC != NULL && pCC->getProperty(pCC, PDB_PROP_CONFCOMPUTE_SPDM_ENABLED))
+    Spdm *pSpdm = GPU_GET_SPDM(pGpu);
+
+    if (pSpdm != NULL && pSpdm->getProperty(pSpdm, PDB_PROP_SPDM_ENABLED))
     {
         NV_STATUS  status = NV_OK;
-        Spdm      *pSpdm  = pCC->pSpdm;
-
-        // If SPDM is NULL, we failed to initialize
-        if (pCC->pSpdm == NULL)
-        {
-            return NV_ERR_INVALID_STATE;
-        }
 
         // Perform required pre-GSP-RM boot setup that could not be done on Spdm object creation.
         status = spdmSetupCommunicationBuffers(pGpu, pSpdm);
         if (status != NV_OK)
         {
-            NV_PRINTF(LEVEL_ERROR, "Failure when initializing SPDM messaging infrastructure. Status:0x%x\n", status);
+            NV_PRINTF(LEVEL_ERROR, "Failure when initializing SPDM messaging infrastructure. Status:0x%x\n",
+                                    status);
             return status;
         }
 
@@ -556,7 +563,7 @@ _kgspFalconMailbox0Cleared
 }
 
 /*!
- * Establish session with SPDM Responder on GSP in Confidential Compute scenario.
+ * Establish session with SPDM Responder on GSP.
  * GSP-RM boot is blocked until session establishment completes.
  *
  * NOTE: This function currently requires the API lock (for at least the async init
@@ -565,13 +572,23 @@ _kgspFalconMailbox0Cleared
 static NV_STATUS
 _kgspEstablishSpdmSession
 (
-    OBJGPU              *pGpu,
-    KernelGsp           *pKernelGsp,
-    ConfidentialCompute *pConfCompute
+    OBJGPU    *pGpu,
+    KernelGsp *pKernelGsp
 )
 {
     NV_STATUS     status        = NV_OK;
     KernelFalcon *pKernelFalcon = staticCast(pKernelGsp, KernelFalcon);
+    NvU32         requesterId   = NV_SPDM_REQUESTER_ID_NULL;
+    NvBool        bCcEnabled    = NV_FALSE;
+    Spdm         *pSpdm         = GPU_GET_SPDM(pGpu);
+
+    ConfidentialCompute *pConfCompute = GPU_GET_CONF_COMPUTE(pGpu);
+
+    if (pConfCompute->getProperty(pConfCompute, PDB_PROP_CONFCOMPUTE_ENABLED))
+    {
+        bCcEnabled  = NV_TRUE;
+        requesterId = NV_SPDM_REQUESTER_ID_CONF_COMPUTE;
+    }
 
     // Ensure SPDM Responder has booted before attempting to establish session.
     status = gpuTimeoutCondWait(pGpu, _kgspSpdmBootedOrFmcError, pKernelFalcon, NULL);
@@ -594,11 +611,18 @@ _kgspEstablishSpdmSession
         goto exit;
     }
 
-    status = confComputeEstablishSpdmSessionAndKeys_HAL(pGpu, pConfCompute);
-    if (status != NV_OK)
+    NV_CHECK_OK_OR_GOTO(status, LEVEL_ERROR,
+                        spdmEstablishSession(pGpu, pSpdm, requesterId),
+                        exit);
+
+    if (bCcEnabled)
     {
-        NV_PRINTF(LEVEL_ERROR, "SPDM handshake with Responder failed.\n");
-        goto exit;
+        status = confComputeDeriveSessionKeys_HAL(pGpu, pConfCompute);
+        if (status != NV_OK)
+        {
+            NV_PRINTF(LEVEL_ERROR, "CC key derivation failed.\n");
+            goto exit;
+        }
     }
 
     //
@@ -738,7 +762,7 @@ _kgspBootstrapGspFmc_GH100
  * This routine handles the prequesites to booting GSP-RM that requires the API LOCK:
  *   - Clear ECC errors
  *   - Prepare GSP-FMC arguments
- *   - Prepare FSP boot commands
+ *   - Prepare FSP or SEC2 boot commands, depending on what is applicable
  *
  * @param[in]   pGpu            GPU object pointer
  * @param[in]   pKernelGsp      GSP object pointer
@@ -756,6 +780,7 @@ kgspPrepareForBootstrap_GH100
 )
 {
     KernelFsp *pKernelFsp = GPU_GET_KERNEL_FSP(pGpu);
+    KernelSec2 *pKernelSec2 = GPU_GET_KERNEL_SEC2(pGpu);
 
     // Only for GSP client builds
     if (!IS_GSP_CLIENT(pGpu))
@@ -774,6 +799,13 @@ kgspPrepareForBootstrap_GH100
         NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
             kfspPrepareBootCommands_HAL(pGpu, pKernelFsp));
     }
+    else if (pKernelSec2 != NULL && pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_BOOT_GSPFMC))
+    {
+        NV_PRINTF(LEVEL_INFO, "Sec2 preparing for GSPRM boot\n");
+        pKernelSec2->setProperty(pKernelSec2, PDB_PROP_KSEC2_GSP_MODE_GSPRM, NV_TRUE);
+        NV_CHECK_OK_OR_RETURN(LEVEL_ERROR,
+            ksec2PrepareBootCommands_HAL(pGpu, pKernelSec2));
+    }
 
     return NV_OK;
 }
@@ -782,7 +814,7 @@ kgspPrepareForBootstrap_GH100
  * Boot GSP-RM.
  *
  * This routine handles the following:
- *   - sends FSP boot commands
+ *   - sends FSP or SEC2 boot commands
  *   - waits for GSP-RM to complete initialization
  *
  * Note that this routine is based on flcnBootstrapRiscvOS_GA102().
@@ -807,9 +839,9 @@ kgspBootstrap_GH100
 {
     KernelFalcon *pKernelFalcon = staticCast(pKernelGsp, KernelFalcon);
     KernelFsp    *pKernelFsp = GPU_GET_KERNEL_FSP(pGpu);
+    KernelSec2   *pKernelSec2 = GPU_GET_KERNEL_SEC2(pGpu);
     NV_STATUS     status = NV_OK;
     NvU32         mailbox0;
-    ConfidentialCompute *pCC = GPU_GET_CONF_COMPUTE(pGpu);
 
     //
     // Hopper+ GSP always boots in RISC-V mode. The GSP-FMC blocks RISCV_BCR_CTRL reads via PLM,
@@ -832,6 +864,11 @@ kgspBootstrap_GH100
 
         NV_PRINTF(LEVEL_NOTICE, "Starting to boot GSP via FSP.\n");
         NV_CHECK_OK_OR_RETURN(LEVEL_ERROR, kfspSendBootCommands_HAL(pGpu, pKernelFsp));
+    }
+    else if (pKernelSec2 != NULL && pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_BOOT_GSPFMC))
+    {
+        NV_PRINTF(LEVEL_INFO, "Starting to boot GSP via SEC2.\n");
+        NV_CHECK_OK_OR_RETURN(LEVEL_ERROR, ksec2SendBootCommands_HAL(pGpu, pKernelSec2));
     }
     else
     {
@@ -857,17 +894,32 @@ kgspBootstrap_GH100
             return status;
         }
     }
-
+    else if (pKernelSec2 != NULL &&
+             pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_BOOT_GSPFMC) &&
+             pKernelSec2->getProperty(pKernelSec2, PDB_PROP_KSEC2_GSP_MODE_GSPRM))
+    {
+        status = ksec2WaitForGspTargetMaskReleased_HAL(pGpu, pKernelSec2);
+        if (status != NV_OK)
+        {
+            NV_PRINTF(LEVEL_ERROR, "SEC2 GSP Boot:Timeout waiting for GSP target mask release. "
+                      "This error may be caused by several reasons: Bootrom may have failed, "
+                      "GSP init code may have failed or ACR failed to release target mask. "
+                      "RM does not have access to information on which of those conditions happened.\n");
+            return status;
+        }
+    }
     //
-    // In Confidential Compute, SPDM session will be established before GSP-RM boots.
+    // When enabled, SPDM session will be established before GSP-RM boots.
     // Wait until after target mask is released by ACR to minimize busy wait time.
     // NOTE: This is incompatible with parallel initialization. See function
     // description for more details.
     //
-    if (pCC != NULL && pCC->getProperty(pCC, PDB_PROP_CONFCOMPUTE_CC_FEATURE_ENABLED))
+    Spdm *pSpdm = GPU_GET_SPDM(pGpu);
+
+    if (pSpdm != NULL && pSpdm->getProperty(pSpdm, PDB_PROP_SPDM_ENABLED))
     {
         NV_ASSERT_OR_RETURN(rmapiLockIsOwner(), NV_ERR_INVALID_LOCK_STATE);
-        NV_ASSERT_OK_OR_RETURN(_kgspEstablishSpdmSession(pGpu, pKernelGsp, pCC));
+        NV_ASSERT_OK_OR_RETURN(_kgspEstablishSpdmSession(pGpu, pKernelGsp));
     }
 
     // Wait for lockdown to be released or the FMC to report an error
@@ -969,13 +1021,13 @@ kgspGetGspRmBootUcodeStorage_GH100
 
             if (kgspIsDebugModeEnabled(pGpu, pKernelGsp))
             {
-                *ppBinStorageImage = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMC, "ucode_image_dbg");
-                *ppBinStorageDesc  = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMCDesc, "ucode_desc_dbg");
+                *ppBinStorageImage = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMC, BINDATA_LABEL_UCODE_IMAGE_DBG);
+                *ppBinStorageDesc  = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMCDesc, BINDATA_LABEL_UCODE_DESC_DBG);
             }
             else
             {
-                *ppBinStorageImage = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMC, "ucode_image_prod");
-                *ppBinStorageDesc  = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMCDesc, "ucode_desc_prod");
+                *ppBinStorageImage = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMC, BINDATA_LABEL_UCODE_IMAGE_PROD);
+                *ppBinStorageDesc  = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMCDesc, BINDATA_LABEL_UCODE_DESC_PROD);
             }
 
             return;

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2020-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -31,16 +31,22 @@
 #include "published/blackwell/gb100/dev_top.h"
 #include "published/blackwell/gb100/dev_hshub_base.h"
 
+#include "published/blackwell/gb100/dev_fb.h"
+#include "published/blackwell/gb100/dev_gc6_island.h"
+#include "published/blackwell/gb100/dev_gc6_island_addendum.h"
+
 /*!
- * @brief Static function used to return the HSHUB0 IoAperture
+ * @brief Function used to return the HSHUB0 IoAperture
+ *        Used by sysmem flush buffer code, since it gets called
+ *        before HSHUB IO apertures are constructed by HSHUB class object
  *
  * @param[in] pGpu                OBJGPU pointer
  * @param[in[ pKernelMemorySystem KernelMemorySystem pointer
  *
  * @returns IoAperture used to write to HSHUB0 PRI's
  */
-static
-IoAperture* _kmemsysInitHshub0Aperture_GB100
+IoAperture*
+kmemsysInitHshub0Aperture_GB100
 (
     OBJGPU             *pGpu,
     KernelMemorySystem *pKernelMemorySystem
@@ -65,15 +71,22 @@ IoAperture* _kmemsysInitHshub0Aperture_GB100
 }
 
 /*!
- * @brief Static function used to destroy the HSHUB0 IoAperture
+ * @brief Function used to destroy the HSHUB0 IoAperture
+ *        Used by sysmem flush buffer code, since it gets called
+ *        before HSHUB IO apertures are constructed by HSHUB class object
  *
  * @param[in] pGpu                OBJGPU pointer
  * @param[in[ pKernelMemorySystem KernelMemorySystem pointer
  *
  * @returns void
  */
-static
-void _kmemsysDestroyHshub0Aperture_GB100(OBJGPU *pGpu, KernelMemorySystem *pKernelMemorySystem, IoAperture *pIoAperture)
+void
+kmemsysDestroyHshub0Aperture_GB100
+(
+    OBJGPU             *pGpu, 
+    KernelMemorySystem *pKernelMemorySystem, 
+    IoAperture         *pIoAperture
+)
 {
     objDelete(pIoAperture);
 }
@@ -82,11 +95,11 @@ void _kmemsysDestroyHshub0Aperture_GB100(OBJGPU *pGpu, KernelMemorySystem *pKern
  * @brief Validate the sysmemFlushBuffer val and assert
  *
  * @param[in] pGpu                OBJGPU pointer
- * @param[in[ pKernelMemorySystem KernelMemorySystem pointer
+ * @param[in] pKernelMemorySystem KernelMemorySystem pointer
  *
- * @returns void
+ * @returns NV_STATUS - NV_OK if sysmemFlushBuffer is valid otherwise NV_ERR_INVALID_STATE
  */
-void
+NV_STATUS
 kmemsysAssertSysmemFlushBufferValid_GB100
 (
     OBJGPU *pGpu,
@@ -97,32 +110,48 @@ kmemsysAssertSysmemFlushBufferValid_GB100
     NvU32       regHshubPcieFlushSysmemAddrValLo = 0;
     NvU32       regHshubEgPcieFlushSysmemAddrValHi = 0;
     NvU32       regHshubEgPcieFlushSysmemAddrValLo = 0;
-    IoAperture *pHshub0IoAperture = _kmemsysInitHshub0Aperture_GB100(pGpu, pKernelMemorySystem);
+    IoAperture *pHshub0IoAperture = kmemsysInitHshub0Aperture_HAL(pGpu, pKernelMemorySystem);
+    NV_STATUS   status = NV_OK;
 
-    NV_ASSERT_OR_RETURN_VOID(pHshub0IoAperture != NULL);
+    NV_ASSERT_OR_RETURN(pHshub0IoAperture != NULL, NV_ERR_INVALID_POINTER);
 
     regHshubPcieFlushSysmemAddrValLo = REG_RD32(pHshub0IoAperture,
                                              NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_LO);
     regHshubPcieFlushSysmemAddrValHi = REG_RD32(pHshub0IoAperture,
                                              NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_HI);
 
-    NV_ASSERT((regHshubPcieFlushSysmemAddrValLo != 0) || (regHshubPcieFlushSysmemAddrValHi != 0));
+    if (regHshubPcieFlushSysmemAddrValLo == 0 && regHshubPcieFlushSysmemAddrValHi == 0)
+    {
+        status = NV_ERR_INVALID_STATE;
+        goto cleanup;
+    }
 
     regHshubEgPcieFlushSysmemAddrValLo = REG_RD32(pHshub0IoAperture,
                                                NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_LO);
     regHshubEgPcieFlushSysmemAddrValHi = REG_RD32(pHshub0IoAperture,
                                                NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_HI);
 
-    NV_ASSERT((regHshubEgPcieFlushSysmemAddrValLo != 0) || (regHshubEgPcieFlushSysmemAddrValHi != 0));
+    if (regHshubEgPcieFlushSysmemAddrValLo == 0 && regHshubEgPcieFlushSysmemAddrValHi == 0)
+    {
+        status = NV_ERR_INVALID_STATE;
+        goto cleanup;
+    }
 
     //
     // In addition to a non-zero address, both NV_PFB_HSHUB_PCIE_FLUSH_SYSMEM_ADDR_<> and 
     // NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_<> must program same value.
     //
-    NV_ASSERT((regHshubPcieFlushSysmemAddrValLo == regHshubEgPcieFlushSysmemAddrValLo) &&
-        (regHshubPcieFlushSysmemAddrValHi == regHshubEgPcieFlushSysmemAddrValHi));
+    if ((regHshubPcieFlushSysmemAddrValLo != regHshubEgPcieFlushSysmemAddrValLo) ||
+        (regHshubPcieFlushSysmemAddrValHi != regHshubEgPcieFlushSysmemAddrValHi))
+    {
+        status = NV_ERR_INVALID_STATE;
+        goto cleanup;
+    }
 
-    _kmemsysDestroyHshub0Aperture_GB100(pGpu, pKernelMemorySystem, pHshub0IoAperture);
+cleanup:
+    kmemsysDestroyHshub0Aperture_HAL(pGpu, pKernelMemorySystem, pHshub0IoAperture);
+    
+    return status;
 }
 
 /*!
@@ -144,7 +173,7 @@ kmemsysProgramSysmemFlushBuffer_GB100
     NvU32       alignedSysmemFlushBufferAddrHi = 0x0;
     NvU32       regValHi;
     NvU32       regValLo;
-    IoAperture *pHshub0IoAperture = _kmemsysInitHshub0Aperture_GB100(pGpu, pKernelMemorySystem);
+    IoAperture *pHshub0IoAperture = kmemsysInitHshub0Aperture_HAL(pGpu, pKernelMemorySystem);
 
     NV_ASSERT_OR_RETURN_VOID(pHshub0IoAperture != NULL);
     NV_ASSERT(pKernelMemorySystem->sysmemFlushBuffer != 0);
@@ -170,7 +199,7 @@ kmemsysProgramSysmemFlushBuffer_GB100
     REG_WR32(pHshub0IoAperture, NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_HI, ((NvU32)regValHi));
     REG_WR32(pHshub0IoAperture, NV_PFB_HSHUB_EG_PCIE_FLUSH_SYSMEM_ADDR_LO, ((NvU32)regValLo));
 
-    _kmemsysDestroyHshub0Aperture_GB100(pGpu, pKernelMemorySystem, pHshub0IoAperture);
+    kmemsysDestroyHshub0Aperture_HAL(pGpu, pKernelMemorySystem, pHshub0IoAperture);
 }
 
 /*!
@@ -207,4 +236,53 @@ kmemsysAssertFbAckTimeoutPending_GB100
 #else
     return NV_FALSE;
 #endif
+}
+
+/*!
+ * @brief Extract FB offset from LOCAL_MEMORY_RANGE register value
+ */
+static inline NvU64 _kmemsysGetFbOffsetFromLocalMemoryRangeRegVal_GB100(NvU32 regVal)
+{
+    NvU32 lowerRangeMag   = DRF_VAL(_PFB, _PRI_MMU_LOCAL_MEMORY_RANGE, _LOWER_MAG, regVal);
+    NvU32 lowerRangeScale = DRF_VAL(_PFB, _PRI_MMU_LOCAL_MEMORY_RANGE, _LOWER_SCALE, regVal);
+    return ((NvU64) lowerRangeMag << (lowerRangeScale + 20));
+}
+
+/*!
+ * @brief Read HDM top address from VBIOS (or 0 if not supported)
+ */
+NV_STATUS
+kmemsysReadHdmTopFromVbios_GB100
+(
+    OBJGPU *pGpu,
+    KernelMemorySystem *pKernelMemorySystem,
+    NvU64 *pHdmTopOut
+)
+{
+    /*
+     * On GB100, some VBIOS versions emulate an HDM top by setting
+     * LOCAL_MEMORY_RANGE to a smaller value after reset, then restoring
+     * the true LOCAL_MEMORY_RANGE value after FSP boot commands. VBIOS then
+     * stores the emulated HDM top value in a secure scratch register.
+     *
+     * Compare secure scratch vs. local memory range to determine if emulated
+     * HDM top is present.
+     */
+
+    NvU64 localMemoryRange = _kmemsysGetFbOffsetFromLocalMemoryRangeRegVal_GB100(
+        GPU_REG_RD32(pGpu, NV_PFB_PRI_MMU_LOCAL_MEMORY_RANGE));
+
+    NvU64 scratchHdmTop = _kmemsysGetFbOffsetFromLocalMemoryRangeRegVal_GB100(
+        GPU_REG_RD32(pGpu, NV_PGC6_BSI_SECURE_SCRATCH_MMU_LOCAL_MEMORY_RANGE));
+
+    if (localMemoryRange != scratchHdmTop)
+    {
+        *pHdmTopOut = scratchHdmTop;
+    }
+    else
+    {
+        *pHdmTopOut = 0;
+    }
+
+    return NV_OK;
 }

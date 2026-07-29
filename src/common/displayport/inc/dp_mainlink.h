@@ -135,6 +135,7 @@ namespace DisplayPort
     public:
         virtual bool physicalLayerSetTestPattern(PatternInfo * patternInfo) = 0;
         virtual bool physicalLayerSetDP2xTestPattern(DP2xPatternInfo * patternInfo) = 0;
+        virtual bool getUSBCCableIDInfo(NV0073_CTRL_DP_USBC_CABLEID_INFO *cableIDInfo) = 0;
         //
         //  Wrappers for existing link training RM control calls
         //
@@ -194,7 +195,9 @@ namespace DisplayPort
         //       we cannot rely on the DPCD registers being correct or sane)
         //
         virtual void getLinkConfig(unsigned &laneCount, NvU64 & linkRate) = 0;
-
+        
+        // Get the current link config with FEC
+        virtual void getLinkConfigWithFEC(unsigned &laneCount, NvU64 &linkRate, bool &bFECEnable) {};
         // Get the max link config from UEFI.
         virtual bool getMaxLinkConfigFromUefi(NvU8 &linkRate, NvU8 &laneCount) = 0;
         //
@@ -209,7 +212,7 @@ namespace DisplayPort
         virtual NvU32 getUHBRSupported() {return 0;}
         virtual bool  isRgFlushSequenceUsed() {return false;}
         virtual bool isStreamCloningEnabled() = 0;
-        virtual NvU32 getMinPClkForCompressed() = 0;
+        virtual bool isDpTunnelingHwBugWarEnabled() = 0;
         virtual NvU32 maxLinkRateSupported() = 0;
         virtual bool isLttprSupported() = 0;
         virtual bool isFECSupported() = 0;
@@ -278,16 +281,18 @@ namespace DisplayPort
         virtual NvU32 allocDisplayId() = 0;
         virtual bool freeDisplayId(NvU32 displayId) = 0;
         virtual bool queryGPUCapability() {return false;}
+        virtual bool isAvoidHBR3WAREnabled() = 0;
         virtual bool queryAndUpdateDfpParams() = 0;
         virtual void updateFallbackMap(NvU32 maxLaneCount, LinkRate maxLinkRate, NvU32 sinkUhbrCaps = 0) { return; }
         virtual bool isConnectorUSBTypeC() { return false; }
+        virtual bool isCableVconnSourceUnknown() { return false; }
         virtual void invalidateLinkRatesInFallbackTable(const LinkRate linkRate) { return; }
 
         virtual bool setFlushMode(FlushModePhase phase) { return false; }
         virtual bool clearFlushMode(FlushModePhase phase, NvU32 attachFailedHeadMask = 0, NvU32 headIndex = 0) { return false; }
         virtual bool getDp2xLaneData(NvU32 *numLanes, NvU32 *data) { return false; }
         virtual bool setDp2xLaneData(NvU32 numLanes, NvU32 *data) { return false; }
-        virtual bool isSupportedDPLinkConfig(LinkConfiguration &link) {return false; };
+        virtual bool isSupportedDPLinkConfig(LinkConfiguration &link) {return false; }
         virtual bool getEdpPowerData(bool *panelPowerOn, bool *bDPCDPowerStateD0) = 0;
         virtual bool vrrRunEnablementStage(unsigned stage, NvU32 *status) = 0;
 

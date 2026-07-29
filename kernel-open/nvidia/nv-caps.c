@@ -510,8 +510,6 @@ int NV_API_CALL nv_cap_validate_and_dup_fd(const nv_cap_t *cap, int fd)
     int dup_fd;
     struct inode *inode = NULL;
     dev_t rdev = 0;
-    struct files_struct *files = current->files;
-    struct fdtable *fdt;
 
     if (cap == NULL)
     {
@@ -543,29 +541,10 @@ int NV_API_CALL nv_cap_validate_and_dup_fd(const nv_cap_t *cap, int fd)
         goto err;
     }
 
-    dup_fd = NV_GET_UNUSED_FD_FLAGS(O_CLOEXEC);
+    dup_fd = get_unused_fd_flags(O_CLOEXEC);
     if (dup_fd < 0)
     {
-        dup_fd = NV_GET_UNUSED_FD();
-        if (dup_fd < 0)
-        {
-            goto err;
-        }
-
-        /*
-         * Set CLOEXEC before installing the FD.
-         *
-         * If fork() happens in between, the opened unused FD will have
-         * a NULL struct file associated with it, which is okay.
-         *
-         * The only well known bug here is the race with dup(2), which is
-         * already documented in the kernel, see fd_install()'s description.
-         */
-
-        spin_lock(&files->file_lock);
-        fdt = files_fdtable(files);
-        __set_bit(dup_fd, fdt->close_on_exec);
-        spin_unlock(&files->file_lock);
+        goto err;
     }
 
     fd_install(dup_fd, file);

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2012-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2012-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -82,13 +82,12 @@ osCreateMemFromOsDescriptor
     //
     // For the sake of simplicity, unmatched RM and OS page
     // sizes are not currently supported in this path, except for
-    // PPC64LE and aarch64.
+    // aarch64.
     //
     // Also, the nvmap handle is sent which can be any random number so
     // the virtual address alignment sanity check can't be done here.
     //
-    if (!NVCPU_IS_PPC64LE &&
-        !NVCPU_IS_AARCH64 &&
+    if (!NVCPU_IS_AARCH64 &&
         (NV_RM_PAGE_SIZE != os_page_size))
     {
         return NV_ERR_NOT_SUPPORTED;
@@ -185,14 +184,32 @@ osCreateMemdescFromPages
     void **ppPrivate
 )
 {
-    NV_STATUS rmStatus;
+    NV_STATUS rmStatus = NV_OK;
     MEMORY_DESCRIPTOR *pMemDesc;
     NvU64 memdescFlags = MEMDESC_FLAGS_NONE;
     NvU32 gpuCachedFlags;
+    NvBool bUnprotected = NV_FALSE;
+    NvU64 osPageCount;
+
+    //
+    // Align size up to os page size. This is important in
+    // order to support submemdesc mappings at native page size.
+    // Once dynamic tracking is enabled this will not be needed
+    // as all submemory will get tracked at its native page size.
+    //
+    size = NV_ALIGN_UP64(size, os_page_size);
+
+    osPageCount = size >> os_page_shift;
 
     if (FLD_TEST_DRF(OS02, _FLAGS, _ALLOC_NISO_DISPLAY, _YES, flags))
     {
         memdescFlags |= MEMDESC_FLAGS_MEMORY_TYPE_DISPLAY_NISO;
+    }
+
+    if (FLD_TEST_DRF(OS02, _FLAGS, _MEMORY_PROTECTION, _UNPROTECTED, flags))
+    {
+        memdescFlags |= MEMDESC_FLAGS_ALLOC_IN_UNPROTECTED_MEMORY;
+        bUnprotected = NV_TRUE;
     }
 
     rmStatus = memdescCreate(ppMemDesc, pGpu, size, 0,
@@ -210,9 +227,9 @@ osCreateMemdescFromPages
 
     pMemDesc = *ppMemDesc;
     rmStatus = nv_register_user_pages(NV_GET_NV_STATE(pGpu),
-            NV_RM_PAGES_TO_OS_PAGES(pMemDesc->PageCount),
+            osPageCount,
             memdescGetPteArray(pMemDesc, AT_CPU), pImportPriv,
-            ppPrivate);
+            ppPrivate, bUnprotected);
     if (rmStatus != NV_OK)
     {
         memdescDestroy(pMemDesc);
@@ -224,6 +241,15 @@ osCreateMemdescFromPages
     memdescSetFlag(pMemDesc, MEMDESC_FLAGS_KERNEL_MODE, NV_FALSE);
     memdescSetFlag(pMemDesc, MEMDESC_FLAGS_EXT_PAGE_ARRAY_MEM, NV_TRUE);
 
+    if (!NV_IS_ALIGNED64(memdescGetPhysAddr(pMemDesc, AT_CPU, 0), os_page_size))
+    {
+        rmStatus = NV_ERR_INVALID_ARGUMENT;
+        NV_ASSERT_OR_GOTO(0, cleanup);
+    }
+
+    NV_ASSERT_OK_OR_GOTO(rmStatus, memdescSetAllocSizeFields(pMemDesc, size, NV_RM_PAGE_SIZE), cleanup);
+
+
     //
     // If the OS layer doesn't think in RM page size, we need to inflate the
     // PTE array into RM pages.
@@ -231,8 +257,7 @@ osCreateMemdescFromPages
     if ((NV_RM_PAGE_SIZE < os_page_size) &&
         !memdescGetContiguity(pMemDesc, AT_CPU))
     {
-        RmInflateOsToRmPageArray(memdescGetPteArray(pMemDesc, AT_CPU),
-                                 pMemDesc->PageCount);
+        RmInflateOsToRmPageArray(memdescGetPteArray(pMemDesc, AT_CPU), pMemDesc->PageCount);
     }
 
     //
@@ -246,6 +271,7 @@ osCreateMemdescFromPages
     memdescSetMemData(pMemDesc, *ppPrivate, NULL);
 
     rmStatus = memdescMapIommu(pMemDesc, pGpu->busInfo.iovaspaceId);
+cleanup:
     if (rmStatus != NV_OK)
     {
         if ((NV_RM_PAGE_SIZE < os_page_size) &&
@@ -256,7 +282,7 @@ osCreateMemdescFromPages
         }
 
         nv_unregister_user_pages(NV_GET_NV_STATE(pGpu),
-                                 NV_RM_PAGES_TO_OS_PAGES(pMemDesc->PageCount),
+                                 osPageCount,
                                  NULL /* import_priv */, ppPrivate);
         memdescDestroy(pMemDesc);
         return rmStatus;
@@ -342,6 +368,11 @@ osCheckGpuBarsOverlapAddrRange
     gpuInstance = 0;
     while ((pGpu = gpumgrGetNextGpu(gpuMask, &gpuInstance)) != NULL)
     {
+        if (pGpu->getProperty(pGpu, PDB_PROP_GPU_ZERO_FB))
+        {
+            continue;
+        }
+
         NV_INIT_RANGE(gpuPhysFbAddrRange, gpumgrGetGpuPhysFbAddr(pGpu),
             gpumgrGetGpuPhysFbAddr(pGpu) + pGpu->fbLength -1);
 
@@ -398,6 +429,7 @@ osCreateOsDescriptorFromIoMemory
     NvRangeU64 physAddrRange;
     NvU64 *base = 0;
     NvBool bAllowMmap;
+    NvU64 size;
 
     //
     // Unlike the page array path, this one deals exclusively
@@ -465,7 +497,9 @@ osCreateOsDescriptorFromIoMemory
     //
     *base = _doWarBug4040336(pGpu, *base);
 
-    rmStatus = memdescCreate(ppMemDesc, pGpu, (*pLimit + 1), 0,
+    size = NV_ALIGN_UP64(*pLimit + 1, os_page_size);
+
+    rmStatus = memdescCreate(ppMemDesc, pGpu, size, 0,
                              NV_MEMORY_CONTIGUOUS, ADDR_SYSMEM,
                              NV_MEMORY_UNCACHED, MEMDESC_FLAGS_NONE);
     if (rmStatus != NV_OK)
@@ -494,6 +528,13 @@ osCreateOsDescriptorFromIoMemory
 
     *ppPrivate = NULL;
 
+    if (!NV_IS_ALIGNED64(pPteArray[0], os_page_size))
+    {
+        rmStatus = NV_ERR_INVALID_ARGUMENT;
+        NV_ASSERT_OR_GOTO(0, cleanup);
+    }
+    NV_ASSERT_OK_OR_GOTO(rmStatus, memdescSetAllocSizeFields(pMemDesc, size, NV_RM_PAGE_SIZE), cleanup);
+
     if (bAllowMmap)
     {
         rmStatus = nv_register_peer_io_mem(NV_GET_NV_STATE(pGpu), pPteArray,
@@ -517,6 +558,7 @@ osCreateOsDescriptorFromIoMemory
     // this call will succeed.
     //
     rmStatus = memdescMapIommu(pMemDesc, pGpu->busInfo.iovaspaceId);
+cleanup:
     if (rmStatus != NV_OK)
     {
         if (*ppPrivate != NULL)
@@ -556,6 +598,7 @@ osCreateOsDescriptorFromPhysAddr
     NvU64 *pPhys_addrs;
     NvU64  num_os_pages;
     NvU32  idx;
+    NvU64  size;
 
     // Currently only work with contiguous sysmem allocations
     if (!FLD_TEST_DRF(OS02, _FLAGS, _PHYSICALITY, _CONTIGUOUS, flags))
@@ -584,7 +627,11 @@ osCreateOsDescriptorFromPhysAddr
     }
 
     base = (NvU64)pDescriptor;
-    rmStatus = memdescCreate(ppMemDesc, pGpu, (*pLimit + 1), 0,
+    size = NV_ALIGN_UP64((*pLimit + 1), os_page_size);
+
+    NV_ASSERT_OR_RETURN(NV_IS_ALIGNED64(base, os_page_size), NV_ERR_INVALID_ARGUMENT);
+
+    rmStatus = memdescCreate(ppMemDesc, pGpu, size, 0,
                              NV_MEMORY_CONTIGUOUS, ADDR_SYSMEM,
                              cache_type, memdescFlags);
     if (rmStatus != NV_OK)
@@ -604,7 +651,7 @@ osCreateOsDescriptorFromPhysAddr
     pPteArray = memdescGetPteArray(pMemDesc, AT_CPU);
     pPteArray[0] = base;
 
-    num_os_pages = NV_RM_PAGES_TO_OS_PAGES(pMemDesc->PageCount);
+    num_os_pages = size >> os_page_shift;
     pPhys_addrs  = portMemAllocNonPaged(sizeof(NvU64) * num_os_pages);
     if (pPhys_addrs == NULL)
         goto cleanup_memdesc;
@@ -621,12 +668,10 @@ osCreateOsDescriptorFromPhysAddr
     if (rmStatus != NV_OK)
         goto cleanup_memdesc;
 
-    //
-    // For syncpoint memory, if IOMMU skip flag wasn't set earlier,
-    // create IOVA mapping.
-    //
-    if (FLD_TEST_DRF(OS02, _FLAGS, _ALLOC_TYPE_SYNCPOINT, _APERTURE, flags) &&
-        !memdescGetFlag(pMemDesc, MEMDESC_FLAGS_SKIP_IOMMU_MAPPING))
+    NV_ASSERT_OK_OR_RETURN(memdescSetAllocSizeFields(pMemDesc, size, NV_RM_PAGE_SIZE));
+
+    // If IOMMU skip flag wasn't set earlier, create IOVA mapping.
+    if (!memdescGetFlag(pMemDesc, MEMDESC_FLAGS_SKIP_IOMMU_MAPPING))
     {
         //
         // memdescMapIommu() requires the OS-private data to be set on the memory
@@ -683,6 +728,18 @@ _createMemdescFromDmaBufSgtHelper
     MEMORY_DESCRIPTOR *pMemDesc;
     NvU64 memdescFlags = MEMDESC_FLAGS_NONE;
     NvU32 gpuCachedFlags;
+    NvBool isPeerMmio = NV_FALSE;
+    NvU64 osPageCount;
+
+    //
+    // Align size up to os page size. This is important in
+    // order to support submemdesc mappings at native page size.
+    // Once dynamic tracking is enabled this will not be needed
+    // as all submemor
+    //
+    size = NV_ALIGN_UP64(size, os_page_size);
+
+    osPageCount = size >> os_page_shift;
 
     NV_ASSERT((pMemDataReleaseCallback == osDestroyOsDescriptorFromDmaBuf) ||
               (pMemDataReleaseCallback == osDestroyOsDescriptorFromSgt));
@@ -696,9 +753,46 @@ _createMemdescFromDmaBufSgtHelper
         cacheType = NV_MEMORY_CACHED;
     }
 
+    if (FLD_TEST_DRF(OS02, _FLAGS, _GPU_CACHEABLE, _YES, flags))
+    {
+        gpuCachedFlags = NV_MEMORY_CACHED;
+    }
+    else
+    {
+        gpuCachedFlags = NV_MEMORY_UNCACHED;
+    }
+
+    if (FLD_TEST_DRF(OS02, _FLAGS, _ALLOC_TYPE_SYNCPOINT, _APERTURE, flags))
+    {
+        // Syncpoint memory is uncached.
+        if ((cacheType      != NV_MEMORY_UNCACHED) ||
+            (gpuCachedFlags != NV_MEMORY_UNCACHED))
+        {
+            NV_PRINTF(LEVEL_ERROR,
+                      "%s(): Error: Syncpoint memory region should be uncached!!!\n",
+                      __FUNCTION__);
+            return NV_ERR_INVALID_FLAGS;
+        }
+
+        isPeerMmio           = NV_TRUE;
+
+        NV_PRINTF(LEVEL_INFO,
+                  "%s(): Syncpoint type sgt!\n", __FUNCTION__);
+    }
+
     if (FLD_TEST_DRF(OS02, _FLAGS, _ALLOC_NISO_DISPLAY, _YES, flags))
     {
         memdescFlags |= MEMDESC_FLAGS_MEMORY_TYPE_DISPLAY_NISO;
+    }
+
+    if (FLD_TEST_DRF(OS02, _FLAGS, _ALLOC_USER_READ_ONLY, _YES, flags))
+    {
+        memdescFlags |= MEMDESC_FLAGS_USER_READ_ONLY;
+    }
+
+    if (FLD_TEST_DRF(OS02, _FLAGS, _ALLOC_DEVICE_READ_ONLY, _YES, flags))
+    {
+        memdescFlags |= MEMDESC_FLAGS_DEVICE_READ_ONLY;
     }
 
     rmStatus = memdescCreate(ppMemDesc, pGpu, size, 0,
@@ -707,15 +801,6 @@ _createMemdescFromDmaBufSgtHelper
     if (rmStatus != NV_OK)
     {
         return rmStatus;
-    }
-
-    if (FLD_TEST_DRF(OS02, _FLAGS, _GPU_CACHEABLE, _YES, flags))
-    {
-        gpuCachedFlags = NV_MEMORY_CACHED;
-    }
-    else
-    {
-        gpuCachedFlags = NV_MEMORY_UNCACHED;
     }
 
     pMemDesc = *ppMemDesc;
@@ -729,16 +814,26 @@ _createMemdescFromDmaBufSgtHelper
     *ppPrivate = NULL;
     rmStatus = nv_register_sgt(NV_GET_NV_STATE(pGpu),
                                memdescGetPteArray(pMemDesc, AT_CPU),
-                               NV_RM_PAGES_TO_OS_PAGES(pMemDesc->PageCount),
+                               osPageCount,
                                memdescGetCpuCacheAttrib(pMemDesc),
                                ppPrivate,
                                pImportSgt,
-                               pImportPriv);
+                               pImportPriv,
+                               isPeerMmio);
     if (rmStatus != NV_OK)
     {
         memdescDestroy(pMemDesc);
         return rmStatus;
     }
+
+
+    if (!NV_IS_ALIGNED64(memdescGetPhysAddr(pMemDesc, AT_CPU, 0), os_page_size))
+    {
+        rmStatus = NV_ERR_INVALID_ARGUMENT;
+        NV_ASSERT_OR_GOTO(0, cleanup);
+    }
+
+    NV_ASSERT_OK_OR_GOTO(rmStatus, memdescSetAllocSizeFields(pMemDesc, size, NV_RM_PAGE_SIZE), cleanup);
 
     //
     // If the OS layer doesn't think in RM page size, we need to inflate the
@@ -747,8 +842,7 @@ _createMemdescFromDmaBufSgtHelper
     if ((NV_RM_PAGE_SIZE < os_page_size) &&
         !memdescGetContiguity(pMemDesc, AT_CPU))
     {
-        RmInflateOsToRmPageArray(memdescGetPteArray(pMemDesc, AT_CPU),
-                                 pMemDesc->PageCount);
+        RmInflateOsToRmPageArray(memdescGetPteArray(pMemDesc, AT_CPU), pMemDesc->PageCount);
     }
 
     memdescSetMemData(*ppMemDesc, *ppPrivate, NULL);
@@ -762,6 +856,7 @@ _createMemdescFromDmaBufSgtHelper
     // succeed.
     //
     rmStatus = memdescMapIommu(*ppMemDesc, pGpu->busInfo.iovaspaceId);
+cleanup:
     if (rmStatus != NV_OK)
     {
         if ((NV_RM_PAGE_SIZE < os_page_size) &&
@@ -869,6 +964,7 @@ osCreateOsDescriptorFromFileHandle
     NvU32 size = 0;
     nv_dma_buf_t *pImportPriv = NULL;
     struct sg_table *pImportSgt = NULL;
+    NvBool bRoDeviceMap = NV_FALSE;
     NvS32 fd;
 
     fd = (NvS32)((NvU64)pDescriptor);
@@ -881,7 +977,16 @@ osCreateOsDescriptorFromFileHandle
     }
 
     dma_dev = GetDmaDeviceForImport(nv, flags);
-    rmStatus = nv_dma_import_from_fd(dma_dev, fd, &size,
+
+    if (FLD_TEST_DRF(OS02, _FLAGS, _ALLOC_DEVICE_READ_ONLY, _YES, flags))
+    {
+        bRoDeviceMap = NV_TRUE;
+        NV_PRINTF(LEVEL_INFO,
+                  "%s(): RO DMA Mapping - flags [%x]!\n",
+                  __FUNCTION__, flags);
+    }
+
+    rmStatus = nv_dma_import_from_fd(dma_dev, fd, bRoDeviceMap, &size,
                                      &pImportSgt, &pImportPriv);
     if (rmStatus != NV_OK)
     {
@@ -948,9 +1053,19 @@ osCreateOsDescriptorFromDmaBufPtr
     nv_dma_buf_t *pImportPriv = NULL;
     struct sg_table *pImportSgt = NULL;
     void *dmaBuf = (void*)((NvUPtr)pDescriptor);
+    NvBool bRoDeviceMap = NV_FALSE;
 
     dma_dev = GetDmaDeviceForImport(nv, flags);
-    rmStatus = nv_dma_import_dma_buf(dma_dev, dmaBuf, &size,
+
+    if (FLD_TEST_DRF(OS02, _FLAGS, _ALLOC_DEVICE_READ_ONLY, _YES, flags))
+    {
+        bRoDeviceMap = NV_TRUE;
+        NV_PRINTF(LEVEL_INFO,
+                  "%s(): RO DMA Mapping - flags [%x]!\n",
+                  __FUNCTION__, flags);
+    }
+
+    rmStatus = nv_dma_import_dma_buf(dma_dev, dmaBuf, bRoDeviceMap, &size,
                                      &pImportSgt, &pImportPriv);
     if (rmStatus != NV_OK)
     {
@@ -975,6 +1090,9 @@ osDestroyOsDescriptorFromPhysAddr
 
     pPrivate = memdescGetMemData(pMemDesc);
     NV_ASSERT(pPrivate != NULL);
+
+    if (!memdescGetFlag(pMemDesc, MEMDESC_FLAGS_SKIP_IOMMU_MAPPING))
+        memdescUnmapIommu(pMemDesc, pGpu->busInfo.iovaspaceId);
 
     nv_unregister_phys_pages(NV_GET_NV_STATE(pGpu), pPrivate);
 }

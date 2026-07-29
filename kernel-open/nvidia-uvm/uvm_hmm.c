@@ -34,8 +34,9 @@ MODULE_PARM_DESC(uvm_disable_hmm,
                  "enabled if is not supported in this driver build "
                  "configuration, or if ATS settings conflict with HMM.");
 #else
-// So far, we've only tested HMM on x86_64, so disable it by default everywhere
-// else.
+// TODO: Bug 4103580: UVM: HMM: implement HMM support on ARM64 (aarch64)
+// So far, we've only tested HMM on x86_64 and aarch64 and it is broken on
+// aarch64 so disable it by default everywhere except x86_64.
 static bool uvm_disable_hmm = true;
 MODULE_PARM_DESC(uvm_disable_hmm,
                  "Force-disable HMM functionality in the UVM driver. "
@@ -72,6 +73,19 @@ module_param(uvm_disable_hmm, bool, 0444);
 #include "uvm_api.h"
 #include "uvm_va_policy.h"
 #include "uvm_tools.h"
+
+//
+// Pass 0 as the order, when actual large order support is added this
+// function will need to be revisited
+//
+static __always_inline void nv_zone_device_page_init(struct page *page)
+{
+#if defined(NV_ZONE_DEVICE_PAGE_INIT_HAS_PGMAP_AND_ORDER_ARGS)
+    zone_device_page_init(page, page_pgmap(page), 0);
+#else
+    zone_device_page_init(page);
+#endif
+}
 
 // The function nv_PageSwapCache() wraps the check for page swap cache flag in
 // order to support a wide variety of kernel versions.
@@ -126,6 +140,8 @@ typedef struct
 
 bool uvm_hmm_is_enabled_system_wide(void)
 {
+    // TODO: Bug 4103580: Once aarch64 supports HMM this condition will no
+    // longer be true.
     if (uvm_disable_hmm)
         return false;
 
@@ -182,7 +198,7 @@ static NV_STATUS hmm_copy_devmem_page(struct page *dst_page, struct page *src_pa
     if (status != NV_OK)
         goto out;
 
-    status = uvm_parent_gpu_map_cpu_pages(gpu->parent, dst_page, PAGE_SIZE, &dma_addr);
+    status = uvm_gpu_map_cpu_page(gpu, dst_page, &dma_addr);
     if (status != NV_OK)
         goto out_unmap_gpu;
 
@@ -202,6 +218,7 @@ static NV_STATUS hmm_copy_devmem_page(struct page *dst_page, struct page *src_pa
                                  PAGE_SIZE);
     uvm_push_end(&push);
     status = uvm_tracker_add_push_safe(&tracker, &push);
+
     if (status == NV_OK)
         status = uvm_tracker_wait_deinit(&tracker);
 
@@ -243,6 +260,7 @@ static NV_STATUS uvm_hmm_pmm_gpu_evict_pfn(unsigned long pfn)
         // in data loss in the application but failures are not expected.
         if (hmm_copy_devmem_page(dst_page, migrate_pfn_to_page(src_pfn)) != NV_OK)
             memzero_page(dst_page, 0, PAGE_SIZE);
+
         dst_pfn = migrate_pfn(page_to_pfn(dst_page));
         migrate_device_pages(&src_pfn, &dst_pfn, 1);
     }
@@ -1565,6 +1583,31 @@ uvm_va_block_region_t uvm_hmm_get_prefetch_region(uvm_va_block_t *va_block,
     return uvm_va_block_region_from_start_end(va_block, start, end);
 }
 
+uvm_prot_t uvm_hmm_compute_mapping_prot(uvm_va_block_t *va_block,
+                                        uvm_processor_id_t processor_id,
+                                        uvm_page_index_t page_index)
+{
+    if (!uvm_processor_mask_test(&va_block->mapped, UVM_ID_CPU))
+        return UVM_PROT_NONE;
+
+    if (uvm_page_mask_test(&va_block->cpu.pte_bits[UVM_PTE_BITS_CPU_WRITE], page_index)) {
+        if (uvm_processor_mask_test(&va_block->hmm.va_space->has_native_atomics[uvm_id_value(UVM_ID_CPU)],
+                                    processor_id))
+            // If the CPU has write access it also has atomic access, so it's
+            // fine for any GPU with HW support to do atomic accesses.
+            return UVM_PROT_READ_WRITE_ATOMIC;
+        else
+            // Otherwise the GPU needs to fault on atomic access to ensure the
+            // CPU is unmapped.
+            return UVM_PROT_READ_WRITE;
+    }
+
+    if (uvm_page_mask_test(&va_block->cpu.pte_bits[UVM_PTE_BITS_CPU_READ], page_index))
+        return UVM_PROT_READ_ONLY;
+
+    return UVM_PROT_NONE;
+}
+
 uvm_prot_t uvm_hmm_compute_logical_prot(uvm_va_block_t *va_block,
                                         struct vm_area_struct *vma,
                                         NvU64 addr)
@@ -2141,7 +2184,7 @@ static void fill_dst_pfn(uvm_va_block_t *va_block,
 
         UVM_ASSERT(!page_count(dpage));
         UVM_ASSERT(!dpage->zone_device_data);
-        zone_device_page_init(dpage);
+        nv_zone_device_page_init(dpage);
         dpage->zone_device_data = gpu_chunk;
         atomic64_inc(&va_block->hmm.va_space->hmm.allocated_page_count);
     }
@@ -3651,7 +3694,7 @@ NV_STATUS uvm_hmm_remote_cpu_fault(struct vm_fault *vmf)
     args.vma = vmf->vma;
     args.src = &src_pfn;
     args.dst = &dst_pfn;
-    args.start = nv_page_fault_va(vmf);
+    args.start = vmf->address;
     args.end = args.start + PAGE_SIZE;
     args.pgmap_owner = &g_uvm_global;
     args.flags = MIGRATE_VMA_SELECT_DEVICE_PRIVATE;
@@ -3685,6 +3728,7 @@ NV_STATUS uvm_hmm_remote_cpu_fault(struct vm_fault *vmf)
 out:
     if (status == NV_OK)
         migrate_vma_pages(&args);
+
     migrate_vma_finalize(&args);
 
     return status;

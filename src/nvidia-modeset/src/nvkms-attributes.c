@@ -32,6 +32,7 @@
 #include "nvos.h"
 #include "nvkms-stereo.h"
 #include "nvkms-hdmi.h"
+#include "dp/nvdp-connector.h"
 
 #include <ctrl/ctrl0073/ctrl0073dp.h> // NV0073_CTRL_CMD_DP_GET_LINK_CONFIG_*
 
@@ -614,11 +615,13 @@ static void DpyPostColorSpaceOrRangeSetEvo(NVDpyEvoPtr pDpyEvo)
     NvU32 head;
     NvBool colorSpaceChanged = FALSE;
     NvBool colorBpcChanged = FALSE;
+    NVDpyAttributeColor tmpDpyColor;
 
     if (pDpyEvo->apiHead == NV_INVALID_HEAD) {
         return;
     }
     pApiHeadState = &pDispEvo->apiHeadState[pDpyEvo->apiHead];
+    tmpDpyColor = pApiHeadState->attributes.color;
 
     nvAssert((pApiHeadState->hwHeadsMask) != 0x0 &&
              (nvDpyIdIsInDpyIdList(pDpyEvo->id, pApiHeadState->activeDpys)));
@@ -643,30 +646,20 @@ static void DpyPostColorSpaceOrRangeSetEvo(NVDpyEvoPtr pDpyEvo)
     colorSpaceChanged = (pApiHeadState->attributes.color.format != colorSpace);
     colorBpcChanged = (pApiHeadState->attributes.color.bpc != colorBpc);
 
-    /* For DP, neither color space nor bpc can be changed without a modeset */
-    if (nvConnectorUsesDPLib(pDpyEvo->pConnectorEvo) &&
+    /* For DP and HDMI FRL, neither color space nor bpc can be changed without a modeset */
+    if ((nvConnectorUsesDPLib(pDpyEvo->pConnectorEvo) ||
+            (pApiHeadState->timings.protocol == NVKMS_PROTOCOL_SOR_HDMI_FRL)) &&
         (colorSpaceChanged || colorBpcChanged)) {
         return;
     }
 
-    /*
-     * Hardware does not support HDMI FRL with YUV422, and it is not possible
-     * to downgrade current color bpc on HDMI FRL at this point.
-     */
-    if ((pApiHeadState->timings.protocol == NVKMS_PROTOCOL_SOR_HDMI_FRL) &&
-            ((colorSpace == NV_KMS_DPY_ATTRIBUTE_CURRENT_COLOR_SPACE_YCbCr422) ||
-             (pApiHeadState->attributes.color.bpc > colorBpc))) {
-        return;
-    }
+    tmpDpyColor.format = colorSpace;
+    tmpDpyColor.range = colorRange;
+    tmpDpyColor.bpc = colorBpc;
 
     if (nvDpyIsHdmiEvo(pDpyEvo) &&
-            (colorBpc > pApiHeadState->attributes.color.bpc)) {
-        NVDpyAttributeColor tmpDpyColor = pApiHeadState->attributes.color;
-
-        tmpDpyColor.format = colorSpace;
-        tmpDpyColor.range = colorRange;
-        tmpDpyColor.bpc = colorBpc;
-
+            ((colorBpc > pApiHeadState->attributes.color.bpc) || 
+              colorSpaceChanged)) {
         /*
          * For HDMI FRL, downgrade the selected color bpc to the current color
          * bpc so that the current color bpc remains unchanged.
@@ -677,11 +670,9 @@ static void DpyPostColorSpaceOrRangeSetEvo(NVDpyEvoPtr pDpyEvo)
             const NvKmsDpyOutputColorFormatInfo colorFormatsInfo =
                 nvDpyGetOutputColorFormatInfo(pDpyEvo);
 
-            while (nvHdmiGetEffectivePixelClockKHz(pDpyEvo,
-                                                   &pApiHeadState->timings,
-                                                   &tmpDpyColor) >
-                       pDpyEvo->maxSingleLinkPixelClockKHz) {
-
+            while (!nvHdmiIsTmdsPossible(pDpyEvo,
+                                         &pApiHeadState->timings,
+                                         &tmpDpyColor)) {
                 if(!nvDowngradeColorSpaceAndBpc(pDpyEvo,
                                                 &colorFormatsInfo,
                                                 &tmpDpyColor)) {
@@ -689,15 +680,11 @@ static void DpyPostColorSpaceOrRangeSetEvo(NVDpyEvoPtr pDpyEvo)
                 }
             }
         }
+    } 
 
-        pApiHeadState->attributes.color.format = tmpDpyColor.format;
-        pApiHeadState->attributes.color.range = tmpDpyColor.range;
-        pApiHeadState->attributes.color.bpc = tmpDpyColor.bpc;
-    } else {
-        pApiHeadState->attributes.color.format = colorSpace;
-        pApiHeadState->attributes.color.range = colorRange;
-        pApiHeadState->attributes.color.bpc = colorBpc;
-    }
+    pApiHeadState->attributes.color.format = tmpDpyColor.format;
+    pApiHeadState->attributes.color.range = tmpDpyColor.range;
+    pApiHeadState->attributes.color.bpc = tmpDpyColor.bpc;
 
     /* Update hardware's current colorSpace and colorRange */
     FOR_EACH_EVO_HW_HEAD_IN_MASK(pApiHeadState->hwHeadsMask, head) {
@@ -1125,6 +1112,42 @@ static NvBool GetDisplayportSinkIsAudioCapableValidValues(
     return TRUE;
 }
 
+static NvBool SetDisplayportForceEnableFEC(NVDpyEvoRec *pDpyEvo, NvS64 value)
+{
+    NVConnectorEvoPtr pConnectorEvo = pDpyEvo->pConnectorEvo;
+
+    if (!nvConnectorUsesDPLib(pConnectorEvo)) {
+        return FALSE;
+    }
+
+    return nvDPForceEnableFEC(pConnectorEvo, !!value);
+}
+
+static NvBool GetDisplayportForceEnableFEC(const NVDpyEvoRec *pDpyEvo,
+                                           NvS64 *pValue)
+{
+    NVConnectorEvoPtr pConnectorEvo = pDpyEvo->pConnectorEvo;
+
+    if (!nvConnectorUsesDPLib(pConnectorEvo)) {
+        return FALSE;
+    }
+
+    *pValue = nvDPIsFECForceEnabled(pConnectorEvo);
+
+    return TRUE;
+}
+
+static NvBool GetDisplayportForceEnableFECValidValues(
+    const NVDpyEvoRec *pDpyEvo,
+    struct NvKmsAttributeValidValuesCommonReply *pValidValues)
+{
+    if (!nvConnectorUsesDPLib(pDpyEvo->pConnectorEvo)) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
 NvS64 nvRMLaneCountToNvKms(NvU32 rmLaneCount)
 {
     switch (rmLaneCount) {
@@ -1413,6 +1436,12 @@ static const struct {
         .set            = NULL,
         .get            = GetDisplayportSinkIsAudioCapable,
         .getValidValues = GetDisplayportSinkIsAudioCapableValidValues,
+        .type           = NV_KMS_ATTRIBUTE_TYPE_BOOLEAN,
+    },
+    [NV_KMS_DPY_ATTRIBUTE_DISPLAYPORT_FORCE_ENABLE_FEC] = {
+        .set            = SetDisplayportForceEnableFEC,
+        .get            = GetDisplayportForceEnableFEC,
+        .getValidValues = GetDisplayportForceEnableFECValidValues,
         .type           = NV_KMS_ATTRIBUTE_TYPE_BOOLEAN,
     },
     [NV_KMS_DPY_ATTRIBUTE_FRAMELOCK_DISPLAY_CONFIG] = {

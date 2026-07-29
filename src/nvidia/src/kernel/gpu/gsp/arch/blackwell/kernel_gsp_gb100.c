@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -26,6 +26,7 @@
  */
 
 #include "rmconfig.h"
+#include "gpu/falcon/kernel_falcon.h"
 #include "gpu/gsp/kernel_gsp.h"
 #include "gpu/fsp/kern_fsp.h"
 
@@ -127,13 +128,13 @@ kgspGetGspRmBootUcodeStorage_GB100
 
             if (kgspIsDebugModeEnabled(pGpu, pKernelGsp))
             {
-                *ppBinStorageImage = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMC, "ucode_image_dbg");
-                *ppBinStorageDesc  = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMCDesc, "ucode_desc_dbg");
+                *ppBinStorageImage = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMC, BINDATA_LABEL_UCODE_IMAGE_DBG);
+                *ppBinStorageDesc  = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMCDesc, BINDATA_LABEL_UCODE_DESC_DBG);
             }
             else
             {
-                *ppBinStorageImage = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMC, "ucode_image_prod");
-                *ppBinStorageDesc  = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMCDesc, "ucode_desc_prod");
+                *ppBinStorageImage = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMC, BINDATA_LABEL_UCODE_IMAGE_PROD);
+                *ppBinStorageDesc  = (BINDATA_STORAGE *)bindataArchiveGetStorage(pBinArchiveConcatenatedFMCDesc, BINDATA_LABEL_UCODE_DESC_PROD);
             }
 
             return;
@@ -149,34 +150,42 @@ kgspGetGspRmBootUcodeStorage_GB100
 }
 
 /*!
- * Handle GSP Fatal Errors
+ * Check if GSP has been poisoned
+ *
+ * @param[in] pGpu         OBJGPU pointer
+ * @param[in] pKernelGsp   KernelGsp pointer
+ * @param[in] intrStatus   Interrupt status
+ *
+ * @return NV_TRUE if GSP has been poisoned, NV_FALSE otherwise
  */
-void
-kgspServiceFatalHwError_GB100
+NvBool
+kgspCheckGspPoisonError_GB100
 (
-    OBJGPU    *pGpu,
-    KernelGsp *pKernelGsp,
-    NvU32      intrStatus
+ OBJGPU    *pGpu,
+ KernelGsp *pKernelGsp,
+ NvU32      intrStatus
 )
 {
-    NvU32 errorCode = GPU_REG_RD32(pGpu, NV_PGSP_RISCV_FAULT_CONTAINMENT_SRCSTAT);
+    NvU32 errorStatus = 0;
 
     if (!FLD_TEST_DRF(_PGSP_FALCON, _IRQSTAT, _FATAL_ERROR, _TRUE, intrStatus))
     {
-        return;
+        return NV_FALSE;
     }
 
-    NV_PRINTF(LEVEL_ERROR, "NV_PGSP_FALCON_IRQSTAT_FATAL_ERROR PENDING error_code 0x%x\n", errorCode);
-    MODS_ARCH_ERROR_PRINTF("NV_PGSP_FALCON_IRQSTAT_FATAL_ERROR=0x%x\n", errorCode);
+    KernelFalcon *pKernelFlcn     = staticCast(pKernelGsp, KernelFalcon);
 
-    pKernelGsp->bFatalError = NV_TRUE;
+    if (kflcnGetFatalHwErrorStatus_HAL(pGpu, pKernelFlcn, &errorStatus) != NV_OK)
+    {
+        NV_PRINTF(LEVEL_ERROR, "NV_PGSP_FALCON_IRQSTAT_FATAL_ERROR unknown error pending\n");
+        MODS_ARCH_ERROR_PRINTF("NV_PGSP_FALCON_IRQSTAT_FATAL_ERROR unknown error pending\n");
+
+        return NV_FALSE;
+    }
 
     // Poison error
-    if (FLD_TEST_DRF(_PGSP, _RISCV_FAULT_CONTAINMENT_SRCSTAT, _GLOBAL_MEM, _FAULTED, errorCode))
+    if (FLD_TEST_DRF(_PGSP, _RISCV_FAULT_CONTAINMENT_SRCSTAT, _GLOBAL_MEM, _FAULTED, errorStatus))
     {
-        NV_ERROR_CONT_LOCATION loc = { 0 };
-
-        loc.locType = NV_ERROR_CONT_LOCATION_TYPE_NONE;
 
         //
         // Assert since this interrupt can't be cleared without a
@@ -187,13 +196,79 @@ kgspServiceFatalHwError_GB100
             NV_ASSERT_FAILED("GSP poison pending when poison is disabled");
         }
 
-        NV_ASSERT_OK(gpuUpdateErrorContainmentState_HAL(pGpu, NV_ERROR_CONT_ERR_ID_E24_GSP_POISON, loc, NULL));
-    }
-    else
-    {
-        nvErrorLog_va((void *)pGpu, ROBUST_CHANNEL_CONTAINED_ERROR, "GSP-RISCV instance 0 fatal error");
-        NV_ASSERT_OK(gpuMarkDeviceForReset(pGpu));
+        return NV_TRUE;
     }
 
+    return NV_FALSE;
+}
+
+/*!
+ * Handle GSP Fatal Errors
+ */
+void
+kgspServiceFatalHwError_GB100
+(
+    OBJGPU    *pGpu,
+    KernelGsp *pKernelGsp,
+    NvU32      intrStatus
+)
+{
+    KernelFalcon *pKernelFlcn     = staticCast(pKernelGsp, KernelFalcon);
+    NvU32         errorStatus     = 0;
+    NvU32         errorCodeBitIdx = 0;
+
+    if (!FLD_TEST_DRF(_PGSP_FALCON, _IRQSTAT, _FATAL_ERROR, _TRUE, intrStatus))
+    {
+        return;
+    }
+
+    // Must be set before logging any Xids to skip the GSP RPC
+    pKernelGsp->bFatalError = NV_TRUE;
+
+    if (kflcnGetFatalHwErrorStatus_HAL(pGpu, pKernelFlcn, &errorStatus) != NV_OK)
+    {
+        NV_PRINTF(LEVEL_ERROR, "NV_PGSP_FALCON_IRQSTAT_FATAL_ERROR unknown error pending\n");
+        MODS_ARCH_ERROR_PRINTF("NV_PGSP_FALCON_IRQSTAT_FATAL_ERROR unknown error pending\n");
+
+        nvErrorLog_va((void *)pGpu, ROBUST_CHANNEL_CONTAINED_ERROR, "GSP-RISCV instance 0 unknown fatal error");
+
+        goto done;
+    }
+
+    FOR_EACH_INDEX_IN_MASK(32, errorCodeBitIdx, errorStatus)
+    {
+        NvU32       errorCode  = NVBIT(errorCodeBitIdx);
+        const char *pErrorName = kflcnFatalHwErrorCodeToString_HAL(pGpu, pKernelFlcn, errorCode, NV_FALSE);
+
+#if NV_PRINTF_STRINGS_ALLOWED
+        {
+            const char *pErrorNameNvPrintf = kflcnFatalHwErrorCodeToString_HAL(pGpu, pKernelFlcn, errorCode, NV_TRUE);
+
+            NV_PRINTF(LEVEL_ERROR, "NV_PGSP_FALCON_IRQSTAT_FATAL_ERROR %s pending (mask: 0x%x)\n",
+                      pErrorNameNvPrintf, errorStatus);
+            MODS_ARCH_ERROR_PRINTF("NV_PGSP_FALCON_IRQSTAT_FATAL_ERROR=0x%x\n", errorStatus);
+        }
+#endif // NV_PRINTF_STRINGS_ALLOWED
+
+        // Poison error
+        if (kgspCheckGspPoisonError_HAL(pGpu, pKernelGsp, intrStatus))
+        {
+            NV_ERROR_CONT_LOCATION loc = { 0 };
+
+            loc.locType = NV_ERROR_CONT_LOCATION_TYPE_NONE;
+
+            NV_ASSERT_OK(gpuUpdateErrorContainmentState_HAL(pGpu, NV_ERROR_CONT_ERR_ID_E24_GSP_POISON, loc, NULL));
+        }
+        else
+        {
+            nvErrorLog_va((void *)pGpu, ROBUST_CHANNEL_CONTAINED_ERROR,
+                          "GSP-RISCV instance 0 %s fatal error (mask: 0x%x)",
+                          pErrorName, errorStatus);
+        }
+    }
+    FOR_EACH_INDEX_IN_MASK_END;
+
+done:
+    NV_ASSERT_OK(gpuMarkDeviceForReset(pGpu));
     kgspRcAndNotifyAllChannels(pGpu, pKernelGsp, ROBUST_CHANNEL_CONTAINED_ERROR, NV_TRUE);
 }

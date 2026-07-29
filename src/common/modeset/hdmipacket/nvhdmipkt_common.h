@@ -65,7 +65,6 @@ struct tagNVHDMIPKT_MEM_MAP
 };
 
 // HDMIPKT print define
-#if defined (DEBUG)
     #define NvHdmiPkt_Print(_p, ...)                                                     \
         do {                                                                             \
             if ((_p)->callback.print)                                                    \
@@ -73,15 +72,16 @@ struct tagNVHDMIPKT_MEM_MAP
                 (_p)->callback.print((_p)->cbHandle, "HdmiPacketLibrary: " __VA_ARGS__); \
             }                                                                            \
         } while(0)
-#else
-    #define NvHdmiPkt_Print(_p, ...) /* nothing */
-#endif
 
 
 // HDMIPKT assert define
 #if defined (DEBUG)
-    #define NvHdmiPkt_AssertP(p, expr)  ((p)->callback.assert ?                           \
-                                         (p)->callback.assert((p)->cbHandle, !!(expr)) : 0)
+    #define NvHdmiPkt_AssertP(p, expr)  ((p)->callback.assert && !(expr) ?  \
+                                         (p)->callback.assert(#expr,        \
+                                                              __FILE__,     \
+                                                              __FUNCTION__, \
+                                                              __LINE__)     \
+                                         : 0)
     #define NvHdmiPkt_Assert(expr)      NvHdmiPkt_AssertP(pThis, expr)
 #else
     #define NvHdmiPkt_AssertP(p, expr)
@@ -91,12 +91,15 @@ struct tagNVHDMIPKT_MEM_MAP
 
 // Prototypes for common functions shared across implementations.
 extern void hdmiWriteDummyPacket(NVHDMIPKT_CLASS*, NvU32*, NvU32, NvU32, NvU8 const *const);
-extern NVHDMIPKT_RESULT hdmiAssessLinkCapabilitiesDummy(NVHDMIPKT_CLASS             *pThis,
-                                                        NvU32                        subDevice,
-                                                        NvU32                        displayId,
+extern NVHDMIPKT_RESULT hdmiAssessLinkCapabilitiesDummy(NVHDMIPKT_CLASS      *pThis,
+                                                        NvU32                 subDevice,
+                                                        NvU32                 displayId,
                                                         NVT_EDID_INFO         const * const pSinkEdid,
-                                                        HDMI_SRC_CAPS               *pSrcCaps,
-                                                        HDMI_SINK_CAPS              *pSinkCaps);
+                                                        const NvBool          bPerformLinkTrainingToAssess,
+                                                        const NvBool          bIsDisplayActive,
+                                                        HDMI_FRL_DATA_RATE    currFRLRate,
+                                                        HDMI_SRC_CAPS        *pSrcCaps,
+                                                        HDMI_SINK_CAPS       *pSinkCaps);
 extern NVHDMIPKT_RESULT hdmiQueryFRLConfigDummy(NVHDMIPKT_CLASS                     *pThis,
                                                 HDMI_VIDEO_TRANSPORT_INFO     const * const pVidTransInfo,
                                                 HDMI_QUERY_FRL_CLIENT_CONTROL const * const pClientCtrl,

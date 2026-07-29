@@ -65,16 +65,17 @@
 
 #include "class/clcab5.h"      // BLACKWELL_DMA_COPY_B
 
-static NvU64  _scrubCheckProgress(OBJMEMSCRUB *pScrubber);
-static NvU64  _searchScrubList(OBJMEMSCRUB *pScrubber, RmPhysAddr base, NvU64 size);
-static void   _waitForPayload(OBJMEMSCRUB  *pScrubber, RmPhysAddr  base, RmPhysAddr end);
-static void   _scrubAddWorkToList(OBJMEMSCRUB  *pScrubber, RmPhysAddr  base, NvU64  size, NvU64  newId);
-static NvU32  _scrubMemory(OBJMEMSCRUB  *pScrubber, RmPhysAddr base, NvU64 size,
-                           NvU32 dstCpuCacheAttrib, NvU32 freeToken);
-static void   _scrubWaitAndSave(OBJMEMSCRUB *pScrubber, PSCRUB_NODE pList, NvLength  itemsToSave);
-static NvU64  _scrubGetFreeEntries(OBJMEMSCRUB *pScrubber);
-static NvU64  _scrubCheckAndSubmit(OBJMEMSCRUB *pScrubber, NvU64 pageCount, PSCRUB_NODE  pList,
-                                   PSCRUB_NODE pScrubListCopy, NvLength  pagesToScrubCheck);
+static NvU64     _scrubCheckProgress(OBJMEMSCRUB *pScrubber);
+static NvU64     _searchScrubList(OBJMEMSCRUB *pScrubber, RmPhysAddr base, NvU64 size);
+static NV_STATUS _waitForPayload(OBJMEMSCRUB  *pScrubber, RmPhysAddr  base, RmPhysAddr end);
+static void      _serviceInterrupts(OBJMEMSCRUB *pScrubber);
+static void      _scrubAddWorkToList(OBJMEMSCRUB  *pScrubber, RmPhysAddr  base, NvU64  size, NvU64  newId);
+static NvU32     _scrubMemory(OBJMEMSCRUB  *pScrubber, RmPhysAddr base, NvU64 size,
+                              NvU32 dstCpuCacheAttrib, NvU32 freeToken, NvU32 flags);
+static NV_STATUS _scrubWaitAndSave(OBJMEMSCRUB *pScrubber, PSCRUB_NODE pList, NvLength  itemsToSave);
+static NvU64     _scrubGetFreeEntries(OBJMEMSCRUB *pScrubber);
+static NvU64     _scrubCheckAndSubmit(OBJMEMSCRUB *pScrubber, NvU64 pageCount, PSCRUB_NODE  pList,
+                                   PSCRUB_NODE pScrubListCopy, NvLength  pagesToScrubCheck, NvU32 flags);
 static void   _scrubCopyListItems(OBJMEMSCRUB *pScrubber, PSCRUB_NODE pList, NvLength itemsToSave);
 
 static NV_STATUS _scrubCheckLocked(OBJMEMSCRUB  *pScrubber, PSCRUB_NODE *ppList, NvU64 *pSize);
@@ -110,9 +111,9 @@ scrubberConstruct
     {
         return NV_ERR_INVALID_ARGUMENT;
     }
-    pPma = &pHeap->pmaObject;
+    pPma = pHeap->pPmaObject;
 
-    if (pPma->pScrubObj != NULL)
+    if (pmaGetMemScrub(pPma) != NULL)
         return NV_OK;
 
     pScrubber = (OBJMEMSCRUB *)portMemAllocNonPaged(sizeof(OBJMEMSCRUB));
@@ -246,20 +247,22 @@ void
 scrubberDestruct
 (
     OBJGPU         *pGpu,
-    Heap           *pHeap,
-    OBJMEMSCRUB    *pScrubber
+    Heap           *pHeap
 )
 {
     PMA          *pPma      = NULL;
     PSCRUB_NODE   pPmaScrubList = NULL;
     NvU64         count = 0;
     NV_STATUS     status = NV_OK;
+    OBJMEMSCRUB  *pScrubber;
 
     if (pHeap == NULL)
     {
         return;
     }
-    pPma = &pHeap->pmaObject;
+    pPma = pHeap->pPmaObject;
+
+    pScrubber = pmaGetMemScrub(pPma);
 
     if (pScrubber == NULL)
         return;
@@ -405,7 +408,8 @@ scrubSubmitPages
     NvU64       *pPages,
     NvU64        pageCount,
     PSCRUB_NODE *ppList,
-    NvU64       *pSize
+    NvU64       *pSize,
+    NvU32        flags
 )
 {
     NvU64       curPagesSaved     = 0;
@@ -467,7 +471,8 @@ scrubSubmitPages
             numFinished = _scrubCheckAndSubmit(pScrubber, scrubCount,
                                                &pScrubList[totalSubmitted],
                                                &pScrubListCopy[curPagesSaved],
-                                               pagesToScrubCheck);
+                                               pagesToScrubCheck,
+                                               flags);
 
             scrubListSize     -= numFinished;
             curPagesSaved     += pagesToScrubCheck;
@@ -481,7 +486,7 @@ scrubSubmitPages
     else
     {
         totalSubmitted = _scrubCheckAndSubmit(pScrubber, scrubListSize,
-                                              pScrubList, NULL, 0);
+                                              pScrubList, NULL, 0, flags);
         *ppList = NULL;
         *pSize  = 0;
     }
@@ -550,10 +555,13 @@ scrubWaitPages
 
     for (iter = 0; iter < scrubListSize; iter++)
     {
-        _waitForPayload(pScrubber,
-                        pScrubList[iter].base,
-                        (pScrubList[iter].base + pScrubList[iter].size - 1));
+        NV_ASSERT_OK_OR_GOTO(status, 
+                             _waitForPayload(pScrubber,
+                                             pScrubList[iter].base,
+                                             (pScrubList[iter].base + pScrubList[iter].size - 1)),
+                             done);
     }
+done:
     portSyncMutexRelease(pScrubber->pScrubberMutex);
 
     if (pScrubList != NULL)
@@ -615,7 +623,12 @@ scrubCheckAndWaitForSize
             goto exit;
         }
 
-        _scrubWaitAndSave(pScrubber, pList, requiredItemsToSave);
+        NV_CHECK_OK_OR_GOTO(status,
+                            LEVEL_ERROR,
+                            _scrubWaitAndSave(pScrubber,
+                                              pList,
+                                              requiredItemsToSave),
+                            exit);
     }
     else {
         // since there is no scrub remaining, its upto the user about how to handle that.
@@ -627,6 +640,12 @@ scrubCheckAndWaitForSize
 
 exit:
     portSyncMutexRelease(pScrubber->pScrubberMutex);
+
+    if ((status != NV_OK) && (pList != NULL))
+    {
+        portMemFree(pList);
+        pList = NULL;
+    }
     return status;
 }
 
@@ -704,7 +723,8 @@ _scrubCheckAndSubmit
     NvU64        pageCount,
     PSCRUB_NODE  pList,
     PSCRUB_NODE  pScrubListCopy,
-    NvLength     pagesToScrubCheck
+    NvLength     pagesToScrubCheck,
+    NvU32        flags
 )
 {
     NvU64     iter = 0;
@@ -718,7 +738,12 @@ _scrubCheckAndSubmit
         goto exit;
     }
 
-    _scrubWaitAndSave(pScrubber, pScrubListCopy, pagesToScrubCheck);
+    NV_CHECK_OK_OR_GOTO(status,
+                        LEVEL_ERROR,
+                        _scrubWaitAndSave(pScrubber,
+                                          pScrubListCopy,
+                                          pagesToScrubCheck),
+                        exit);
 
     for (iter = 0; iter < pageCount; iter++)
     {
@@ -730,7 +755,7 @@ _scrubCheckAndSubmit
 
         {
             status =_scrubMemory(pScrubber, pList[iter].base, pList[iter].size, NV_MEMORY_DEFAULT,
-                                 (NvU32)newId);
+                                 (NvU32)newId, flags);
         }
 
         if(status != NV_OK)
@@ -804,12 +829,33 @@ _searchScrubList
 
 
 /**
+ * helper function to service interrupts
+ */
+static void
+_serviceInterrupts
+(
+    OBJMEMSCRUB *pScrubber
+)
+{
+    {
+        if (pScrubber->bIsEngineTypeSec2)
+        {
+            sec2utilsServiceInterrupts(pScrubber->pSec2Utils);
+        }
+        else
+        {
+            ceutilsServiceInterrupts(pScrubber->pCeUtils);
+        }
+    }
+}
+
+/**
  * helper function which waits for a particular submission to complete and
  * copies the completed work items from scrub list to temporary list
  *
  */
 
-static void
+static NV_STATUS
 _scrubWaitAndSave
 (
     OBJMEMSCRUB *pScrubber,
@@ -817,32 +863,48 @@ _scrubWaitAndSave
     NvLength     itemsToSave
 )
 {
-    NvU64  currentCompletedId = 0;
+    RMTIMEOUT  timeout;
+    OBJGPU    *pGpu   = pScrubber->pGpu;
+    NV_STATUS  status = NV_OK;
 
     if (itemsToSave == 0)
-        return;
+        goto done;
 
-    currentCompletedId = _scrubCheckProgress(pScrubber);
+    gpuSetTimeout(pGpu, GPU_TIMEOUT_DEFAULT, &timeout, 0);
 
-    while (currentCompletedId < (pScrubber->lastSeenIdByClient + itemsToSave))
+    while (_scrubCheckProgress(pScrubber) < (pScrubber->lastSeenIdByClient + itemsToSave))
     {
+        _serviceInterrupts(pScrubber);
+
+        status = gpuCheckTimeout(pGpu, &timeout);
+        if (status != NV_OK)
         {
-            if (pScrubber->bIsEngineTypeSec2)
-                sec2utilsServiceInterrupts(pScrubber->pSec2Utils);
-            else
-                ceutilsServiceInterrupts(pScrubber->pCeUtils);
+            if (status == NV_ERR_TIMEOUT)
+            {
+                if (_scrubCheckProgress(pScrubber) < (pScrubber->lastSeenIdByClient + itemsToSave))
+                {
+                    NV_PRINTF(LEVEL_ERROR, "Timed out when waiting for scrub jobs to finish.\n");
+                }
+                else
+                {
+                    status = NV_OK;
+                }
+                goto done;
+            }
         }
-        currentCompletedId = _scrubCheckProgress(pScrubber);
     }
 
     _scrubCopyListItems(pScrubber, pList, itemsToSave);
+
+done:
+    return status;
 }
 
 
 /**
  *  helper function to find and wait for a specific work to complete
  */
-static void
+static NV_STATUS
 _waitForPayload
 (
     OBJMEMSCRUB  *pScrubber,
@@ -850,21 +912,49 @@ _waitForPayload
     RmPhysAddr    end
 )
 {
-    NvU64     idToWait;
+    NvU64      idToWait;
+    RMTIMEOUT  timeout;
+    NV_STATUS  status        = NV_OK;
+    OBJGPU    *pGpu          = pScrubber->pGpu;
+    NvBool     bGpuLockTaken = (rmDeviceGpuLockIsOwner(gpuGetInstance(pGpu)) ||
+                                rmGpuLockIsOwner());
 
     //We need to look up in the range between [lastSeenIdByClient, lastSubmittedWorkId]
     idToWait = _searchScrubList(pScrubber, base, end);
 
     if (idToWait == 0)
     {
-        return;
+        return NV_OK;
     }
 
-    // Loop will break out, when the semaphore is equal to payload
+    gpuSetTimeout(pGpu, GPU_TIMEOUT_DEFAULT, &timeout, 0);
+
+    // Loop will break out, when the semaphore is equal to payload, or times out
     while (_scrubCheckProgress(pScrubber) < idToWait)
     {
-        portUtilSpin();
+        if (bGpuLockTaken)
+        {
+            _serviceInterrupts(pScrubber);
+        }
+
+        status = gpuCheckTimeout(pGpu, &timeout);
+        if (status != NV_OK)
+        {
+            if (status == NV_ERR_TIMEOUT)
+            {
+                if (_scrubCheckProgress(pScrubber) < idToWait)
+                {
+                    NV_PRINTF(LEVEL_ERROR, "Timed out when waiting for scrub job %llu to finish.\n", idToWait);
+                }
+                else
+                {
+                    status = NV_OK;
+                }
+            }
+            break;
+        }
     }
+    return status;
 }
 
 /**
@@ -960,7 +1050,8 @@ _scrubMemory
     RmPhysAddr   base,
     NvU64        size,
     NvU32        dstCpuCacheAttrib,
-    NvU32        payload
+    NvU32        payload,
+    NvU32        flags
 )
 {
     NV_STATUS status = NV_OK;
@@ -969,6 +1060,12 @@ _scrubMemory
                                           ADDR_FBMEM, dstCpuCacheAttrib, MEMDESC_FLAGS_NONE));
 
     memdescDescribe(pMemDesc, ADDR_FBMEM, base, size);
+
+    if ((flags & SCRUBBER_SUBMIT_FLAGS_LOCALIZED_SCRUB) != 0)
+    {
+        memdescSetFlag(pMemDesc, MEMDESC_FLAGS_ALLOC_AS_LOCALIZED, NV_TRUE);
+        pMemDesc->localizedMask = (GPU_GET_MEMORY_MANAGER(pScrubber->pGpu))->localizedMask;
+    }
 
     if (pScrubber->bIsEngineTypeSec2)
     {

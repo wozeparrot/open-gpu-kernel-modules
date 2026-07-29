@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2011-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2011-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -415,6 +415,7 @@ static int nv_p2p_get_pages(
     NvU8 *gpu_uuid = NULL;
     NvU8 uuid[NVIDIA_P2P_GPU_UUID_LEN] = {0};
     NvBool force_pcie = !!(flags & NVIDIA_P2P_FLAGS_FORCE_BAR1_MAPPING);
+    NvBool cpu_cacheable;
     int rc;
 
     if (!NV_IS_ALIGNED64(virtual_address, NVRM_P2P_PAGESIZE_BIG_64K) ||
@@ -520,7 +521,7 @@ static int nv_p2p_get_pages(
                                              &mem_info->private,
                                              physical_addresses, &entries,
                                              force_pcie, *page_table, gpu_info,
-                                             &mem_info->mig_info);
+                                             &mem_info->mig_info, &cpu_cacheable);
         if (status != NV_OK)
         {
             goto failed;
@@ -531,7 +532,7 @@ static int nv_p2p_get_pages(
         // Get regular old-style, non-persistent mappings
         status = rm_p2p_get_pages(sp, p2p_token, va_space,
                 virtual_address, length, physical_addresses, wreqmb_h,
-                rreqmb_h, &entries, &gpu_uuid, *page_table);
+                rreqmb_h, &entries, &gpu_uuid, *page_table, &cpu_cacheable);
         if (status != NV_OK)
         {
             goto failed;
@@ -577,6 +578,11 @@ static int nv_p2p_get_pages(
     }
 
     (*page_table)->page_size = page_size_index;
+
+    if (cpu_cacheable)
+    {
+        (*page_table)->flags |= NVIDIA_P2P_PAGE_TABLE_FLAGS_CPU_CACHEABLE;
+    }
 
     os_free_mem(physical_addresses);
     physical_addresses = NULL;
@@ -1004,61 +1010,8 @@ int nvidia_p2p_get_rsync_registers(
     nvidia_p2p_rsync_reg_info_t **reg_info
 )
 {
-    nv_linux_state_t *nvl;
-    NV_STATUS status;
-    NvU32 index = 0;
-    NvU32 count = 0;
-    nvidia_p2p_rsync_reg_info_t *info = NULL;
-    nvidia_p2p_rsync_reg_t *regs = NULL;
-
-    if (reg_info == NULL)
-    {
-        return -EINVAL;
-    }
-
-    status = os_alloc_mem((void**)&info, sizeof(*info));
-    if (status != NV_OK)
-    {
-        return -ENOMEM;
-    }
-
-    memset(info, 0, sizeof(*info));
-
-    info->version = NVIDIA_P2P_RSYNC_REG_INFO_VERSION;
-
-    LOCK_NV_LINUX_DEVICES();
-
-    for (nvl = nv_linux_devices; nvl; nvl = nvl->next)
-    {
-        count++;
-    }
-
-    status = os_alloc_mem((void**)&regs, (count * sizeof(*regs)));
-    if (status != NV_OK)
-    {
-        nvidia_p2p_put_rsync_registers(info);
-        UNLOCK_NV_LINUX_DEVICES();
-        return -ENOMEM;
-    }
-
-    // TODO: This function will always fail with -ENODEV because the logic that
-    // incremented 'index' was removed.  It should be cleaned up in a future
-    // change.
-
-    UNLOCK_NV_LINUX_DEVICES();
-
-    info->regs = regs;
-    info->entries = index;
-
-    if (info->entries == 0)
-    {
-        nvidia_p2p_put_rsync_registers(info);
-        return -ENODEV;
-    }
-
-    *reg_info = info;
-
-    return 0;
+    // TODO: Remove this interface.
+    return -ENODEV;
 }
 
 NV_EXPORT_SYMBOL(nvidia_p2p_get_rsync_registers);
@@ -1067,30 +1020,8 @@ void nvidia_p2p_put_rsync_registers(
     nvidia_p2p_rsync_reg_info_t *reg_info
 )
 {
-    NvU32 i;
-    nvidia_p2p_rsync_reg_t *regs = NULL;
-
-    if (reg_info == NULL)
-    {
-        return;
-    }
-
-    if (reg_info->regs)
-    {
-        for (i = 0; i < reg_info->entries; i++)
-        {
-            regs = &reg_info->regs[i];
-
-            if (regs->ptr)
-            {
-                nv_iounmap(regs->ptr, regs->size);
-            }
-        }
-
-        os_free_mem(reg_info->regs);
-    }
-
-    os_free_mem(reg_info);
+    // TODO: Remove this interface.  There is nothing to do because
+    // nvidia_p2p_get_rsync_registers always fails.
 }
 
 NV_EXPORT_SYMBOL(nvidia_p2p_put_rsync_registers);

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -28,6 +28,7 @@
 #include "kernel/core/locks.h"
 #include "kernel/gpu/subdevice/subdevice.h"
 #include "vgpu/rpc.h"
+#include "virtualization/hypervisor/hypervisor.h"
 #include "kernel/mem_mgr/gpu_vaspace.h"
 #include "kernel/gpu/mem_mgr/mem_mgr.h"
 #include "kernel/gpu/fifo/kernel_channel_group.h"
@@ -297,8 +298,10 @@ kgrobjConstruct_IMPL
 
     NV_ASSERT_OR_RETURN(pKernelChannel != NULL, NV_ERR_INVALID_STATE);
 
-    NV_PRINTF(LEVEL_INFO, "class: 0x%x on channel: 0x%08x\n",
-              pChannelDescendant->resourceDesc.externalClassId, kchannelGetDebugTag(pKernelChannel));
+    NV_PRINTF(LEVEL_INFO,
+              "class: 0x%x on " FMT_CHANNEL_DEBUG_TAG "\n",
+              pChannelDescendant->resourceDesc.externalClassId,
+              kchannelGetDebugTag(pKernelChannel));
 
     //
     // Legacy code believed this to be possible, but Resource Server should
@@ -480,6 +483,9 @@ kgrobjFreeComputeMmio_IMPL
     KernelGraphicsObject *pKernelGraphicsObject
 )
 {
+    if (pGpu->getProperty(pGpu, PDB_PROP_GPU_ZERO_FB))
+        memdescFree(pKernelGraphicsObject->pMmioMemDesc);
+
     memdescDestroy(pKernelGraphicsObject->pMmioMemDesc);
     pKernelGraphicsObject->pMmioMemDesc = NULL;
 }
@@ -515,7 +521,10 @@ kgrobjShouldCleanup_PHYSICAL
     ChannelDescendant *pChannelDescendant = staticCast(pKernelGraphicsObject, ChannelDescendant);
     NvU32              gfid = kchannelGetGfid(pChannelDescendant->pKernelChannel);
 
-    return !gpuIsClientRmAllocatedCtxBufferEnabled(pGpu) || (gpuIsSriovEnabled(pGpu) && IS_GFID_PF(gfid));
+    if (gpuIsSriovEnabled(pGpu) && !RMCFG_FEATURE_PLATFORM_GSP)
+        return !gpuIsClientRmAllocatedCtxBufferEnabled(pGpu) || IS_GFID_PF(gfid);
+    else
+        return !gpuIsClientRmAllocatedCtxBufferEnabled(pGpu);
 }
 
 /*!

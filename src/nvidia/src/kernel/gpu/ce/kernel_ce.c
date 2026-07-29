@@ -24,6 +24,7 @@
 #include "core/locks.h"
 #include "gpu/ce/kernel_ce.h"
 #include "gpu/ce/kernel_ce_private.h"
+#include "gpu/bif/kernel_bif.h"
 #include "gpu/eng_desc.h"
 #include "gpu/mem_mgr/ce_utils.h"
 #include "gpu_mgr/gpu_mgr.h"
@@ -83,12 +84,9 @@ NV_STATUS kceConstructEngine_IMPL(OBJGPU *pGpu, KernelCE *pKCe, ENGDESCRIPTOR en
 
 NvBool kceIsPresent_IMPL(OBJGPU *pGpu, KernelCE *pKCe)
 {
-    // Use bus/fifo to detemine if LCE(i) is present.
-    KernelBus *pKernelBus = GPU_GET_KERNEL_BUS(pGpu);
     NvBool present = NV_FALSE;
 
-    NV_ASSERT_OR_RETURN(pKernelBus != NULL, NV_FALSE);
-    present = kbusCheckEngine_HAL(pGpu, pKernelBus, ENG_CE(pKCe->publicID));
+    present = gpuCheckEngine_HAL(pGpu, ENG_CE(pKCe->publicID));
 
     NV_PRINTF(LEVEL_INFO, "KCE %d / %d: present=%d\n", pKCe->publicID,
         pGpu->numCEs > 0 ? pGpu->numCEs - 1 : pGpu->numCEs, present);
@@ -120,8 +118,7 @@ spdmSendTestCommand
     NV_STATUS           status   = NV_OK;
     RM_API              *pRmApi  = rmapiGetInterface(RMAPI_GPU_LOCK_INTERNAL);
     RMTIMEOUT           timeout;
-    ConfidentialCompute *pCC   = GPU_GET_CONF_COMPUTE(pGpu);
-    Spdm                *pSpdm = pCC->pSpdm;
+    Spdm                *pSpdm = GPU_GET_SPDM(pGpu);
 
     NVC56F_CTRL_CMD_GET_KMB_PARAMS             getKmbParams = {0};
     NV2080_CTRL_INTERNAL_SPDM_PARTITION_PARAMS params = {0};
@@ -152,7 +149,7 @@ spdmSendTestCommand
     params.cmd.cmdType          = RM_GSP_SPDM_CMD_ID_FIPS_SELFTEST;
     params.cmd.ccFipsTest.isEnc = isEnc;
     gpuSetTimeout(pGpu, GPU_TIMEOUT_DEFAULT, &timeout, 0);
-    status = spdmCtrlSpdmPartition(pGpu, &params);
+    status = spdmSendCtrlCall(pGpu, pSpdm, &params);
 
     NV_ASSERT_OK_OR_RETURN(status);
 
@@ -161,7 +158,8 @@ spdmSendTestCommand
 
     NV_ASSERT_OK_OR_RETURN(status);
 
-    if (isEnc) {
+    if (isEnc)
+    {
         portMemCopy(encData, encDataSize, params.cmd.ccFipsTest.text, encDataSize);
         portMemCopy(authTag, authTagSize, params.cmd.ccFipsTest.authTag, authTagSize);
     }
@@ -610,7 +608,8 @@ kceGetCeFromNvlinkConfig_IMPL
 
         // Check if GPU supports NVLink for P2P
         if (NV2080_CTRL_NVLINK_GET_CAP(nvlinkCaps, NV2080_CTRL_NVLINK_CAPS_P2P_SUPPORTED))
-            rmStatus = kceGetP2PCes(pKCe, pGpu, gpuMask, nvlinkP2PCeMask);
+            if (nvlinkP2PCeMask)
+                rmStatus = kceGetP2PCes(pKCe, pGpu, gpuMask, nvlinkP2PCeMask);
     }
 
     return rmStatus;
@@ -757,6 +756,8 @@ NV_STATUS kceTopLevelPceLceMappingsUpdate_IMPL(OBJGPU *pGpu, KernelCE *pKCe)
         }
     }
 
+    cePauseCeUtilsScheduling(pGpu);
+
     //
     // Pass these values to the ceUpdatePceLceMappings_HAL.
     //
@@ -817,6 +818,8 @@ NV_STATUS kceTopLevelPceLceMappingsUpdate_IMPL(OBJGPU *pGpu, KernelCE *pKCe)
     // GSP/monolithic RM. For CPU-RM, have to call this function explicitly.
     //
     status = kceUpdateClassDB_HAL(pGpu, pKCe);
+
+    ceResumeCeUtilsScheduling(pGpu);
 
     return status;
 }
@@ -994,6 +997,25 @@ kceGetPceConfigForLceType_IMPL
     NV2080_CTRL_INTERNAL_CE_GET_PCE_CONFIG_FOR_LCE_TYPE_PARAMS pceConfigParams;
     portMemSet(&pceConfigParams, 0, sizeof(pceConfigParams));
     pceConfigParams.lceType = lceType;
+
+    if (lceType == NV2080_CTRL_CE_LCE_TYPE_PCIE_RD ||
+        lceType == NV2080_CTRL_CE_LCE_TYPE_PCIE_WR)
+    {
+        KernelBif *pKernelBif = GPU_GET_KERNEL_BIF(pGpu);
+
+        NV2080_CTRL_BUS_INFO busInfo = {0};
+        busInfo.index = NV2080_CTRL_BUS_INFO_INDEX_PCIE_ROOT_LINK_CAPS;
+        busInfo.data  = 0;
+
+        if (kbifControlGetPCIEInfo(pGpu, pKernelBif, &busInfo) == NV_OK)
+        {
+            pceConfigParams.metadataForLceType = ceEncodeLceTypeMetadataForPcie(pGpu, busInfo.data);
+        }
+        else
+        {
+            pceConfigParams.metadataForLceType = UNKNOWN_PCIE_GEN_SPEED;
+        }
+    }
 
     NV_ASSERT_OK_OR_RETURN(pRmApi->Control(pRmApi,
                                            pGpu->hInternalClient,

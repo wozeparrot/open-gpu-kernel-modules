@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2015-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2015-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -23,6 +23,7 @@
 
 #include "gpu/mem_mgr/phys_mem_allocator/phys_mem_allocator_util.h"
 #include "gpu/mem_mgr/phys_mem_allocator/phys_mem_allocator.h"
+#include "gpu/mem_mgr/phys_mem_allocator/phys_mem_allocator_private.h"
 #include "gpu/mem_mgr/mem_scrub.h"
 #include "utils/nvprintf.h"
 #include "utils/nvassert.h"
@@ -31,51 +32,28 @@
 // These files are not found on SRT builds
 #include "os/os.h"
 #else
-static NvU64 osGetPageRefcount(NvU64 sysPagePhysAddr)
-{
-    return 0;
-}
-
-static NvU64 osCountTailPages(NvU64 sysPagePhysAddr)
-{
-    return 0;
-}
-
-static void osAllocReleasePage(NvU64 sysPagePhysAddr, NvU32 pageCount)
-{
-    return;
-}
-
-static NV_STATUS osOfflinePageAtAddress(NvU64 address)
-{
-    return NV_ERR_GENERIC;
-}
-
-static NvU8 osGetPageShift(void)
-{
-    return 0;
-}
+#include "pma_test_stubs.h"
 
 NV_STATUS scrubCheck(OBJMEMSCRUB *pScrubber, PSCRUB_NODE *ppList, NvU64 *size)
 {
-    return NV_ERR_GENERIC;
+    return NV_OK;
 }
 
 NV_STATUS scrubSubmitPages(OBJMEMSCRUB *pScrubber, NvU64 chunkSize, NvU64* pages,
-                           NvU64 pageCount, PSCRUB_NODE *ppList, NvU64 *size)
+                           NvU64 pageCount, PSCRUB_NODE *ppList, NvU64 *size, NvU32 flags)
 {
-    return NV_ERR_GENERIC;
+    return NV_OK;
 }
 
 NV_STATUS scrubWaitPages(OBJMEMSCRUB *pScrubber, NvU64 chunkSize, NvU64* pages, NvU32 pageCount)
 {
-    return NV_ERR_GENERIC;
+    return NV_OK;
 }
 
 NV_STATUS scrubCheckAndWaitForSize (OBJMEMSCRUB *pScrubber, NvU64 numPages,
                                     NvU64 pageSize, PSCRUB_NODE *ppList, NvU64 *pSize)
 {
-    return NV_ERR_GENERIC;
+    return NV_OK;
 }
 #endif
 
@@ -486,9 +464,12 @@ _pmaEvictContiguous
             // and hence there will be no page stealing.
             //
             NvU64 count;
+            NvU32 flags = 0;
+
+            // Localized not supported on NUMA yet
 
             if ((status = scrubSubmitPages(pPma->pScrubObj, (NvU32)evictSize, &evictStart,
-                                           1, &pPmaScrubList, &count)) != NV_OK)
+                                           1, &pPmaScrubList, &count, flags)) != NV_OK)
             {
                 status = NV_ERR_INSUFFICIENT_RESOURCES;
                 goto scrub_exit;
@@ -600,9 +581,33 @@ _pmaEvictPages
             goto evict_cleanup;
         }
 
+        NvU32 flags = 0;
+
+        // Localized memory scrub
+        PMA_PAGESTATUS state;
+        NvU32 regId;
+        NvU64 frameNum, addrBase;
+
+        //
+        // Optimization: the first one is expected to be the same as the rest of them.
+        // If no localized pages, then don't spend time checking through the
+        // rest of them
+        //
+        if (evictPageCount > 0)
+        {
+            regId = findRegionID(pPma, evictPages[0]);
+            addrBase = pPma->pRegDescriptors[regId]->base;
+            frameNum = PMA_ADDR2FRAME(evictPages[0], addrBase);
+            state = pPma->pMapInfo->pmaMapRead(pPma->pRegions[regId], frameNum, NV_TRUE);
+            if ((state & ATTRIB_LOCALIZED) != 0)
+            {
+                flags |= SCRUBBER_SUBMIT_FLAGS_LOCALIZED_SCRUB;
+            }
+        }
+
         // Don't need to mark ATTRIB_SCRUBBING to protect the pages because they are already pinned
         status = scrubSubmitPages(pPma->pScrubObj, pageSize, evictPages,
-                                  (NvU32)evictPageCount, &pPmaScrubList, &count);
+                                  (NvU32)evictPageCount, &pPmaScrubList, &count, flags);
         NV_ASSERT_OR_GOTO((status == NV_OK), scrub_exit);
 
         if (count > 0)
@@ -1120,6 +1125,11 @@ pmaBuildList
     PRANGELISTTYPE pRangeCurr, pRangeList = NULL;
     NV_STATUS status = NV_OK;
     void *pMap = NULL;
+    
+    if (ppList == NULL)
+    {
+        return NV_ERR_INVALID_ARGUMENT;
+    }
 
     for (regionIdx = 0; regionIdx < pPma->regSize; regionIdx++)
     {
@@ -1292,7 +1302,7 @@ pmaRegisterBlacklistInfo
         // This is fine, because multiple simultaneous calls to page blacklisting
         // API memory_failure() do not cause any issues.
         //
-        if (pPma->bNuma && pPma->bNumaAutoOnline)
+        if (pPma->bNuma && pPma->bNumaAutoOnline && pPma->nodeOnlined)
         {
             NV_STATUS status;
 

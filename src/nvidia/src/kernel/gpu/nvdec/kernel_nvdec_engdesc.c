@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -39,7 +39,9 @@
 #include "class/clc7b0.h" // NVC7B0_VIDEO_DECODER
 #include "class/clc9b0.h" // NVC9B0_VIDEO_DECODER
 #include "class/clcdb0.h" // NVCDB0_VIDEO_DECODER
+#include "class/clceb0.h" // NVCEB0_VIDEO_DECODER
 #include "class/clcfb0.h" // NVCFB0_VIDEO_DECODER
+#include "class/cld1b0.h" // NVD1B0_VIDEO_DECODER
 
 /*
  * This function returns an engine descriptor corresponding to the class
@@ -89,8 +91,10 @@ nvdecGetEngineDescFromAllocParams
         case NVC7B0_VIDEO_DECODER:
         case NVC9B0_VIDEO_DECODER:
         case NVCDB0_VIDEO_DECODER:
+        case NVCEB0_VIDEO_DECODER:
         case NVCFB0_VIDEO_DECODER:
         case NVB8B0_VIDEO_DECODER:
+        case NVD1B0_VIDEO_DECODER:
             engineInstance = pNvdecAllocParams->engineInstance;
             break;
         default:

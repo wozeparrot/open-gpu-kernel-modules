@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2015-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2015-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -116,7 +116,9 @@ struct RS_RES_DUP_PARAMS_INTERNAL
     NvU32               flags;                 ///< [in] Flags to denote special cases ( Bug: 2859347 to track removal)
     // Internal use only
     RsClient           *pSrcClient;
+    RsClient           *pDstClient;
     RsResourceRef      *pSrcRef;
+    RsResourceRef      *pDstParentRef;
     API_SECURITY_INFO  *pSecInfo;              ///< [in] Security info
     RS_LOCK_INFO       *pLockInfo;             ///< [inout] Locking flags and state
 };
@@ -538,6 +540,8 @@ struct RS_INTER_MAP_PARAMS
     NvU64           offset;
     NvU64           length;
     NvU32           flags;
+    NvU32           flags2;
+    NvU32           kindOverride;
     NvU64           dmaOffset;              ///< [inout] RS-TODO rename this
     void           *pMemDesc;               ///< [out]
 
@@ -578,6 +582,7 @@ struct RsInterMapping
     ListNode       mappableNode;
     ListNode       contextNode;
     NvU32 flags;                     ///< Flags passed when mapping, same flags also passed when unmapping
+    NvU32 flags2;                    ///< Additional flags for the mapping
     NvU64 dmaOffset;
     NvU64 size;
     void *pMemDesc;

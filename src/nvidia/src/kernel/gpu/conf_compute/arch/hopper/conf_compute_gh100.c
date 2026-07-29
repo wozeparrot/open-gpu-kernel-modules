@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -33,6 +33,8 @@
 #include "published/hopper/gh100/dev_fuse.h"
 #include "rmapi/rmapi.h"
 #include "conf_compute/cc_keystore.h"
+#include "nvdevid.h"
+#include "detect-self-hosted.h"
 //#include "hopper/gh100/dev_se_seb.h"
 
 /*!
@@ -71,7 +73,7 @@ confComputeIsGpuCcCapable_GH100
 
     if (confComputeIsDebugModeEnabled_HAL(pGpu, pConfCompute))
     {
-        NV_PRINTF(LEVEL_ERROR, "Cannot boot Confidential Compute as debug board is not supported!\n");
+        NV_PRINTF(LEVEL_ERROR, "Cannot boot Confidential Compute as debug board is not supported.\n");
         return NV_FALSE;
     }
 
@@ -180,6 +182,8 @@ confComputeDeriveSecrets_GH100(ConfidentialCompute *pConfCompute,
                 CC_GKEYID_GEN(CC_KEYSPACE_GSP, CC_LKEYID_GSP_CPU_REPLAYABLE_FAULT)));
             NV_ASSERT_OK_OR_RETURN(confComputeKeyStoreDeriveKey_HAL(pConfCompute,
                 CC_GKEYID_GEN(CC_KEYSPACE_GSP, CC_LKEYID_GSP_CPU_NON_REPLAYABLE_FAULT)));
+            NV_ASSERT_OK_OR_RETURN(confComputeKeyStoreDeriveKey_HAL(pConfCompute,
+                CC_GKEYID_GEN(CC_KEYSPACE_GSP, CC_LKEYID_CPU_GSP_NVLE_P2P_WRAPPING)));
             break;
         case MC_ENGINE_IDX_SEC2:
         {
@@ -438,7 +442,7 @@ NV_STATUS confComputeUpdateSecrets_GH100(ConfidentialCompute *pConfCompute,
     while (confComputeGetNextChannelForKey(pGpu, pConfCompute, &iterator, h2dKey, &pKernelChannel) == NV_OK)
     {
         NV_ASSERT_OK_OR_RETURN(confComputeKeyStoreRetrieveViaChannel(
-            pConfCompute, pKernelChannel, ROTATE_IV_ALL_VALID, NV_FALSE, &pKernelChannel->clientKmb));
+            pConfCompute, pKernelChannel, ROTATE_IV_ALL_VALID, CHANNEL_IV_OPERATION_NONE, &pKernelChannel->clientKmb));
 
         // After key rotation channel counter stays the same but message counter is cleared.
         pKernelChannel->clientKmb.encryptBundle.iv[0] = 0x00000000;
@@ -458,5 +462,24 @@ NV_STATUS confComputeUpdateSecrets_GH100(ConfidentialCompute *pConfCompute,
             pKernelChannel->clientKmb.hmacBundle.nonce[5] = 0x00000000;
         }
 	}
+    return NV_OK;
+}
+
+/*!
+ * @brief Hopper implementation for checking CC support on self-hosted platforms
+ */
+NV_STATUS
+confComputeTestPlatformSupport_GH100
+(
+    OBJGPU              *pGpu,
+    ConfidentialCompute *pConfCompute
+)
+{
+    if (pci_devid_is_self_hosted(DRF_VAL(_PCI, _SUBID, _DEVICE, pGpu->idInfo.PCIDeviceID)) &&
+        (pConfCompute->getProperty(pConfCompute, PDB_PROP_CONFCOMPUTE_ENABLED)))
+    {
+        NV_PRINTF(LEVEL_ERROR, "CC is not supported on self-hosted platforms\n");
+        return NV_ERR_NOT_SUPPORTED;
+    }
     return NV_OK;
 }

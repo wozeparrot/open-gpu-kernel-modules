@@ -281,12 +281,10 @@ typedef struct NV0073_CTRL_CMD_SPECIFIC_FAKE_DEVICE_PARAMS {
 
 /* Faking Support commands */
 /* some random value to enable/disable test code */
-#define NV0073_FAKE_DEVICE_SUPPORT_ENABLE                       0x11faU
-#define NV0073_FAKE_DEVICE_SUPPORT_DISABLE                      0x99ceU
-#define NV0073_FAKE_DEVICE_SUPPORT_ATTACH_DEVICES               0x100U
-#define NV0073_FAKE_DEVICE_SUPPORT_REMOVE_DEVICES               0x101U
-
-
+#define NV0073_FAKE_DEVICE_SUPPORT_ENABLE         0x11faU
+#define NV0073_FAKE_DEVICE_SUPPORT_DISABLE        0x99ceU
+#define NV0073_FAKE_DEVICE_SUPPORT_ATTACH_DEVICES 0x100U
+#define NV0073_FAKE_DEVICE_SUPPORT_REMOVE_DEVICES 0x101U
 
 /*
  * NV0073_CTRL_CMD_SPECIFIC_GET_I2C_PORTID
@@ -317,7 +315,7 @@ typedef struct NV0073_CTRL_CMD_SPECIFIC_FAKE_DEVICE_PARAMS {
  *   NV_ERR_INVALID_ARGUMENT
  */
 
-#define NV0073_CTRL_CMD_SPECIFIC_GET_I2C_PORTID                        (0x730211U) /* finn: Evaluated from "(FINN_NV04_DISPLAY_COMMON_SPECIFIC_INTERFACE_ID << 8) | NV0073_CTRL_SPECIFIC_GET_I2C_PORTID_PARAMS_MESSAGE_ID" */
+#define NV0073_CTRL_CMD_SPECIFIC_GET_I2C_PORTID   (0x730211U) /* finn: Evaluated from "(FINN_NV04_DISPLAY_COMMON_SPECIFIC_INTERFACE_ID << 8) | NV0073_CTRL_SPECIFIC_GET_I2C_PORTID_PARAMS_MESSAGE_ID" */
 
 #define NV0073_CTRL_SPECIFIC_GET_I2C_PORTID_PARAMS_MESSAGE_ID (0x11U)
 
@@ -1353,6 +1351,10 @@ typedef struct NV0073_CTRL_SPECIFIC_SET_MONITOR_POWER_PARAMS {
 *   bLtSkipped
 *     The flag returned indicating whether link training is skipped or not.
 *     TRUE if link training is skipped due to the link config is not changed.
+*   bLinkAssessmentOnly
+*     The flag as input to this command. It indicates that the client is doing
+*     link training only for the link assessment, no FRL video transmission is
+*     intended.
 *
 * Possible status values returned include:
 * NV_OK -
@@ -1375,17 +1377,53 @@ typedef struct NV0073_CTRL_SPECIFIC_SET_HDMI_FRL_LINK_CONFIG_PARAMS {
     NvU32  displayId;
     NvU32  data;
     NvBool bFakeLt;
+    NvBool bDoNotSkipLt;
     NvBool bLtSkipped;
+    NvBool bLinkAssessmentOnly;
 } NV0073_CTRL_SPECIFIC_SET_HDMI_FRL_LINK_CONFIG_PARAMS;
 
 #define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE                                           2:0
-#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_NONE                (0x00000000U)
-#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_3LANES_3G           (0x00000001U)
-#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_3LANES_6G           (0x00000002U)
-#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_4LANES_6G           (0x00000003U)
-#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_4LANES_8G           (0x00000004U)
-#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_4LANES_10G          (0x00000005U)
-#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_4LANES_12G          (0x00000006U)
+#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_NONE       (0x00000000U)
+#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_3LANES_3G  (0x00000001U)
+#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_3LANES_6G  (0x00000002U)
+#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_4LANES_6G  (0x00000003U)
+#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_4LANES_8G  (0x00000004U)
+#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_4LANES_10G (0x00000005U)
+#define NV0073_CTRL_HDMI_FRL_DATA_SET_FRL_RATE_4LANES_12G (0x00000006U)
+
+/*
+* NV0073_CTRL_CMD_SPECIFIC_SET_HDMI_FRL_FLUSH_MODE
+*
+* This command is used to enable flush mode on given HDMI displayId in
+* preparation for FRL link training. The flush mode can be enabled only if HDMI
+* display is active and driven by FRL protocol. If display is not active then
+* this control command does nothing.
+*
+*   subDeviceInstance
+*     This parameter specifies the subdevice instance within the
+*     NV04_DISPLAY_COMMON parent device to which the operation should be
+*     directed.
+*   displayID
+*     This parameter specifies the displayID for the display output resource to
+*     configure.
+*   bEnable
+*     This parameter is an inputto this command.
+*
+* Possible status values returned include:
+* NV_OK
+* NV_ERR_INVALID_ARGUMENT
+*   If any argument is invalid for this control call, NV_ERR_INVALID_ARGUMENT
+*   status will be returned.
+*/
+#define NV0073_CTRL_CMD_SPECIFIC_SET_HDMI_FRL_FLUSH_MODE  (0x73029bU) /* finn: Evaluated from "(FINN_NV04_DISPLAY_COMMON_SPECIFIC_INTERFACE_ID << 8) | NV0073_CTRL_SPECIFIC_SET_HDMI_FRL_FLUSH_MODE_PARAMS_MESSAGE_ID" */
+
+#define NV0073_CTRL_SPECIFIC_SET_HDMI_FRL_FLUSH_MODE_PARAMS_MESSAGE_ID (0x9BU)
+
+typedef struct NV0073_CTRL_SPECIFIC_SET_HDMI_FRL_FLUSH_MODE_PARAMS {
+    NvU32  subDeviceInstance;
+    NvU32  displayId;
+    NvBool bEnable;
+} NV0073_CTRL_SPECIFIC_SET_HDMI_FRL_FLUSH_MODE_PARAMS;
 
 
 
@@ -2049,6 +2087,12 @@ typedef struct NV0073_CTRL_SPECIFIC_DEFAULT_ADAPTIVESYNC_DISPLAY_PARAMS {
  * bDynamicHdrTonemapping
  * if bLtmEnable = true, and if set to true, and output is HDR, enable dynamic per frame HDR tonemapping. Set to false by default.
  *
+ * maxDisplayLuminance
+ * maximum display luminance
+ *
+ * luminanceSscalingFactor
+ * HDR tone mapping luminance scaling factor
+ *
  * Possible status values returned include:
  * NV_OK
  * NV_ERR_NOT_SUPPORTED
@@ -2070,6 +2114,8 @@ typedef struct NV0073_CTRL_SPECIFIC_DISPLAY_BRIGHTNESS_LTM_PARAMS {
     NvU16  detailGain;
     NvBool bContentAdaptiveBrightness;
     NvBool bDynamicHdrTonemapping;
+    NvU32  maxDisplayLuminance;
+    NvU32  luminanceScalingFactor;
 } NV0073_CTRL_SPECIFIC_DISPLAY_BRIGHTNESS_LTM_PARAMS;
 
 #define NV0073_CTRL_SPECIFIC_GET_DISPLAY_BRIGHTNESS_LTM_PARAMS_MESSAGE_ID (0xAFU)
@@ -2082,6 +2128,26 @@ typedef NV0073_CTRL_SPECIFIC_DISPLAY_BRIGHTNESS_LTM_PARAMS NV0073_CTRL_SPECIFIC_
 
 typedef NV0073_CTRL_SPECIFIC_DISPLAY_BRIGHTNESS_LTM_PARAMS NV0073_CTRL_SPECIFIC_SET_DISPLAY_BRIGHTNESS_LTM_PARAMS;
 
-#define NV0073_CTRL_CMD_SPECIFIC_SET_DISPLAY_BRIGHTNESS_LTM (0x7302b0U) /* finn: Evaluated from "(FINN_NV04_DISPLAY_COMMON_SPECIFIC_INTERFACE_ID << 8) | NV0073_CTRL_SPECIFIC_SET_DISPLAY_BRIGHTNESS_LTM_PARAMS_MESSAGE_ID" */
+#define NV0073_CTRL_CMD_SPECIFIC_SET_DISPLAY_BRIGHTNESS_LTM    (0x7302b0U) /* finn: Evaluated from "(FINN_NV04_DISPLAY_COMMON_SPECIFIC_INTERFACE_ID << 8) | NV0073_CTRL_SPECIFIC_SET_DISPLAY_BRIGHTNESS_LTM_PARAMS_MESSAGE_ID" */
 
+/*
+* NV0073_CTRL_CMD_GET_REGISTER_OFFSET_FOR_ULMB_TIMESTAMP
+*
+* The command returns the offset of the disp registers for sending timestamp
+* directly to RISCV, so that clients may map them directly and write to this
+* register which will trigger interrupt in RISCV.
+*
+* Possible status values returned are: 
+*   NV_OK
+*   NV_ERR_NOT_SUPPORTED
+*/
+
+#define NV0073_CTRL_CMD_GET_REGISTER_OFFSET_FOR_ULMB_TIMESTAMP (0x7302b1U) /* finn: Evaluated from "(FINN_NV04_DISPLAY_COMMON_SPECIFIC_INTERFACE_ID << 8) | NV0073_CTRL_GET_REGISTER_OFFSET_FOR_ULMB_TIMESTAMP_PARAMS_MESSAGE_ID" */
+
+#define NV0073_CTRL_GET_REGISTER_OFFSET_FOR_ULMB_TIMESTAMP_PARAMS_MESSAGE_ID (0xB1U)
+
+typedef struct NV0073_CTRL_GET_REGISTER_OFFSET_FOR_ULMB_TIMESTAMP_PARAMS {
+    NvU32 subDeviceInstance;
+    NvU32 dispRegisterBase;
+} NV0073_CTRL_GET_REGISTER_OFFSET_FOR_ULMB_TIMESTAMP_PARAMS;
 /* _ctrl0073specific_h_ */

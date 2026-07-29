@@ -47,7 +47,7 @@
 #define NV_DP_REGKEY_APPLY_MAX_LINK_RATE_OVERRIDES    "APPLY_OVERRIDES_FOR_BUG_2489143"
 #define NV_DP_REGKEY_DISABLE_DSC                      "DISABLE_DSC"
 #define NV_DP_REGKEY_SKIP_ASSESSLINK_FOR_EDP          "HP_WAR_2189772"
-#define NV_DP_REGKEY_HDCP_AUTH_ONLY_ON_DEMAND         "DP_HDCP_AUTH_ONLY_ON_DEMAND"
+#define NV_DP_REGKEY_MST_AUTO_HDCP_AUTH_AT_ATTACH     "DP_MST_AUTO_HDCP_AUTH_AT_ATTACH"
 #define NV_DP_REGKEY_ENABLE_MSA_OVER_MST              "ENABLE_MSA_OVER_MST"
 #define NV_DP_REGKEY_DISABLE_DOWNSPREAD               "DISABLE_DOWNSPREAD"
 
@@ -62,12 +62,6 @@
 
 // Message to power down video stream before power down link (set D3)
 #define NV_DP_REGKEY_POWER_DOWN_PHY                   "DP_POWER_DOWN_PHY"
-
-//
-// Regkey to re-assess max link if the first assessed link config
-// is lower than the panel max
-//
-#define NV_DP_REGKEY_REASSESS_MAX_LINK                "DP_REASSESS_MAX_LINK"
 
 //
 // DSC capability of downstream device should be decided based on device's own
@@ -87,32 +81,39 @@
 
 #define NV_DP2X_IGNORE_CABLE_ID_CAPS                    "DP2X_IGNORE_CABLE_ID_CAPS"
 
+#define NV_DP2X_REGKEY_VCONN_SOURCE_UNKNOWN_WAR         "DP2X_VCONN_SOURCE_UNKNOWN_WAR"
+
+#define NV_DP2X_REGKEY_DISABLE_EFF_BPP_SST_8b10b        "DP2X_REGKEY_DISABLE_EFF_BPP_SST_8b10b"
+
 //
 // Bug 4388987 : This regkey will disable reading PCON caps for MST.
 //
 #define NV_DP_REGKEY_MST_PCON_CAPS_READ_DISABLED                  "DP_BUG_4388987_WAR"
 #define NV_DP_REGKEY_DISABLE_TUNNEL_BW_ALLOCATION                 "DP_DISABLE_TUNNEL_BW_ALLOCATION"
 
+#define NV_DP_REGKEY_DISABLE_AVOID_HBR3_WAR                       "DP_DISABLE_AVOID_HBR3_WAR"
+
 // Bug 4793112 : On eDP panel, do not cache source OUI if it reads zero
 #define NV_DP_REGKEY_SKIP_ZERO_OUI_CACHE                          "DP_SKIP_ZERO_OUI_CACHE"
 
-#define NV_DP_REGKEY_DISABLE_FIX_FOR_5019537                      "DP_DISABLE_5019537_FIX"
 #define NV_DP_REGKEY_ENABLE_FIX_FOR_5147205                       "DP_ENABLE_5147205_FIX"
-
-// This regkey forces devID to be exposed to vendors via DPCD 0x309 for DSC-enabled SKUs.
-#define NV_DP_REGKEY_EXPOSE_DSC_DEVID_WAR                         "DP_DSC_DEVID_WAR"
-
 // Bug 5088957 : Force head shutdown in DpLib
 #define NV_DP_REGKEY_FORCE_HEAD_SHUTDOWN                          "DP_WAR_5088957"
 
-// Bug 5041041 : Enable Lower BPP check for DSC
-#define NV_DP_REGKEY_ENABLE_LOWER_BPP_CHECK_FOR_DSC "DP_ENABLE_LOWER_BPP_CHECK"
-
-#define NV_DP_REGKEY_SKIP_SETTING_LINK_STATE_DURING_UNPLUG        "DP_SKIP_SETTING_LINK_STATE_DURING_UNPLUG"
+// Use max DSC compression for MST topologies
+#define NV_DP_REGKEY_USE_MAX_DSC_COMPRESSION_MST                  "DP_USE_MAX_DSC_COMPRESSION_MST"
+// This regkey forces devID to be exposed to vendors via DPCD 0x309 for DSC-enabled SKUs.
+#define NV_DP_REGKEY_EXPOSE_DSC_DEVID_WAR                         "DP_DSC_DEVID_WAR"
 
 // This regkey ensures DPLib takes into account Displayport++ supports HDMI.
 #define NV_DP_REGKEY_HDMI_ON_DP_PLUS_PLUS                         "HDMI_ON_DP_PLUS_PLUS"
 
+// This regkey ensures DP IMP takes DP tunnelling BW into account while calculating DSC BPP
+#define NV_DP_REGKEY_OPTIMIZE_DSC_BPP_FOR_TUNNELLING_BW            "OPTIMIZE_DSC_BPP_FOR_TUNNELLING_BW"
+
+#define NV_DP_REGKEY_IGNORE_CAPS_AND_FORCE_HIGHEST_LC             "DP_IGNORE_CAPS_AND_FORCE_HIGHEST_LC_WAR"
+
+//
 // Data Base used to store all the regkey values.
 // The actual data base is declared statically in dp_evoadapter.cpp.
 // All entries set to 0 before initialized by the first EvoMainLink constructor.
@@ -135,7 +136,7 @@ struct DP_REGKEY_DATABASE
     NvU32 applyMaxLinkRateOverrides;
     bool  bDscDisabled;
     bool  bAssesslinkForEdpSkipped;
-    bool  bHdcpAuthOnlyOnDemand;
+    bool  bMstAutoHdcpAuthAtAttach;
     bool  bMsaOverMstEnabled;
     bool  bOptLinkKeptAlive;
     bool  bOptLinkKeptAliveMst;
@@ -143,20 +144,22 @@ struct DP_REGKEY_DATABASE
     bool  bBypassEDPRevCheck;
     bool  bDscMstCapBug3143315;
     bool  bPowerDownPhyBeforeD3;
-    bool  bReassessMaxLink;
     NvU32 supportInternalUhbrOnFpga;
     bool  bIgnoreCableIdCaps;
+    bool  bDisableEffBppSST8b10b;
     bool  bMSTPCONCapsReadDisabled;
     bool  bForceDisableTunnelBwAllocation;
     bool  bDownspreadDisabled;
+    bool  bDisableAvoidHBR3War;
+    bool  bCableVconnSourceUnknownWar;
     bool  bSkipZeroOuiCache;
-    bool  bDisable5019537Fix;
     bool  bEnable5147205Fix;
     bool  bForceHeadShutdown;
-    bool  bEnableLowerBppCheckForDsc;
-    bool  bSkipSettingLinkStateDuringUnplug;
     bool  bEnableDevId;
     bool  bHDMIOnDPPlusPlus;
+    bool  bIgnoreCapsAndForceHighestLc;
+    bool  bOptimizeDscBppForTunnellingBw;
+    bool  bUseMaxDSCCompressionMST;
 };
 
 extern struct DP_REGKEY_DATABASE dpRegkeyDatabase;

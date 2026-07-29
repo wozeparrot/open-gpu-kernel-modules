@@ -353,15 +353,7 @@ bool __uvm_thread_check_all_unlocked(void)
 
 NV_STATUS uvm_bit_locks_init(uvm_bit_locks_t *bit_locks, size_t count, uvm_lock_order_t lock_order)
 {
-    // TODO: Bug 1772140: Notably bit locks currently do not work on memory
-    // allocated through vmalloc() (including big allocations created with
-    // uvm_kvmalloc()). The problem is the bit_waitqueue() helper used by the
-    // kernel internally that uses virt_to_page().
-    // To prevent us from using kmalloc() for a huge allocation, warn if the
-    // allocation size gets bigger than what we are comfortable with for
-    // kmalloc() in uvm_kvmalloc().
     size_t size = sizeof(unsigned long) * BITS_TO_LONGS(count);
-    WARN_ON_ONCE(size > UVM_KMALLOC_THRESHOLD);
 
     bit_locks->bits = kzalloc(size, NV_UVM_GFP_FLAGS);
     if (!bit_locks->bits)

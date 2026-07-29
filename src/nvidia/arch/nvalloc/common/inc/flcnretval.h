@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2008-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2008-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -99,7 +99,7 @@ typedef NvU8 FLCN_STATUS;
 #define FLCN_ERR_AUX_ERROR                                                 (0x3AU)
 #define FLCN_ERR_AUX_SEMA_ACQUIRED                                         (0x3BU)
 #define FLCN_ERR_AUX_SEMA_INVALID_RELEASE                                  (0x3CU)
-
+#define FLCN_ERR_AUX_DEFER_TIMEOUT                                         (0x3DU)
 #define FLCN_ERR_MORE_PROCESSING_REQUIRED                                  (0x3EU)
 #define FLCN_ERR_DMA_ALIGN                                                 (0x3FU)
 
@@ -152,6 +152,7 @@ typedef NvU8 FLCN_STATUS;
 #define FLCN_ERR_VPR_APP_DISP_FALCON_IS_NOT_IN_LS_MODE                     (0x61U)
 #define FLCN_ERR_VPR_APP_VPR_IS_ALREADY_ENABLED                            (0x62U)
 #define FLCN_ERR_VPR_APP_UNEXPECTEDLY_RUNNING_ON_RISCV                     (0x63U)
+#define FLCN_ERR_INVALID_SR_CONFIGURATION                                  (0x64U)
 
 // Clocks Errors
 #define FLCN_ERR_CYCLE_DETECTED                                            (0x70U)

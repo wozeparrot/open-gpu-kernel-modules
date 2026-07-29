@@ -1,13 +1,15 @@
 
 #ifndef _G_CRASHCAT_WAYFINDER_NVOC_H_
 #define _G_CRASHCAT_WAYFINDER_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -88,6 +90,11 @@ void __nvoc_init_halspec_CrashCatWayfinderHal(CrashCatWayfinderHal*, NV_CRASHCAT
 #define PRIVATE_FIELD(x) NVOC_PRIVATE_FIELD(x)
 #endif
 
+
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__CrashCatWayfinder;
+struct NVOC_METADATA__Object;
+
 struct __nvoc_inner_struc_CrashCatWayfinder_1__ {
     NvCrashCatWayfinderL0_V1 wfl0;
     NvCrashCatWayfinderL1_V1 wfl1;
@@ -97,8 +104,11 @@ struct __nvoc_inner_struc_CrashCatWayfinder_1__ {
 
 struct CrashCatWayfinder {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__CrashCatWayfinder *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct Object __nvoc_base_Object;
@@ -111,6 +121,13 @@ struct CrashCatWayfinder {
     struct CrashCatWayfinderHal wayfinderHal;
     struct CrashCatQueue *PRIVATE_FIELD(pQueue);
     struct __nvoc_inner_struc_CrashCatWayfinder_1__ PRIVATE_FIELD(v1);
+};
+
+
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__CrashCatWayfinder {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__Object metadata__Object;
 };
 
 #ifndef __NVOC_CLASS_CrashCatWayfinder_TYPEDEF__
@@ -129,10 +146,10 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_CrashCatWayfinder;
     ((pThis)->__nvoc_pbase_CrashCatWayfinder)
 
 #ifdef __nvoc_crashcat_wayfinder_h_disabled
-#define __dynamicCast_CrashCatWayfinder(pThis) ((CrashCatWayfinder*)NULL)
+#define __dynamicCast_CrashCatWayfinder(pThis) ((CrashCatWayfinder*) NULL)
 #else //__nvoc_crashcat_wayfinder_h_disabled
 #define __dynamicCast_CrashCatWayfinder(pThis) \
-    ((CrashCatWayfinder*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(CrashCatWayfinder)))
+    ((CrashCatWayfinder*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(CrashCatWayfinder)))
 #endif //__nvoc_crashcat_wayfinder_h_disabled
 
 NV_STATUS __nvoc_objCreateDynamic_CrashCatWayfinder(CrashCatWayfinder**, Dynamic*, NvU32, va_list);
@@ -143,42 +160,42 @@ NV_STATUS __nvoc_objCreate_CrashCatWayfinder(CrashCatWayfinder**, Dynamic*, NvU3
     __nvoc_objCreate_CrashCatWayfinder((ppNewObj), staticCast((pParent), Dynamic), (createFlags), CrashCatWayfinderHal_version, arg_wfl0)
 
 
-// Wrapper macros
+// Wrapper macros for implementation functions
+NV_STATUS crashcatWayfinderConstruct_IMPL(struct CrashCatWayfinder *arg_, NvU32 arg_wfl0);
+#define __nvoc_crashcatWayfinderConstruct(arg_, arg_wfl0) crashcatWayfinderConstruct_IMPL(arg_, arg_wfl0)
+
+void crashcatWayfinderDestruct_IMPL(struct CrashCatWayfinder *arg_this);
+#define __nvoc_crashcatWayfinderDestruct(arg_this) crashcatWayfinderDestruct_IMPL(arg_this)
+
+#ifdef __nvoc_crashcat_wayfinder_h_disabled
+static inline struct CrashCatQueue * crashcatWayfinderGetReportQueue(struct CrashCatWayfinder *arg_this) {
+    NV_ASSERT_FAILED_PRECOMP("CrashCatWayfinder was disabled!");
+    return NULL;
+}
+#else // __nvoc_crashcat_wayfinder_h_disabled
+#define crashcatWayfinderGetReportQueue(arg_this) crashcatWayfinderGetReportQueue_V1(arg_this)
+#endif // __nvoc_crashcat_wayfinder_h_disabled
+
+#ifdef __nvoc_crashcat_wayfinder_h_disabled
+static inline void crashcatWayfinderSetWFL0(struct CrashCatWayfinder *arg_this, NvU32 wfl0) {
+    NV_ASSERT_FAILED_PRECOMP("CrashCatWayfinder was disabled!");
+}
+#else // __nvoc_crashcat_wayfinder_h_disabled
+#define crashcatWayfinderSetWFL0(arg_this, wfl0) crashcatWayfinderSetWFL0_V1(arg_this, wfl0)
+#endif // __nvoc_crashcat_wayfinder_h_disabled
+
+
+// Wrapper macros for halified functions
+#define crashcatWayfinderGetReportQueue_HAL(arg_this) crashcatWayfinderGetReportQueue(arg_this)
+#define crashcatWayfinderSetWFL0_HAL(arg_this, wfl0) crashcatWayfinderSetWFL0(arg_this, wfl0)
 
 // Dispatch functions
 struct CrashCatQueue *crashcatWayfinderGetReportQueue_V1(struct CrashCatWayfinder *arg1);
 
 
-#ifdef __nvoc_crashcat_wayfinder_h_disabled
-static inline struct CrashCatQueue *crashcatWayfinderGetReportQueue(struct CrashCatWayfinder *arg1) {
-    NV_ASSERT_FAILED_PRECOMP("CrashCatWayfinder was disabled!");
-    return NULL;
-}
-#else //__nvoc_crashcat_wayfinder_h_disabled
-#define crashcatWayfinderGetReportQueue(arg1) crashcatWayfinderGetReportQueue_V1(arg1)
-#endif //__nvoc_crashcat_wayfinder_h_disabled
-
-#define crashcatWayfinderGetReportQueue_HAL(arg1) crashcatWayfinderGetReportQueue(arg1)
-
 void crashcatWayfinderSetWFL0_V1(struct CrashCatWayfinder *arg1, NvU32 wfl0);
 
 
-#ifdef __nvoc_crashcat_wayfinder_h_disabled
-static inline void crashcatWayfinderSetWFL0(struct CrashCatWayfinder *arg1, NvU32 wfl0) {
-    NV_ASSERT_FAILED_PRECOMP("CrashCatWayfinder was disabled!");
-}
-#else //__nvoc_crashcat_wayfinder_h_disabled
-#define crashcatWayfinderSetWFL0(arg1, wfl0) crashcatWayfinderSetWFL0_V1(arg1, wfl0)
-#endif //__nvoc_crashcat_wayfinder_h_disabled
-
-#define crashcatWayfinderSetWFL0_HAL(arg1, wfl0) crashcatWayfinderSetWFL0(arg1, wfl0)
-
-NV_STATUS crashcatWayfinderConstruct_IMPL(struct CrashCatWayfinder *arg_, NvU32 arg_wfl0);
-
-#define __nvoc_crashcatWayfinderConstruct(arg_, arg_wfl0) crashcatWayfinderConstruct_IMPL(arg_, arg_wfl0)
-void crashcatWayfinderDestruct_IMPL(struct CrashCatWayfinder *arg1);
-
-#define __nvoc_crashcatWayfinderDestruct(arg1) crashcatWayfinderDestruct_IMPL(arg1)
 #undef PRIVATE_FIELD
 
 #ifndef NVOC_CRASHCAT_WAYFINDER_H_PRIVATE_ACCESS_ALLOWED

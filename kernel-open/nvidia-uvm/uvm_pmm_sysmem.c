@@ -224,8 +224,8 @@ NvU64 uvm_cpu_chunk_get_gpu_phys_addr(uvm_cpu_chunk_t *chunk, uvm_gpu_t *gpu)
 // partition is using the mapping.
 //
 // Returns NV_OK on success. On error, any of the errors returned by
-// uvm_parent_gpu_map_cpu_pages() can be returned. In the case that the DMA
-// mapping structure could not be allocated, NV_ERR_NO_MEMORY is returned.
+// uvm_gpu_map_cpu_pages() can be returned. In the case that the DMA mapping
+// structure could not be allocated, NV_ERR_NO_MEMORY is returned.
 static NV_STATUS cpu_chunk_map_gpu_phys(uvm_cpu_chunk_t *chunk, uvm_gpu_t *gpu)
 {
     uvm_parent_gpu_t *parent_gpu = gpu->parent;
@@ -247,7 +247,9 @@ static NV_STATUS cpu_chunk_map_gpu_phys(uvm_cpu_chunk_t *chunk, uvm_gpu_t *gpu)
         uvm_chunk_size_t chunk_size = uvm_cpu_chunk_get_size(&phys_chunk->common);
         NvU64 dma_addr;
 
-        status = uvm_parent_gpu_map_cpu_pages(parent_gpu, phys_chunk->common.page, chunk_size, &dma_addr);
+        // Skip invalidates to avoid synchronous operation. The caller is
+        // required to issue them if necessary.
+        status = uvm_gpu_map_cpu_pages_no_invalidate(gpu, phys_chunk->common.page, chunk_size, &dma_addr);
         if (status != NV_OK)
             goto done;
 

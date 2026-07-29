@@ -29,7 +29,8 @@
 #include "kernel/gpu/mig_mgr/kernel_mig_manager.h"
 #include "kernel/gpu/fifo/kernel_fifo.h"
 #include "kernel/gpu/nvlink/kernel_nvlink.h"
-#include "gpu/bus/kern_bus.h"
+#include "gpu/mem_mgr/mem_mgr.h"
+#include "gpu/mem_mgr/ce_utils.h"
 #include "gpu/ce/kernel_ce.h"
 #include "gpu/ce/kernel_ce_private.h"
 #include "nvmisc.h"
@@ -210,11 +211,10 @@ ceIsPartneredWithGr
 
 NvU32 ceCountGrCe(OBJGPU *pGpu)
 {
-    KernelBus *pKernelBus = GPU_GET_KERNEL_BUS(pGpu);
     NvU32      engIdx;
     NvU32      grCeCount;
 
-    if (pKernelBus == NULL || IsAMODEL(pGpu))
+    if (IsAMODEL(pGpu))
         return 0;
 
     grCeCount = 0;
@@ -225,7 +225,7 @@ NvU32 ceCountGrCe(OBJGPU *pGpu)
     //
     for (engIdx = 0; engIdx < GPU_MAX_CES; ++engIdx)
     {
-        if (kbusCheckEngine_HAL(pGpu, pKernelBus, ENG_CE(engIdx)) &&
+        if (gpuCheckEngine_HAL(pGpu, ENG_CE(engIdx)) &&
             ceIsCeGrce(pGpu, RM_ENGINE_TYPE_COPY(engIdx)))
         {
             grCeCount++;
@@ -333,4 +333,82 @@ subdeviceCtrlCmdCeGetAllCaps_IMPL
     }
 
     return NV_OK;
+}
+
+void cePauseCeUtilsScheduling(OBJGPU *pGpu)
+{
+    MemoryManager *pMemoryManager = GPU_GET_MEMORY_MANAGER(pGpu);
+
+    if (pMemoryManager->pCeUtils != NULL)
+    {
+        // Mark CeUtils as paused to prevent RM from trying to use it until remap is complete
+        ceutilsPauseSubmission(pMemoryManager->pCeUtils, NV_TRUE);
+    }
+}
+
+void ceResumeCeUtilsScheduling(OBJGPU *pGpu)
+{
+    MemoryManager *pMemoryManager = GPU_GET_MEMORY_MANAGER(pGpu);
+
+    if (pMemoryManager->pCeUtils != NULL)
+    {
+        if (!ceutilsUsesPreferredCe(pMemoryManager->pCeUtils))
+        {
+            // LCE is missing or not preferred; CeUtils will pick new one on creation
+            memmgrDestroyCeUtils(pMemoryManager);
+            NV_ASSERT_OK(memmgrInitCeUtils(GPU_GET_MEMORY_MANAGER(pGpu), NV_FALSE, NV_TRUE));
+        }
+        else
+        {
+            ceutilsResumeSubmission(pMemoryManager->pCeUtils);
+        }
+    }
+}
+
+NvU32
+ceEncodeLceTypeMetadataForPcie
+(
+    OBJGPU *pGpu,
+    NvU32   pcieGenSpeed
+)
+{
+    switch (DRF_VAL(2080, _CTRL_BUS, _INFO_PCIE_LINK_CAP_MAX_SPEED, pcieGenSpeed))
+    {
+        case NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_MAX_SPEED_2500MBPS:
+        {
+            return NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_GEN_GEN1;
+        }
+        case NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_MAX_SPEED_5000MBPS:
+        {
+            return NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_GEN_GEN2;
+        }
+        case NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_MAX_SPEED_8000MBPS:
+        {
+            return NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_GEN_GEN3;
+        }
+        case NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_MAX_SPEED_16000MBPS:
+        {
+            return NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_GEN_GEN4;
+        }
+        case NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_MAX_SPEED_32000MBPS:
+        {
+            return NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_GEN_GEN5;
+        }
+        case NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_MAX_SPEED_64000MBPS:
+        {
+            return NV2080_CTRL_BUS_INFO_PCIE_LINK_CAP_GEN_GEN6;
+        }
+        default:                
+        {
+            NV_PRINTF(LEVEL_ERROR, "ceEncodeLceTypeMetadataForPcie unknown\n");
+            return UNKNOWN_PCIE_GEN_SPEED;
+        }
+    }
+}
+
+NvU32
+ceDecodePcieGenSpeedFromLceTypeMetadata(OBJGPU *pGpu, NvU32 lceTypeMetadata)
+{
+    // Since the metadata just has PCIe gen speed now, just return it as is.
+    return lceTypeMetadata;
 }

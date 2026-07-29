@@ -1,13 +1,15 @@
 
 #ifndef _G_SEC2_UTILS_NVOC_H_
 #define _G_SEC2_UTILS_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -80,10 +82,18 @@ typedef struct
 #endif
 
 
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__Sec2Utils;
+struct NVOC_METADATA__Object;
+
+
 struct Sec2Utils {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__Sec2Utils *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct Object __nvoc_base_Object;
@@ -108,6 +118,13 @@ struct Sec2Utils {
     NvU32 authTagGetIndex;
 };
 
+
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__Sec2Utils {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__Object metadata__Object;
+};
+
 #ifndef __NVOC_CLASS_Sec2Utils_TYPEDEF__
 #define __NVOC_CLASS_Sec2Utils_TYPEDEF__
 typedef struct Sec2Utils Sec2Utils;
@@ -124,60 +141,59 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_Sec2Utils;
     ((pThis)->__nvoc_pbase_Sec2Utils)
 
 #ifdef __nvoc_sec2_utils_h_disabled
-#define __dynamicCast_Sec2Utils(pThis) ((Sec2Utils*)NULL)
+#define __dynamicCast_Sec2Utils(pThis) ((Sec2Utils*) NULL)
 #else //__nvoc_sec2_utils_h_disabled
 #define __dynamicCast_Sec2Utils(pThis) \
-    ((Sec2Utils*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(Sec2Utils)))
+    ((Sec2Utils*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(Sec2Utils)))
 #endif //__nvoc_sec2_utils_h_disabled
 
 NV_STATUS __nvoc_objCreateDynamic_Sec2Utils(Sec2Utils**, Dynamic*, NvU32, va_list);
 
-NV_STATUS __nvoc_objCreate_Sec2Utils(Sec2Utils**, Dynamic*, NvU32, struct OBJGPU * arg_pGpu, KERNEL_MIG_GPU_INSTANCE * arg_pKernelMIGGPUInstance);
+NV_STATUS __nvoc_objCreate_Sec2Utils(Sec2Utils**, Dynamic*, NvU32, struct OBJGPU *arg_pGpu, KERNEL_MIG_GPU_INSTANCE *arg_pKernelMIGGPUInstance);
 #define __objCreate_Sec2Utils(ppNewObj, pParent, createFlags, arg_pGpu, arg_pKernelMIGGPUInstance) \
     __nvoc_objCreate_Sec2Utils((ppNewObj), staticCast((pParent), Dynamic), (createFlags), arg_pGpu, arg_pKernelMIGGPUInstance)
 
 
-// Wrapper macros
-
-// Dispatch functions
+// Wrapper macros for implementation functions
 NV_STATUS sec2utilsConstruct_IMPL(struct Sec2Utils *arg_psec2utils, struct OBJGPU *arg_pGpu, KERNEL_MIG_GPU_INSTANCE *arg_pKernelMIGGPUInstance);
-
 #define __nvoc_sec2utilsConstruct(arg_psec2utils, arg_pGpu, arg_pKernelMIGGPUInstance) sec2utilsConstruct_IMPL(arg_psec2utils, arg_pGpu, arg_pKernelMIGGPUInstance)
+
 void sec2utilsDestruct_IMPL(struct Sec2Utils *psec2utils);
-
 #define __nvoc_sec2utilsDestruct(psec2utils) sec2utilsDestruct_IMPL(psec2utils)
-NV_STATUS sec2utilsMemset_IMPL(struct Sec2Utils *psec2utils, SEC2UTILS_MEMSET_PARAMS *pParams);
 
+NV_STATUS sec2utilsMemset_IMPL(struct Sec2Utils *psec2utils, SEC2UTILS_MEMSET_PARAMS *pParams);
 #ifdef __nvoc_sec2_utils_h_disabled
 static inline NV_STATUS sec2utilsMemset(struct Sec2Utils *psec2utils, SEC2UTILS_MEMSET_PARAMS *pParams) {
     NV_ASSERT_FAILED_PRECOMP("Sec2Utils was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_sec2_utils_h_disabled
+#else // __nvoc_sec2_utils_h_disabled
 #define sec2utilsMemset(psec2utils, pParams) sec2utilsMemset_IMPL(psec2utils, pParams)
-#endif //__nvoc_sec2_utils_h_disabled
+#endif // __nvoc_sec2_utils_h_disabled
 
 NvU64 sec2utilsUpdateProgress_IMPL(struct Sec2Utils *psec2utils);
-
 #ifdef __nvoc_sec2_utils_h_disabled
 static inline NvU64 sec2utilsUpdateProgress(struct Sec2Utils *psec2utils) {
     NV_ASSERT_FAILED_PRECOMP("Sec2Utils was disabled!");
     return 0;
 }
-#else //__nvoc_sec2_utils_h_disabled
+#else // __nvoc_sec2_utils_h_disabled
 #define sec2utilsUpdateProgress(psec2utils) sec2utilsUpdateProgress_IMPL(psec2utils)
-#endif //__nvoc_sec2_utils_h_disabled
+#endif // __nvoc_sec2_utils_h_disabled
 
 void sec2utilsServiceInterrupts_IMPL(struct Sec2Utils *psec2utils);
-
 #ifdef __nvoc_sec2_utils_h_disabled
 static inline void sec2utilsServiceInterrupts(struct Sec2Utils *psec2utils) {
     NV_ASSERT_FAILED_PRECOMP("Sec2Utils was disabled!");
 }
-#else //__nvoc_sec2_utils_h_disabled
+#else // __nvoc_sec2_utils_h_disabled
 #define sec2utilsServiceInterrupts(psec2utils) sec2utilsServiceInterrupts_IMPL(psec2utils)
-#endif //__nvoc_sec2_utils_h_disabled
+#endif // __nvoc_sec2_utils_h_disabled
 
+
+// Wrapper macros for halified functions
+
+// Dispatch functions
 #undef PRIVATE_FIELD
 
 

@@ -219,16 +219,19 @@ void vgpuDevWriteReg032(
     OBJSYS        *pSys = SYS_GET_INSTANCE();
     OBJHYPERVISOR *pHypervisor = SYS_GET_HYPERVISOR(pSys);
 
-    if(!pGpu ||
-       !pHypervisor || !pHypervisor->bDetected || !pHypervisor->bIsHVMGuest ||
-       !GPU_GET_KERNEL_BIF(pGpu))
+    if (!pGpu || !GPU_GET_KERNEL_BIF(pGpu) ||
+        (!IS_VIRTUAL(pGpu) && !(pHypervisor && pHypervisor->bDetected && pHypervisor->bIsHVMGuest)))
     {
         *vgpuHandled = NV_FALSE;
         return;
     }
 
-    NV_ASSERT_OK(kbifGetPciConfigSpacePriMirror_HAL(pGpu, GPU_GET_KERNEL_BIF(pGpu),
-                                                    &configSpaceMirrorBase, &configSpaceMirrorSize));
+    if (NV_OK != kbifGetPciConfigSpacePriMirror_HAL(pGpu, GPU_GET_KERNEL_BIF(pGpu),
+                                                    &configSpaceMirrorBase, &configSpaceMirrorSize))
+    {
+        *vgpuHandled = NV_FALSE;
+        return;
+    }
 
     if (IS_VIRTUAL_WITH_SRIOV(pGpu))
     {
@@ -295,16 +298,19 @@ NvU32 vgpuDevReadReg032(
     OBJSYS        *pSys = SYS_GET_INSTANCE();
     OBJHYPERVISOR *pHypervisor = SYS_GET_HYPERVISOR(pSys);
 
-    if(!pGpu ||
-       !pHypervisor || !pHypervisor->bDetected || !pHypervisor->bIsHVMGuest ||
-       !GPU_GET_KERNEL_BIF(pGpu))
+    if (!pGpu || !GPU_GET_KERNEL_BIF(pGpu) ||
+        (!IS_VIRTUAL(pGpu) && !(pHypervisor && pHypervisor->bDetected && pHypervisor->bIsHVMGuest)))
     {
         *vgpuHandled = NV_FALSE;
         return 0;
     }
 
-    NV_ASSERT_OK(kbifGetPciConfigSpacePriMirror_HAL(pGpu, GPU_GET_KERNEL_BIF(pGpu),
-                                                    &configSpaceMirrorBase, &configSpaceMirrorSize));
+    if (NV_OK != kbifGetPciConfigSpacePriMirror_HAL(pGpu, GPU_GET_KERNEL_BIF(pGpu),
+                                                    &configSpaceMirrorBase, &configSpaceMirrorSize))
+    {
+        *vgpuHandled = NV_FALSE;
+        return 0;
+    }
 
     if (IS_VIRTUAL_WITH_SRIOV(pGpu))
     {
@@ -482,7 +488,7 @@ static void nvErrorLog2(void *pVoid, XidContext context, NvBool oobLogging, cons
 
     OBJGPU    *pGpu    = reinterpretCast(pVoid, OBJGPU *);
 
-#if RMCFG_MODULE_SMBPBI || \
+#if RMCFG_MODULE_OOB || \
     (RMCFG_MODULE_KERNEL_RC && !RMCFG_FEATURE_PLATFORM_GSP)
     char *errorString = portMemAllocNonPaged(MAX_ERROR_STRING);
     if (errorString == NULL)
@@ -515,7 +521,7 @@ static void nvErrorLog2(void *pVoid, XidContext context, NvBool oobLogging, cons
 
 done:
     portMemFree(errorString);
-#endif // RMCFG_MODULE_SMBPBI || (RMCFG_MODULE_KERNEL_RC &&
+#endif // RMCFG_MODULE_OOB || (RMCFG_MODULE_KERNEL_RC &&
        // !RMCFG_FEATURE_PLATFORM_GSP)
 
     osErrorLogV(pGpu, context, pFormat, arglist);

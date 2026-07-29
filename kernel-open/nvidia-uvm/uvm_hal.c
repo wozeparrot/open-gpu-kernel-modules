@@ -1,5 +1,5 @@
 /*******************************************************************************
-    Copyright (c) 2015-2024 NVIDIA Corporation
+    Copyright (c) 2015-2025 NVIDIA Corporation
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to
@@ -208,7 +208,9 @@ static uvm_hal_class_ops_t host_table[] =
             .write_gpu_put = uvm_hal_maxwell_host_write_gpu_put,
             .tlb_invalidate_all = uvm_hal_maxwell_host_tlb_invalidate_all_a16f,
             .tlb_invalidate_va = uvm_hal_maxwell_host_tlb_invalidate_va,
+            .tlb_invalidate_phys = uvm_hal_maxwell_host_tlb_invalidate_phys_unsupported,
             .tlb_invalidate_test = uvm_hal_maxwell_host_tlb_invalidate_test,
+            .tlb_flush_prefetch = uvm_hal_maxwell_host_tlb_flush_prefetch_unsupported,
             .replay_faults = uvm_hal_maxwell_replay_faults_unsupported,
             .cancel_faults_global = uvm_hal_maxwell_cancel_faults_global_unsupported,
             .cancel_faults_targeted = uvm_hal_maxwell_cancel_faults_targeted_unsupported,
@@ -219,6 +221,7 @@ static uvm_hal_class_ops_t host_table[] =
             .access_counter_clear_all = uvm_hal_maxwell_access_counter_clear_all_unsupported,
             .access_counter_clear_targeted = uvm_hal_maxwell_access_counter_clear_targeted_unsupported,
             .access_counter_query_clear_op = uvm_hal_maxwell_access_counter_query_clear_op_unsupported,
+            .l2_invalidate = uvm_hal_host_l2_invalidate_unsupported,
             .get_time = uvm_hal_maxwell_get_time,
         }
     },
@@ -284,6 +287,7 @@ static uvm_hal_class_ops_t host_table[] =
             .tlb_invalidate_all = uvm_hal_ampere_host_tlb_invalidate_all,
             .tlb_invalidate_va = uvm_hal_ampere_host_tlb_invalidate_va,
             .tlb_invalidate_test = uvm_hal_ampere_host_tlb_invalidate_test,
+            .l2_invalidate = uvm_hal_ampere_host_l2_invalidate,
         }
     },
     {
@@ -309,8 +313,11 @@ static uvm_hal_class_ops_t host_table[] =
         .u.host_ops = {
             .tlb_invalidate_all = uvm_hal_blackwell_host_tlb_invalidate_all,
             .tlb_invalidate_va = uvm_hal_blackwell_host_tlb_invalidate_va,
+            .tlb_invalidate_phys = uvm_hal_blackwell_host_tlb_invalidate_phys,
             .tlb_invalidate_test = uvm_hal_blackwell_host_tlb_invalidate_test,
+            .tlb_flush_prefetch = uvm_hal_blackwell_host_tlb_flush_prefetch,
             .access_counter_query_clear_op = uvm_hal_blackwell_access_counter_query_clear_op_gb100,
+            .l2_invalidate = uvm_hal_blackwell_host_l2_invalidate,
         }
     },
     {
@@ -408,6 +415,32 @@ static uvm_hal_class_ops_t arch_table[] =
             // Note that GB20x MMU behaves as Hopper MMU, so it inherits from
             // Hopper's MMU, not from GB10x.
             .mmu_mode_hal = uvm_hal_mmu_mode_hopper,
+        }
+    },
+};
+
+// chip_table[] is different from the other class op tables - it is used to
+// apply chip specific overrides to arch ops. This means unlike the other class
+// op tables, parent_id does not refer to a preceding entry within the table
+// itself. parent_id is an architecture (not a chip id) and instead refers to an
+// entry in arch_table[]. This means that arch_table[] must be initialized
+// before chip_table[]. chip_table[] must be initialized using
+// ops_init_from_table(arch_table) instead of ops_init_from_parent().
+// TODO: BUG 5044266: the chip ops should be separated from the arch ops.
+static uvm_hal_class_ops_t chip_table[] =
+{
+    {
+        .id = NV2080_CTRL_MC_ARCH_INFO_ARCHITECTURE_GB100 | NV2080_CTRL_MC_ARCH_INFO_IMPLEMENTATION_GB10B,
+        .parent_id = NV2080_CTRL_MC_ARCH_INFO_ARCHITECTURE_GB100,
+        .u.arch_ops = {
+            .mmu_mode_hal = uvm_hal_mmu_mode_blackwell_integrated,
+        }
+    },
+    {
+        .id = NV2080_CTRL_MC_ARCH_INFO_ARCHITECTURE_GB200 | NV2080_CTRL_MC_ARCH_INFO_IMPLEMENTATION_GB20B,
+        .parent_id = NV2080_CTRL_MC_ARCH_INFO_ARCHITECTURE_GB200,
+        .u.arch_ops = {
+            .mmu_mode_hal = uvm_hal_mmu_mode_blackwell_integrated,
         }
     },
 };
@@ -675,38 +708,53 @@ static inline void op_copy(uvm_hal_class_ops_t *dst, uvm_hal_class_ops_t *src, N
     memcpy(m_dst, m_src, sizeof(void *));
 }
 
-static inline NV_STATUS ops_init_from_parent(uvm_hal_class_ops_t *table,
-                                             NvU32 row_count,
-                                             NvLength op_count,
-                                             NvLength op_offset)
+static inline NV_STATUS ops_init_from_table(uvm_hal_class_ops_t *dest_table,
+                                            NvU32 dest_row_count,
+                                            uvm_hal_class_ops_t *src_table,
+                                            NvU32 src_row_count,
+                                            NvLength op_count,
+                                            NvLength op_offset)
 {
     NvLength i;
 
-    for (i = 0; i < row_count; i++) {
+    for (i = 0; i < dest_row_count; i++) {
         NvLength j;
         uvm_hal_class_ops_t *parent = NULL;
 
-        if (table[i].parent_id != 0) {
-            parent = ops_find_by_id(table, i, table[i].parent_id);
+        if (dest_table[i].parent_id != 0) {
+            parent = ops_find_by_id(src_table, src_row_count, dest_table[i].parent_id);
             if (parent == NULL)
                 return NV_ERR_INVALID_CLASS;
 
             // Go through all the ops and assign from parent's corresponding op
             // if NULL
             for (j = 0; j < op_count; j++) {
-                if (op_is_null(table + i, j, op_offset))
-                    op_copy(table + i, parent, j, op_offset);
+                if (op_is_null(dest_table + i, j, op_offset))
+                    op_copy(dest_table + i, parent, j, op_offset);
             }
         }
 
         // At this point, it is an error to have missing HAL operations
         for (j = 0; j < op_count; j++) {
-            if (op_is_null(table + i, j, op_offset))
+            if (op_is_null(dest_table + i, j, op_offset))
                 return NV_ERR_INVALID_STATE;
         }
     }
 
     return NV_OK;
+}
+
+static inline NV_STATUS ops_init_from_parent(uvm_hal_class_ops_t *table,
+                                             NvU32 row_count,
+                                             NvLength op_count,
+                                             NvLength op_offset)
+{
+    return ops_init_from_table(table,
+                               row_count,
+                               table,
+                               row_count,
+                               op_count,
+                               op_offset);
 }
 
 NV_STATUS uvm_hal_init_table(void)
@@ -734,6 +782,18 @@ NV_STATUS uvm_hal_init_table(void)
                                   offsetof(uvm_hal_class_ops_t, u.arch_ops));
     if (status != NV_OK) {
         UVM_ERR_PRINT("ops_init_from_parent(arch_table) failed: %s\n", nvstatusToString(status));
+        return status;
+    }
+
+    // chip_table[] must be initialized after arch_table[].
+    status = ops_init_from_table(chip_table,
+                                 ARRAY_SIZE(chip_table),
+                                 arch_table,
+                                 ARRAY_SIZE(arch_table),
+                                 ARCH_OP_COUNT,
+                                 offsetof(uvm_hal_class_ops_t, u.arch_ops));
+    if (status != NV_OK) {
+        UVM_ERR_PRINT("ops_init_from_table(chip_table) failed: %s\n", nvstatusToString(status));
         return status;
     }
 
@@ -801,6 +861,13 @@ NV_STATUS uvm_hal_init_gpu(uvm_parent_gpu_t *parent_gpu)
     }
 
     parent_gpu->arch_hal = &class_ops->u.arch_ops;
+
+    // Apply per chip overrides if required
+    class_ops = ops_find_by_id(chip_table,
+                               ARRAY_SIZE(chip_table),
+                               gpu_info->gpuArch | gpu_info->gpuImplementation);
+    if (class_ops)
+        parent_gpu->arch_hal = &class_ops->u.arch_ops;
 
     class_ops = ops_find_by_id(fault_buffer_table, ARRAY_SIZE(fault_buffer_table), gpu_info->gpuArch);
     if (class_ops == NULL) {
@@ -911,9 +978,28 @@ uvm_membar_t uvm_hal_downgrade_membar_type(uvm_gpu_t *gpu, bool is_local_vidmem)
     return UVM_MEMBAR_SYS;
 }
 
+void uvm_hal_tlb_invalidate_phys(uvm_push_t *push, uvm_dma_map_invalidation_t inval_type)
+{
+    uvm_parent_gpu_t *parent = uvm_push_get_gpu(push)->parent;
+
+    switch (inval_type) {
+        case UVM_DMA_MAP_INVALIDATION_FLUSH:
+            parent->host_hal->tlb_flush_prefetch(push);
+            break;
+
+        case UVM_DMA_MAP_INVALIDATION_FULL:
+            parent->host_hal->tlb_invalidate_phys(push);
+            break;
+
+        default:
+            UVM_ASSERT(inval_type == UVM_DMA_MAP_INVALIDATION_NONE);
+            break;
+    }
+}
+
 const char *uvm_aperture_string(uvm_aperture_t aperture)
 {
-    BUILD_BUG_ON(UVM_APERTURE_MAX != 12);
+    BUILD_BUG_ON(UVM_APERTURE_MAX != 13);
 
     switch (aperture) {
         UVM_ENUM_STRING_CASE(UVM_APERTURE_PEER_0);
@@ -926,6 +1012,7 @@ const char *uvm_aperture_string(uvm_aperture_t aperture)
         UVM_ENUM_STRING_CASE(UVM_APERTURE_PEER_7);
         UVM_ENUM_STRING_CASE(UVM_APERTURE_PEER_MAX);
         UVM_ENUM_STRING_CASE(UVM_APERTURE_SYS);
+        UVM_ENUM_STRING_CASE(UVM_APERTURE_SYS_NON_COHERENT);
         UVM_ENUM_STRING_CASE(UVM_APERTURE_VID);
         UVM_ENUM_STRING_CASE(UVM_APERTURE_DEFAULT);
         UVM_ENUM_STRING_DEFAULT();
@@ -1055,6 +1142,18 @@ void uvm_hal_print_access_counter_buffer_entry(const uvm_access_counter_buffer_e
     UVM_DBG_PRINT("    tag             %x\n", entry->tag);
 }
 
+const char *uvm_dma_map_invalidation_string(uvm_dma_map_invalidation_t inval_type)
+{
+    BUILD_BUG_ON(UVM_DMA_MAP_INVALIDATION_COUNT != 3);
+
+    switch (inval_type) {
+        UVM_ENUM_STRING_CASE(UVM_DMA_MAP_INVALIDATION_NONE);
+        UVM_ENUM_STRING_CASE(UVM_DMA_MAP_INVALIDATION_FLUSH);
+        UVM_ENUM_STRING_CASE(UVM_DMA_MAP_INVALIDATION_FULL);
+        UVM_ENUM_STRING_DEFAULT();
+    }
+}
+
 bool uvm_hal_method_is_valid_stub(uvm_push_t *push, NvU32 method_address, NvU32 method_data)
 {
     return true;
@@ -1062,4 +1161,13 @@ bool uvm_hal_method_is_valid_stub(uvm_push_t *push, NvU32 method_address, NvU32 
 
 void uvm_hal_ce_memcopy_patch_src_stub(uvm_push_t *push, uvm_gpu_address_t *src)
 {
+}
+
+void uvm_hal_host_l2_invalidate_unsupported(uvm_push_t *push, uvm_aperture_t aperture)
+{
+    uvm_gpu_t *gpu = uvm_push_get_gpu(push);
+    UVM_ERR_PRINT("L2 cache invalidation: Called on unsupported GPU %s (arch: 0x%x, impl: 0x%x)\n", 
+                   uvm_gpu_name(gpu), gpu->parent->rm_info.gpuArch, gpu->parent->rm_info.gpuImplementation);
+    UVM_ASSERT_MSG(false, "L2 invalidate is not supported on %s",
+                   uvm_parent_gpu_name(gpu->parent));
 }

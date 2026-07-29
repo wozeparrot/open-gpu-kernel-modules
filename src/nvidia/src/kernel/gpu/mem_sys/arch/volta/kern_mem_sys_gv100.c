@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2021-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2021-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -29,6 +29,7 @@
 #include "gpu/bus/p2p_api.h"
 #include "gpu/nvlink/kernel_nvlink.h"
 #include "published/volta/gv100/dev_mmu.h"
+#include "published/volta/gv100/dev_graphics_nobundle.h"
 
 /*!
  * @brief Get physical address of the FB memory on systems where GPU memory
@@ -37,6 +38,7 @@
  * @param[in] pGpu                OBJGPU pointer
  * @param[in] pKernelMemorySystem pointer to the kernel side KernelMemorySystem instance.
  * @param[in] physAddr            Physical Address of FB memory
+ * @param[in] physSize            Size of FB memory onlined to the OS
  * @param[in] numaNodeId          NUMA node id where FB memory is added to the
  *                                kernel
  *
@@ -48,17 +50,25 @@ kmemsysGetFbNumaInfo_GV100
     OBJGPU             *pGpu,
     KernelMemorySystem *pKernelMemorySystem,
     NvU64              *physAddr,
+    NvU64              *physSize,
     NvU64              *rsvdPhysAddr,
     NvS32              *numaNodeId
 )
 {
     NV_STATUS     status;
 
-    status = osGetFbNumaInfo(pGpu, physAddr, rsvdPhysAddr, numaNodeId);
+    status = osGetFbNumaInfo(pGpu, physAddr, physSize, rsvdPhysAddr, numaNodeId);
     if (status == NV_OK)
     {
-        NV_PRINTF(LEVEL_INFO, "NUMA FB Physical address: 0x%llx Node ID: 0x%x\n",
-                  *physAddr, *numaNodeId);
+        if (pKernelMemorySystem->coherentCpuFbBaseOverride.bEnabled)
+        {
+            *physAddr = pKernelMemorySystem->coherentCpuFbBaseOverride.value;
+            NV_PRINTF(LEVEL_INFO, "NUMA FB Physical address overrided to 0x%llx via regkey.\n",
+                      *physAddr);
+        }
+
+        NV_PRINTF(LEVEL_INFO, "NUMA FB Physical address: 0x%llx Size: 0x%llxsNode ID: 0x%x\n",
+                  *physAddr, *physSize, *numaNodeId);
     }
 
     return status;
@@ -80,7 +90,7 @@ kmemsysNeedInvalidateGpuCacheOnMap_GV100
     OBJGPU              *pGpu,
     KernelMemorySystem  *pKernelMemorySystem,
     NvBool               bIsVolatile,
-    NvU32                aperture
+    GMMU_APERTURE        aperture
 )
 {
     //
@@ -88,9 +98,9 @@ kmemsysNeedInvalidateGpuCacheOnMap_GV100
     // because GPU's L2 is not coherent with CPU updates to sysmem
     // See bug 3342220 for more info
     //
-    return (!bIsVolatile && (aperture == NV_MMU_PTE_APERTURE_PEER_MEMORY ||
-                             aperture == NV_MMU_PTE_APERTURE_SYSTEM_COHERENT_MEMORY ||
-                             aperture == NV_MMU_PTE_APERTURE_SYSTEM_NON_COHERENT_MEMORY));
+    return (!bIsVolatile && (aperture == GMMU_APERTURE_PEER ||
+                             aperture == GMMU_APERTURE_SYS_COH ||
+                             aperture == GMMU_APERTURE_SYS_NONCOH));
 }
 
 /*!
@@ -397,6 +407,9 @@ kmemsysRemoveAllAtsPeers_GV100
         if (gpuIsGpuFullPower(pRemoteGpu) == NV_FALSE)
             continue;
 
+        if (GPU_GET_KERNEL_MEMORY_SYSTEM(pRemoteGpu) == NULL)
+            continue;
+
         status = _kmemsysRemoveAtsPeers(pGpu, pKernelMemorySystem, pRemoteGpu);
         if (status != NV_OK)
         {
@@ -406,3 +419,13 @@ kmemsysRemoveAllAtsPeers_GV100
     }
 }
 
+NvBool
+kmemsysCheckReadoutEccEnablement_GV100
+(
+    OBJGPU *pGpu,
+    KernelMemorySystem *pKernelMemorySystem
+)
+{
+    NvU32 fuse = GPU_REG_RD32(pGpu, NV_PGRAPH_PRI_FECS_FEATURE_READOUT);
+    return FLD_TEST_DRF(_PGRAPH, _PRI_FECS_FEATURE_READOUT, _ECC_DRAM, _ENABLED, fuse);
+}

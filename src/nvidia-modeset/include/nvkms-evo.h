@@ -33,7 +33,7 @@ extern "C" {
 
 extern NVEvoInfoStringRec dummyInfoString;
 
-NVDevEvoPtr nvFindDevEvoByDeviceId(NvU32 deviceId);
+NVDevEvoPtr nvFindDevEvoByDeviceId(struct NvKmsDeviceId deviceId);
 NvU8 nvGetGpuLogIndex(void);
 void nvEvoDetachConnector(NVConnectorEvoRec *pConnectorEvo, const NvU32 head,
                           NVEvoModesetUpdateState *pModesetUpdateState);
@@ -89,7 +89,8 @@ NvBool nvValidateHwModeTimingsViewPort(const NVDevEvoRec *pDevEvo,
                                        NVHwModeTimingsEvoPtr pTimings,
                                        NVEvoInfoStringPtr pInfoString);
 void nvAssignDefaultUsageBounds(const NVDispEvoRec *pDispEvo,
-                                NVHwModeViewPortEvo *pViewPort);
+                                NVHwModeViewPortEvo *pViewPort,
+                                const struct NvKmsModeValidationParams *pModeValidationParams);
 void nvUnionUsageBounds(const struct NvKmsUsageBounds *a,
                         const struct NvKmsUsageBounds *b,
                         struct NvKmsUsageBounds *ret);
@@ -172,6 +173,7 @@ NvBool nvConstructHwModeTimingsEvo(const NVDpyEvoRec *pDpyEvo,
                                    const struct NvKmsMode *pKmsMode,
                                    const struct NvKmsSize *pViewPortSizeIn,
                                    const struct NvKmsRect *pViewPortOut,
+                                   const NvBool dscPassThrough,
                                    NVDpyAttributeColor *pDpyColor,
                                    NVHwModeTimingsEvoPtr pTimings,
                                    const struct NvKmsModeValidationParams

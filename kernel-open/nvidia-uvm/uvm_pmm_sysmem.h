@@ -287,6 +287,12 @@ void uvm_cpu_chunk_free(uvm_cpu_chunk_t *chunk);
 // a kernel virtual mapping for the chunk. The virtual mapping persists until
 // GPU deinitialization, such that no unmap functionality is exposed.
 // For more details see uvm_mmu_sysmem_map().
+//
+// Before accessing this mapping the caller is responsible for issuing any
+// physical GPU TLB invalidations required by the architecture, such as with
+// uvm_mmu_tlb_invalidate_phys() or uvm_hal_tlb_invalidate_phys(). This is an
+// optimization allowing the caller to batch, defer, and otherwise control when
+// the operation is issued.
 NV_STATUS uvm_cpu_chunk_map_gpu(uvm_cpu_chunk_t *chunk, uvm_gpu_t *gpu);
 
 // Destroy a CPU chunk's DMA mapping for the given GPU.

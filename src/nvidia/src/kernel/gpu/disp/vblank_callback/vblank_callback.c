@@ -29,7 +29,6 @@
 ******************************************************************************/
 
 #include "gpu/disp/vblank_callback/vblank_callback.h"
-#include "os/os.h"
 #include "gpu/disp/kern_disp.h"
 #include "gpu/disp/head/kernel_head.h"
 
@@ -95,8 +94,10 @@ vblcbConstruct_IMPL
     pVblankCallback->CallBack.bIsVblankNotifyEnable = NV_TRUE;
     pVblankCallback->CallBack.Next = NULL;
 
+    pKernelDisplay->pRgVblankCb = (void *)&pVblankCallback->CallBack;
+
     kheadAddVblankCallback(pGpu, pKernelHead, &pVblankCallback->CallBack);
-    status = osSetupVBlank(pGpu, pAllocParams->pProc, pAllocParams->pParm1, pAllocParams->pParm2, pAllocParams->LogicalHead, &pVblankCallback->CallBack);
+    status = kdispSetupVBlank(pGpu, pKernelDisplay, pAllocParams->pProc, pAllocParams->pParm1, pAllocParams->pParm2, pAllocParams->LogicalHead, &pVblankCallback->CallBack);
 
     if (status != NV_OK)
     {
@@ -116,7 +117,8 @@ vblcbDestruct_IMPL
     KernelDisplay *pKernelDisplay = GPU_GET_KERNEL_DISPLAY(pGpu);
     KernelHead    *pKernelHead    = KDISP_GET_HEAD(pKernelDisplay, pVblankCallback->LogicalHead);
 
-    osSetupVBlank(pGpu, NULL, NULL, NULL, pVblankCallback->LogicalHead, NULL);
+    pKernelDisplay->pRgVblankCb = NULL;
+    kdispSetupVBlank(pGpu, pKernelDisplay, NULL, NULL, NULL, pVblankCallback->LogicalHead, NULL);
     kheadDeleteVblankCallback(pGpu, pKernelHead, &pVblankCallback->CallBack);
 }
 

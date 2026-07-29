@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -252,7 +252,7 @@ gpuInitInstLocOverrides_IMPL
          FLD_TEST_DRF(_REG_STR, _RM_CONFIDENTIAL_COMPUTE, _ENABLED, _YES, data32) &&
          pGpu->getProperty(pGpu, PDB_PROP_GPU_CC_FEATURE_CAPABLE)) ||
         gpuIsCCEnabledInHw_HAL(pGpu) ||
-        gpuIsProtectedPcieEnabledInHw_HAL(pGpu))
+        gpuIsMultiGpuNvleEnabledInHw_HAL(pGpu))
     {
 
         pGpu->instLocOverrides  = NV_REG_STR_RM_INST_LOC_ALL_VID;
@@ -353,7 +353,7 @@ gpuInitInstLocOverrides_IMPL
     {
         pGpu->instLocOverrides = FLD_SET_DRF(_REG, _STR_RM_INST_LOC, _BAR_PTE, _DEFAULT, pGpu->instLocOverrides);
         pGpu->instLocOverrides = FLD_SET_DRF(_REG, _STR_RM_INST_LOC, _BAR_PDE, _DEFAULT, pGpu->instLocOverrides);
-        NV_PRINTF(LEVEL_WARNING, "Ignoring regkeys to place BAR PTE/PDE in SYSMEM\n");
+        NV_PRINTF(LEVEL_INFO, "Ignoring regkeys to place BAR PTE/PDE in SYSMEM\n");
     }
 
     return NV_OK;
@@ -372,7 +372,7 @@ _gpuInitGlobalSurfaceOverride
     OBJGPU *pGpu
 )
 {
-    NvU32 globalOverride;
+    NvU32 globalOverride = 0;
 
     //
     // Precedence of global overrides.
@@ -387,7 +387,7 @@ _gpuInitGlobalSurfaceOverride
             (pGpu->instLocOverrides3 != 0) ||
             (pGpu->instLocOverrides4 != 0))
         {
-            NV_PRINTF(LEVEL_ERROR,
+            NV_PRINTF(LEVEL_INFO,
                 "INSTLOC overrides may not work with large mem systems on GP100+\n");
         }
         else

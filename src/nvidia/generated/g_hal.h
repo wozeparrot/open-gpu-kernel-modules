@@ -123,15 +123,18 @@ typedef enum
     HAL_IMPL_AD106,
     HAL_IMPL_AD107,
     HAL_IMPL_GH100,
-    HAL_IMPL_GH202,
     HAL_IMPL_GB100,
     HAL_IMPL_GB102,
     HAL_IMPL_GB10B,
+    HAL_IMPL_GB110,
+    HAL_IMPL_GB112,
     HAL_IMPL_GB202,
     HAL_IMPL_GB203,
     HAL_IMPL_GB205,
     HAL_IMPL_GB206,
     HAL_IMPL_GB207,
+    HAL_IMPL_GB20B,
+    HAL_IMPL_GB20C,
     HAL_IMPL_T001_FERMI_NOT_EXIST,
     HAL_IMPL_T124,
     HAL_IMPL_T132,
@@ -143,6 +146,7 @@ typedef enum
     HAL_IMPL_T003_ADA_NOT_EXIST,
     HAL_IMPL_T004_HOPPER_NOT_EXIST,
     HAL_IMPL_T234D,
+    HAL_IMPL_T264D,
     HAL_IMPL_AMODEL,
 
     HAL_IMPL_MAXIMUM,       // NOTE: this symbol must be at the end of the enum list.
@@ -173,11 +177,17 @@ typedef enum
     { HAL_IMPL_GB100, "GB100" }, \
     { HAL_IMPL_GB102, "GB102" }, \
     { HAL_IMPL_GB10B, "GB10B" }, \
+    { HAL_IMPL_GB110, "GB110" }, \
+    { HAL_IMPL_GB112, "GB112" }, \
     { HAL_IMPL_GB202, "GB202" }, \
     { HAL_IMPL_GB203, "GB203" }, \
     { HAL_IMPL_GB205, "GB205" }, \
     { HAL_IMPL_GB206, "GB206" }, \
-    { HAL_IMPL_GB207, "GB207" }
+    { HAL_IMPL_GB207, "GB207" }, \
+    { HAL_IMPL_GB20B, "GB20B" }, \
+    { HAL_IMPL_GB20C, "GB20C" }, \
+    { HAL_IMPL_T234D, "T234D" }, \
+    { HAL_IMPL_T264D, "T264D" }
 
 
 #endif  // _G_RMCFG_HAL_H_

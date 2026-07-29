@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -41,6 +41,8 @@
 #include "published/blackwell/gb202/dev_therm.h"
 #include "published/blackwell/gb202/dev_therm_addendum.h"
 
+#include "kernel/gpu/ce/kernel_ce_shared.h"
+
 //
 // List of GPU children that present for the chip. List entries contain$
 // {CLASS-ID, # of instances} pairs, e.g.: {CE, 2} is 2 instance of OBJCE. This$
@@ -79,11 +81,13 @@ static const GPUCHILDPRESENT gpuChildrenPresent_GB202[] =
     GPU_CHILD_PRESENT(KernelNvlink, 1),
     GPU_CHILD_PRESENT(KernelPerf, 1),
     GPU_CHILD_PRESENT(KernelPmu, 1),
+    GPU_CHILD_PRESENT(Spdm, 1),
+    GPU_CHILD_PRESENT(ConfidentialCompute, 1),
     GPU_CHILD_PRESENT(KernelFsp, 1),
     GPU_CHILD_PRESENT(KernelGsp, 1),
     GPU_CHILD_PRESENT(KernelSec2, 1),
-    GPU_CHILD_PRESENT(ConfidentialCompute, 1),
     GPU_CHILD_PRESENT(KernelGsplite, 4),
+    GPU_CHILD_PRESENT(KernelCcu, 1),
 };
 
 const GPUCHILDPRESENT*
@@ -354,3 +358,32 @@ gpuIsInternalSkuFuseEnabled_GB202
     return bInternalSkuEnabled;
 }
 
+/*!
+ * @brief Check if GRCE presence is required or not
+ *
+ * @param[in]  pGpu                OBJGPU pointer
+ * @param[in]  engDesc             Engine Descriptor
+ * @param[out] pIsEngineRequired   Boolean to indicate whether the presence of the GRCE engine is required
+ *
+ * @return NV_OK on success, NV_ERR_NOT_SUPPORTED otherwise
+ */
+NV_STATUS
+gpuRequireGrCePresence_GB202
+(
+    OBJGPU *pGpu,
+    ENGDESCRIPTOR  engDesc,
+    NvBool *pIsEngineRequired
+)
+{
+    KernelFifo *pKernelFifo  = GPU_GET_KERNEL_FIFO(pGpu);
+    NvBool    bSupported;
+    NV_ASSERT_OR_RETURN(pKernelFifo != NULL, NV_ERR_NOT_SUPPORTED);
+    // Check if GRCE actually exists
+    NvBool bCheckEnginePresence = (kfifoCheckEngine_HAL(pGpu, pKernelFifo,
+                                                        engDesc,
+                                                        &bSupported) == NV_OK &&
+                                   bSupported);
+    // check for partnered GR
+    *pIsEngineRequired = bCheckEnginePresence && ceIsCeGrce(pGpu, RM_ENGINE_TYPE_COPY(GET_CE_IDX(engDesc)));
+    return NV_OK;
+}

@@ -194,9 +194,9 @@
  * structures, so the convention is to place a "padding" NvU32 in
  * request or reply structures that would otherwise be empty.
  */
-
 #include "nvtypes.h"
 #include "nvlimits.h"
+#include "nv_mig_types.h"
 #include "nv_dpy_id.h"
 #include "nv_mode_timings.h"
 #include "nvkms-api-types.h"
@@ -221,6 +221,7 @@ enum NvKmsIoctlCommand {
     NVKMS_IOCTL_SET_CURSOR_IMAGE,
     NVKMS_IOCTL_MOVE_CURSOR,
     NVKMS_IOCTL_SET_LUT,
+    NVKMS_IOCTL_CHECK_LUT_NOTIFIER,
     NVKMS_IOCTL_IDLE_BASE_CHANNEL,
     NVKMS_IOCTL_FLIP,
     NVKMS_IOCTL_DECLARE_DYNAMIC_DPY_INTEREST,
@@ -361,6 +362,7 @@ enum NvKmsModeValidationOverrides {
     NVKMS_MODE_VALIDATION_ALLOW_DP_INTERLACED                = (1 << 17),
     NVKMS_MODE_VALIDATION_NO_INTERLACED_MODES                = (1 << 18),
     NVKMS_MODE_VALIDATION_MAX_ONE_HARDWARE_HEAD              = (1 << 19),
+    NVKMS_MODE_VALIDATION_PREFER_HDMI_FRL_MODE               = (1 << 20),
 };
 
 /*!
@@ -477,6 +479,19 @@ struct NvKmsModeValidationParams {
      * When dscOverrideBitsPerPixelX16 is 0, NVKMS compute the rate itself.
      */
     NvU32 dscOverrideBitsPerPixelX16;
+
+    /*!
+     * Maximum pixel depth (in bits) for each layer's usage bounds.
+     * When non-zero, NVKMS filters out surface memory formats with
+     * bpp > this value before performing the gpu extended capability check.
+     *
+     * This allows clients to constrain usage bounds based on the maximum
+     * pixel depth they will actually use, preventing bandwidth allocation
+     * for deeper formats that will never be validated or displayed.
+     *
+     * Value 0 means no constraint (backward compatible).
+     */
+    NvU8 maxUsageBoundPixelDepth[NVKMS_MAX_LAYERS_PER_HEAD];
 };
 
 /*!
@@ -973,6 +988,12 @@ struct NvKmsFlipCommonParams {
             NvBool specified;
         } colorSpace;
 
+        /* Specifies input transfer function to be used */
+        struct {
+            enum NvKmsInputTf val;
+            NvBool specified;
+        } tf;
+
         /* When enabled, explicitly set CSC00 with provided matrix */
         struct {
             struct NvKmsCscMatrix matrix;
@@ -1026,6 +1047,21 @@ struct NvKmsFlipCommonReplyOneHead {
  * object is freed.
  */
 
+struct NvKmsDeviceId {
+    /*!
+     * The (primary) GPU for this device; this is used as the value
+     * for NV0080_ALLOC_PARAMETERS::deviceId.
+     */
+    NvU32 rmDeviceId;
+
+    /*!
+     * The SMG (MIG) partition ID that this client must subscribe to in
+     * N-way SMG mode; or, if not in MIG mode, the value NO_MIG_DEVICE which
+     * equals to leaving this field initialized to zero (0).
+     */
+    MIGDeviceId migDevice;
+};
+
 struct NvKmsAllocDeviceRequest {
     /*!
      * Clients should populate versionString with the value of
@@ -1035,10 +1071,10 @@ struct NvKmsAllocDeviceRequest {
     char versionString[NVKMS_NVIDIA_DRIVER_VERSION_STRING_LENGTH];
 
     /*!
-     * The (primary) GPU for this device; this is used as the value
-     * for NV0080_ALLOC_PARAMETERS::deviceId.
+     * The underlying GPU for this device: this may point to a physical GPU
+     * or a graphics capable MIG partition (= an SMG device).
      */
-    NvU32 deviceId;
+    struct NvKmsDeviceId deviceId;
 
     /*!
      * Whether SLI Mosaic is requested: i.e., multiple disps, one
@@ -1256,6 +1292,22 @@ struct NvKmsAllocDeviceReply {
      * is supported.
      */
     NvBool supportsVblankSemControl;
+
+    /*!
+     * 'supportsInputColorSpace' indicates whether the HW supports setting the
+     * input color space.
+     */
+    NvBool supportsInputColorSpace;
+
+    /*!
+     * 'supportsInputColorRange' indicates whether the HW supports setting the
+     * input color range.
+     */
+    NvBool supportsInputColorRange;
+
+    /*! framebuffer console base address and size. */
+    NvU64 vtFbBaseAddress;
+    NvU64 vtFbSize;
 };
 
 struct NvKmsAllocDeviceParams {
@@ -2196,6 +2248,27 @@ struct NvKmsSetLutParams {
     struct NvKmsSetLutReply reply;     /*! out */
 };
 
+/*!
+ * NVKMS_IOCTL_CHECK_LUT_NOTIFIER: Check or wait on the LUT notifier for the
+ * specified apiHead.
+ */
+
+struct NvKmsCheckLutNotifierRequest {
+    NvKmsDeviceHandle deviceHandle;
+    NvKmsDispHandle dispHandle;
+    NvU32 head;
+
+    NvBool waitForCompletion;
+};
+
+struct NvKmsCheckLutNotifierReply {
+    NvBool complete;
+};
+
+struct NvKmsCheckLutNotifierParams {
+    struct NvKmsCheckLutNotifierRequest request; /*! in */
+    struct NvKmsCheckLutNotifierReply reply;     /*! out */
+};
 
 /*!
  * NVKMS_IOCTL_IDLE_BASE_CHANNEL: Wait for the base channel to be idle on
@@ -2661,6 +2734,7 @@ enum NvKmsDpyAttribute {
     NV_KMS_DPY_ATTRIBUTE_DIGITAL_LINK_TYPE,
     NV_KMS_DPY_ATTRIBUTE_DISPLAYPORT_LINK_RATE,
     NV_KMS_DPY_ATTRIBUTE_DISPLAYPORT_LINK_RATE_10MHZ,
+    NV_KMS_DPY_ATTRIBUTE_DISPLAYPORT_FORCE_ENABLE_FEC,
     NV_KMS_DPY_ATTRIBUTE_FRAMELOCK_DISPLAY_CONFIG,
     /*
      * XXX NVKMS TODO: Delete UPDATE_GLS_FRAMELOCK; this event-only
@@ -4204,7 +4278,7 @@ struct NvKmsSetFlipLockGroupParams {
  *
  * One or more clients may register a memory allocation + offset by specifying
  * an NvKmsSurfaceHandle and offset within that surface.  Until the
- * vblank_sem_control is disabled, during each vblank on the specified heads,
+ * vblank_sem_control is disabled, during each vblank on all enabled heads,
  * nvkms will interpret the specified memory location as an
  * NvKmsVblankSemControlData data structure.  Each enabled head will inspect the
  * corresponding NvKmsVblankSemControlDataOneHead at
@@ -4272,8 +4346,7 @@ struct NvKmsSetFlipLockGroupParams {
  * modeset, such that a registered vblank sem control will no longer receive
  * vblank callbacks if the head is shutdown.  Before a modeset shuts down a
  * head, nvkms clients should ensure that all in-flight semaphore acquires are
- * satisfied, and then after the modeset the vblank sem controls should be
- * re-enabled.
+ * satisfied.
  *
  * NVKMS_IOCTL_ACCEL_VBLANK_SEM_CONTROLS can be used, specifying a particular
  * set of heads, to set all vblank sem controls on those heads to have their
@@ -4287,7 +4360,6 @@ struct NvKmsSetFlipLockGroupParams {
 struct NvKmsEnableVblankSemControlRequest {
     NvKmsDeviceHandle deviceHandle;
     NvKmsDispHandle dispHandle;
-    NvU32 headMask;
     NvKmsSurfaceHandle surfaceHandle;
     NvU64 surfaceOffset NV_ALIGN_BYTES(8);
 };
@@ -4338,6 +4410,7 @@ struct NvKmsAccelVblankSemControlsParams {
  * It should be invoked after flip if needed. If device does not supports
  * VRR semaphores, then this is a no-op action for compatibility.
  */
+
 struct NvKmsVrrSignalSemaphoreRequest {
     NvKmsDeviceHandle deviceHandle;
     NvS32 vrrSemaphoreIndex;

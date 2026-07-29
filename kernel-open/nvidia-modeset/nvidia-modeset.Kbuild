@@ -52,7 +52,7 @@ nvidia-modeset-y += $(NVIDIA_MODESET_BINARY_OBJECT_O)
 # Define nvidia-modeset.ko-specific CFLAGS.
 #
 
-NVIDIA_MODESET_CFLAGS += -I$(src)/nvidia-modeset
+NVIDIA_MODESET_CFLAGS += -I$(src)/nvidia-modeset -I$(src)/common/inc
 NVIDIA_MODESET_CFLAGS += -UDEBUG -U_DEBUG -DNDEBUG -DNV_BUILD_MODULE_INSTANCES=0
 
 # Some Android kernels prohibit driver use of filesystem functions like
@@ -94,14 +94,10 @@ $(obj)/$(NVIDIA_MODESET_INTERFACE): $(addprefix $(obj)/,$(NVIDIA_MODESET_OBJECTS
 
 NV_OBJECTS_DEPEND_ON_CONFTEST += $(NVIDIA_MODESET_OBJECTS)
 
-NV_CONFTEST_TYPE_COMPILE_TESTS += timespec64
 NV_CONFTEST_TYPE_COMPILE_TESTS += proc_ops
 NV_CONFTEST_FUNCTION_COMPILE_TESTS += pde_data
-NV_CONFTEST_FUNCTION_COMPILE_TESTS += timer_setup
 NV_CONFTEST_FUNCTION_COMPILE_TESTS += list_is_first
-NV_CONFTEST_FUNCTION_COMPILE_TESTS += ktime_get_real_ts64
 NV_CONFTEST_FUNCTION_COMPILE_TESTS += ktime_get_raw_ts64
 NV_CONFTEST_FUNCTION_COMPILE_TESTS += acpi_video_backlight_use_native
 NV_CONFTEST_FUNCTION_COMPILE_TESTS += acpi_video_register_backlight
 NV_CONFTEST_SYMBOL_COMPILE_TESTS += is_export_symbol_present_timer_delete_sync
-NV_CONFTEST_FUNCTION_COMPILE_TESTS += kernel_read_has_pointer_pos_arg

@@ -1,5 +1,5 @@
 /*******************************************************************************
-    Copyright (c) 2015-2024 NVIDIA Corporation
+    Copyright (c) 2015-2025 NVIDIA Corporation
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to
@@ -27,6 +27,7 @@
 #include "uvm_global.h"
 #include "uvm_gpu.h"
 #include "uvm_mmu.h"
+#include "uvm_hal_types.h"
 #include "uvm_hal.h"
 #include "uvm_kvmalloc.h"
 #include "uvm_pte_batch.h"
@@ -35,6 +36,7 @@
 #include "uvm_mem.h"
 #include "uvm_va_space.h"
 
+#include <asm/io.h>
 #include <linux/mm.h>
 
 // The page tree has 6 levels on Hopper+ GPUs, and the root is never freed by a
@@ -134,7 +136,7 @@ static NV_STATUS phys_mem_allocate_sysmem(uvm_page_tree_t *tree, NvLength size, 
 
     // Check for fake GPUs from the unit test
     if (tree->gpu->parent->pci_dev)
-        status = uvm_parent_gpu_map_cpu_pages(tree->gpu->parent, out->handle.page, UVM_PAGE_ALIGN_UP(size), &dma_addr);
+        status = uvm_gpu_map_cpu_pages(tree->gpu, out->handle.page, UVM_PAGE_ALIGN_UP(size), &dma_addr);
     else
         dma_addr = page_to_phys(out->handle.page);
 
@@ -291,14 +293,29 @@ static struct page *uvm_mmu_page_table_page(uvm_gpu_t *gpu, uvm_mmu_page_table_a
 
 static void *uvm_mmu_page_table_cpu_map(uvm_gpu_t *gpu, uvm_mmu_page_table_alloc_t *phys_alloc)
 {
-    struct page *page = uvm_mmu_page_table_page(gpu, phys_alloc);
-    NvU64 page_offset = offset_in_page(phys_alloc->addr.address);
-    return (char *)kmap(page) + page_offset;
+    // CDMM implies there are no struct pages corresponding to the
+    // GPU memory physical address.
+    if (gpu->parent->cdmm_enabled) {
+        NvU64 addr = uvm_gpu_chunk_to_sys_addr(&gpu->pmm, phys_alloc->handle.chunk);
+        // Using cached access for coherent systems, there should be no conflicts
+        // for the vidmem region
+        // Since we use ioremap_cache(), we don't need to use the ioread/write
+        // helpers to access the memory. The underlying memory is not real IO
+        // memory with potential side effects.
+        return nv_ioremap_cache(addr, PAGE_SIZE);
+    }
+    else {
+        NvU64 page_offset = offset_in_page(phys_alloc->addr.address);
+        return kmap(uvm_mmu_page_table_page(gpu, phys_alloc)) + page_offset;
+    }
 }
 
-static void uvm_mmu_page_table_cpu_unmap(uvm_gpu_t *gpu, uvm_mmu_page_table_alloc_t *phys_alloc)
+static void uvm_mmu_page_table_cpu_unmap(uvm_gpu_t *gpu, uvm_mmu_page_table_alloc_t *phys_alloc, void *ptr)
 {
-    kunmap(uvm_mmu_page_table_page(gpu, phys_alloc));
+    if (gpu->parent->cdmm_enabled)
+        nv_iounmap(ptr, PAGE_SIZE);
+    else
+        kunmap(uvm_mmu_page_table_page(gpu, phys_alloc));
 }
 
 static void uvm_mmu_page_table_cpu_memset_8(uvm_gpu_t *gpu,
@@ -316,7 +333,7 @@ static void uvm_mmu_page_table_cpu_memset_8(uvm_gpu_t *gpu,
     for (i = 0; i < num_entries; i++)
         ptr[start_index + i] = pattern;
 
-    uvm_mmu_page_table_cpu_unmap(gpu, phys_alloc);
+    uvm_mmu_page_table_cpu_unmap(gpu, phys_alloc, ptr);
 }
 
 static void uvm_mmu_page_table_cpu_memset_16(uvm_gpu_t *gpu,
@@ -338,7 +355,7 @@ static void uvm_mmu_page_table_cpu_memset_16(uvm_gpu_t *gpu,
     for (i = 0; i < num_entries; i++)
         memcpy(&ptr[start_index + i], pattern, sizeof(*ptr));
 
-    uvm_mmu_page_table_cpu_unmap(gpu, phys_alloc);
+    uvm_mmu_page_table_cpu_unmap(gpu, phys_alloc, ptr);
 }
 
 static void pde_fill_cpu(uvm_page_tree_t *tree,
@@ -703,7 +720,7 @@ static NV_STATUS write_gpu_state_cpu(uvm_page_tree_t *tree,
 
     // See the comments in write_gpu_state_gpu()
     tree->gpu->parent->host_hal->tlb_invalidate_all(&push,
-                                                    uvm_page_tree_pdb(tree)->addr,
+                                                    uvm_page_tree_pdb_address(tree),
                                                     invalidate_depth,
                                                     UVM_MEMBAR_NONE);
     page_tree_end(tree, &push);
@@ -787,7 +804,7 @@ static NV_STATUS write_gpu_state_gpu(uvm_page_tree_t *tree,
     // Upgrades don't have to flush out accesses, so no membar is needed on the
     // TLB invalidate.
     tree->gpu->parent->host_hal->tlb_invalidate_all(&push,
-                                                    uvm_page_tree_pdb(tree)->addr,
+                                                    uvm_page_tree_pdb_address(tree),
                                                     invalidate_depth,
                                                     UVM_MEMBAR_NONE);
 
@@ -864,7 +881,7 @@ static bool page_tree_ats_init_required(uvm_page_tree_t *tree)
     if (!tree->gpu_va_space->ats.enabled)
         return false;
 
-    return tree->gpu->parent->no_ats_range_required;
+    return tree->gpu->parent->ats.no_ats_range_required;
 }
 
 static NV_STATUS page_tree_ats_init(uvm_page_tree_t *tree)
@@ -876,7 +893,10 @@ static NV_STATUS page_tree_ats_init(uvm_page_tree_t *tree)
     if (!page_tree_ats_init_required(tree))
         return NV_OK;
 
-    page_size = mmu_biggest_page_size(tree, UVM_APERTURE_VID);
+    if (tree->gpu->mem_info.size)
+        page_size = mmu_biggest_page_size(tree, UVM_APERTURE_VID);
+    else
+        page_size = mmu_biggest_page_size(tree, UVM_APERTURE_SYS);
 
     uvm_cpu_get_unaddressable_range(&max_va_lower, &min_va_upper);
 
@@ -899,19 +919,17 @@ static NV_STATUS page_tree_ats_init(uvm_page_tree_t *tree)
 
     UVM_ASSERT(tree->no_ats_ranges[0].entry_count == 1);
 
-    if (uvm_platform_uses_canonical_form_address()) {
-        // Upper half
-        status = uvm_page_tree_get_ptes(tree,
-                                        page_size,
-                                        min_va_upper - page_size,
-                                        page_size,
-                                        UVM_PMM_ALLOC_FLAGS_EVICT,
-                                        &tree->no_ats_ranges[1]);
-        if (status != NV_OK)
-            return status;
+    // Upper half
+    status = uvm_page_tree_get_ptes(tree,
+                                    page_size,
+                                    min_va_upper - page_size,
+                                    page_size,
+                                    UVM_PMM_ALLOC_FLAGS_EVICT,
+                                    &tree->no_ats_ranges[1]);
+    if (status != NV_OK)
+        return status;
 
-        UVM_ASSERT(tree->no_ats_ranges[1].entry_count == 1);
-    }
+    UVM_ASSERT(tree->no_ats_ranges[1].entry_count == 1);
 
     return NV_OK;
 }
@@ -1056,6 +1074,9 @@ error:
 //    sysmem     |            -            ||           <disallowed>
 //    default    |            -            ||           <disallowed>
 //
+//   - If a GPU has no vidmem (broken fb or integrated GPU) then the page table
+//     must be in sysmem.
+//
 static void page_tree_set_location(uvm_page_tree_t *tree, uvm_aperture_t location)
 {
     UVM_ASSERT(tree->gpu != NULL);
@@ -1071,6 +1092,9 @@ static void page_tree_set_location(uvm_page_tree_t *tree, uvm_aperture_t locatio
 
         if (uvm_parent_gpu_is_virt_mode_sriov_heavy(tree->gpu->parent) || g_uvm_global.conf_computing_enabled)
             UVM_ASSERT(location == UVM_APERTURE_VID);
+
+        if (!tree->gpu->mem_info.size)
+            UVM_ASSERT(location == UVM_APERTURE_SYS);
     }
 
     if (location == UVM_APERTURE_DEFAULT) {
@@ -1122,6 +1146,12 @@ NV_STATUS uvm_page_tree_init(uvm_gpu_t *gpu,
 
     if (tree->root == NULL)
         return NV_ERR_NO_MEMORY;
+
+
+    // Refer to the comment for struct uvm_page_tree_struct::pdb_rm_dma_address
+    // in uvm_mmu.h.
+    if (tree->root->phys_alloc.addr.aperture == UVM_APERTURE_SYS)
+        tree->pdb_rm_dma_address = tree->root->phys_alloc.addr;
 
     if (gpu->parent->map_remap_larger_page_promotion) {
         status = map_remap_init(tree);
@@ -1177,7 +1207,7 @@ void uvm_page_tree_deinit(uvm_page_tree_t *tree)
         // error. We can't perform the unmap, so just leave things in place for
         // debug.
         if (status == NV_OK) {
-            tree->gpu->parent->host_hal->tlb_invalidate_all(&push, uvm_page_tree_pdb(tree)->addr, 0, UVM_MEMBAR_NONE);
+            tree->gpu->parent->host_hal->tlb_invalidate_all(&push, uvm_page_tree_pdb_address(tree), 0, UVM_MEMBAR_NONE);
             page_tree_end(tree, &push);
             page_tree_tracker_overwrite_with_push(tree, &push);
         }
@@ -1303,7 +1333,7 @@ void uvm_page_tree_put_ptes_async(uvm_page_tree_t *tree, uvm_page_table_range_t 
         uvm_hal_wfi_membar(&push, membar_after_pde_clears);
 
     tree->gpu->parent->host_hal->tlb_invalidate_all(&push,
-                                                    uvm_page_tree_pdb(tree)->addr,
+                                                    uvm_page_tree_pdb_address(tree),
                                                     invalidate_depth,
                                                     membar_after_invalidate);
 
@@ -2923,6 +2953,50 @@ uvm_gpu_address_t uvm_mmu_gpu_address(uvm_gpu_t *gpu, uvm_gpu_phys_address_t phy
     return uvm_gpu_address_from_phys(phys_addr);
 }
 
+NV_STATUS uvm_mmu_tlb_invalidate_phys(uvm_gpu_t *gpu)
+{
+    uvm_dma_map_invalidation_t inval_type = gpu->parent->ats.dma_map_invalidation;
+    uvm_push_t push;
+    NV_STATUS status;
+
+    if (inval_type == UVM_DMA_MAP_INVALIDATION_NONE)
+        return NV_OK;
+ 
+    status = uvm_push_begin(gpu->channel_manager,
+                            UVM_CHANNEL_TYPE_MEMOPS,
+                            &push,
+                            "Invalidating physical ATS translations using %s",
+                            uvm_dma_map_invalidation_string(inval_type));
+    if (status != NV_OK)
+        return status;
+
+    uvm_hal_tlb_invalidate_phys(&push, inval_type);
+    return uvm_push_end_and_wait(&push);
+}
+
+NV_STATUS uvm_mmu_l2_invalidate(uvm_gpu_t *gpu, uvm_aperture_t aperture)
+{
+    uvm_push_t push;
+    NV_STATUS status;
+
+    status = uvm_push_begin(gpu->channel_manager,
+                            UVM_CHANNEL_TYPE_MEMOPS,
+                            &push,
+                            "L2 cache invalidate");
+    if (status != NV_OK) {
+        UVM_ERR_PRINT("L2 cache invalidation: Failed to begin push, status: %s\n", nvstatusToString(status));
+        return status;
+    }
+
+    gpu->parent->host_hal->l2_invalidate(&push, aperture);
+
+    status = uvm_push_end_and_wait(&push);
+    if (status != NV_OK) 
+        UVM_ERR_PRINT("ERROR: L2 cache invalidation: Failed to complete push, status: %s\n", nvstatusToString(status));
+
+    return status;
+}
+
 NV_STATUS uvm_test_invalidate_tlb(UVM_TEST_INVALIDATE_TLB_PARAMS *params, struct file *filp)
 {
     NV_STATUS status;
@@ -2964,7 +3038,7 @@ NV_STATUS uvm_test_invalidate_tlb(UVM_TEST_INVALIDATE_TLB_PARAMS *params, struct
                             "Pushing test invalidate, GPU %s",
                             uvm_gpu_name(gpu));
     if (status == NV_OK)
-        gpu->parent->host_hal->tlb_invalidate_test(&push, uvm_page_tree_pdb(&gpu_va_space->page_tables)->addr, params);
+        gpu->parent->host_hal->tlb_invalidate_test(&push, uvm_page_tree_pdb_address(&gpu_va_space->page_tables), params);
 
 unlock_exit:
     // Wait for the invalidation to be performed

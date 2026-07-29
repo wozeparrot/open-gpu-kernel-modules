@@ -100,6 +100,4 @@ typedef struct uvm_access_counter_buffer_struct uvm_access_counter_buffer_t;
 typedef struct uvm_access_counter_service_batch_context_struct uvm_access_counter_service_batch_context_t;
 
 typedef struct uvm_reverse_map_struct uvm_reverse_map_t;
-
-typedef struct uvm_ibm_npu_struct uvm_ibm_npu_t;
 #endif //__UVM_FORWARD_DECL_H__

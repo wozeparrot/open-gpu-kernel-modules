@@ -317,6 +317,17 @@ struct uvm_va_block_struct
     // to pages resident on other processors.
     uvm_processor_mask_t resident;
 
+    // Page mask tracking the set of block pages which have been discarded.
+    //
+    // Pages in this mask must be cleared if they are either migrated or
+    // evicted.
+    uvm_page_mask_t discarded_pages;
+
+    // The set of processors on which the VA block has ever been fully
+    // resident. This is used when determining whether GPU chunks need to
+    // zeroed.
+    uvm_processor_mask_t ever_fully_resident;
+
     // Per-processor mapping bit vector, used for fast lookup of which
     // processors are active in this block.
     //
@@ -467,6 +478,12 @@ struct uvm_va_block_struct
     // need to acquire it before pushing their work, then that work must be
     // added to this tracker before the block's lock is dropped.
     uvm_tracker_t tracker;
+
+    // Track whether any new DMA mappings have been created under this block for
+    // each parent GPU without having been invalidated yet according to the
+    // rules described in uvm_dma_map_invalidation_t. The invalidation must
+    // happen before the DMA mappings are accessed by the GPU.
+    uvm_parent_processor_mask_t needs_phys_invalidate;
 
     // A queue item for establishing eviction mappings in a deferred way
     nv_kthread_q_item_t eviction_mappings_q_item;
@@ -892,6 +909,18 @@ NV_STATUS uvm_va_block_map_mask(uvm_va_block_t *va_block,
                                 uvm_prot_t new_prot,
                                 UvmEventMapRemoteCause cause);
 
+// Map pages not already mapped on the destination processor after a migration.
+//
+// LOCKING: The VA block lock must be held. If va_block_context->mm !=
+//          NULL, va_block_context->mm->mmap_lock must be held in at least read
+//          mode.
+NV_STATUS uvm_va_block_migrate_map_mapped_pages(uvm_va_block_t *va_block,
+                                                uvm_va_block_retry_t *va_block_retry,
+                                                uvm_va_block_context_t *va_block_context,
+                                                uvm_va_block_region_t region,
+                                                uvm_processor_id_t dest_id,
+                                                UvmEventMapRemoteCause cause);
+
 // Unmaps virtual regions from a single processor. This does not free page
 // tables or physical memory. This is safe to call on the eviction path, but the
 // caller must ensure that the block hasn't been killed.
@@ -1029,6 +1058,13 @@ NV_STATUS uvm_va_block_check_logical_permissions(uvm_va_block_t *va_block,
                                                  uvm_page_index_t page_index,
                                                  uvm_fault_access_type_t access_type,
                                                  bool allow_migration);
+
+// Set a va_block discarded, unmap the block and revoke its residency status
+//
+// LOCKING: This takes and releases the VA block lock. If va_block_context->mm
+//          != NULL, va_block_context->mm->mmap_lock must be held in at least
+//          read mode.
+NV_STATUS uvm_va_block_discard(uvm_va_block_t *va_block, uvm_va_block_context_t *va_block_context, NvU64 flags);
 
 // API for access privilege revocation
 //
@@ -1570,6 +1606,9 @@ NV_STATUS uvm_test_va_block_inject_error(UVM_TEST_VA_BLOCK_INJECT_ERROR_PARAMS *
 NV_STATUS uvm_test_change_pte_mapping(UVM_TEST_CHANGE_PTE_MAPPING_PARAMS *params, struct file *filp);
 NV_STATUS uvm_test_va_block_info(UVM_TEST_VA_BLOCK_INFO_PARAMS *params, struct file *filp);
 NV_STATUS uvm_test_va_residency_info(UVM_TEST_VA_RESIDENCY_INFO_PARAMS *params, struct file *filp);
+NV_STATUS uvm_test_va_block_discard_status(UVM_TEST_VA_BLOCK_DISCARD_STATUS_PARAMS *params, struct file *filp);
+NV_STATUS uvm_test_va_block_discard_check_pmm_state(UVM_TEST_VA_BLOCK_DISCARD_CHECK_PMM_STATE_PARAMS *params,
+                                                    struct file *filp);
 
 // Compute the offset in system pages of addr from the start of va_block.
 static uvm_page_index_t uvm_va_block_cpu_page_index(uvm_va_block_t *va_block, NvU64 addr)

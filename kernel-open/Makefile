@@ -74,9 +74,7 @@ else
 
   ifndef ARCH
     ARCH := $(shell uname -m | sed -e 's/i.86/i386/' \
-      -e 's/armv[0-7]\w\+/arm/' \
       -e 's/aarch64/arm64/' \
-      -e 's/ppc64le/powerpc/' \
       -e 's/riscv64/riscv/' \
     )
   endif
@@ -86,7 +84,7 @@ else
   ifneq ($(filter $(ARCH),i386 x86_64),)
     KERNEL_ARCH = x86
   else
-    ifeq ($(filter $(ARCH),arm64 powerpc),)
+    ifeq ($(filter $(ARCH),arm64 riscv),)
         $(error Unsupported architecture $(ARCH))
     endif
   endif
@@ -110,9 +108,12 @@ else
   KBUILD_PARAMS += INSTALL_MOD_DIR="$(INSTALL_MOD_DIR)"
   KBUILD_PARAMS += NV_SPECTRE_V2=$(SPECTRE_V2_RETPOLINE)
 
+  export ORIG_PAHOLE := $(PAHOLE)
+
   .PHONY: modules module clean clean_conftest modules_install
   modules clean modules_install:
-	@$(MAKE) "LD=$(LD)" "CC=$(CC)" "OBJDUMP=$(OBJDUMP)" $(KBUILD_PARAMS) $@
+	@$(MAKE) "LD=$(LD)" "CC=$(CC)" "OBJDUMP=$(OBJDUMP)" \
+	  PAHOLE=$(CURDIR)/pahole.sh $(KBUILD_PARAMS) $@
 	@if [ "$@" = "modules" ]; then \
 	  for module in $(NV_KERNEL_MODULES); do \
 	    if [ -x split-object-file.sh ]; then \

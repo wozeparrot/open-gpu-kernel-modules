@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -25,7 +25,10 @@
 
 #include "nvtypes.h"
 #include "nvstatus.h"
-#include "ctrl/ctrl0073/ctrl0073system.h"
+#include "nvlimits.h"
+#include "ctrl/ctrl0073.h"
+#include "rmconfig.h"
+#include "core/prelude.h"
 
 typedef NV_STATUS (*RmapiCacheGetByInputHandler)(void *cachedEntry, void* pParams, NvBool bSet);
 
@@ -50,5 +53,28 @@ typedef struct DispSystemGetInternalDisplaysCacheEntry
 } DispSystemGetInternalDisplaysCacheEntry;
 
 NV_STATUS _dispSystemGetInternalDisplaysCacheHandler(void *cachedEntry, void* pParams, NvBool bSet);
+
+typedef struct DispDpGetCapsCacheTable
+{
+    // Indexed by sorIndex parameter.
+    struct
+    {
+        NvBool valid;
+        NV0073_CTRL_CMD_DP_GET_CAPS_PARAMS params;
+    } cachedEntries[NV_MAX_DEVICES];
+} DispDpGetCapsCacheTable;
+
+NV_STATUS _dispDpGetCapsCacheHandler(void *cachedEntry, void *pProvidedParams, NvBool bSet);
+
+typedef struct DispSpecificGetTypeCacheTable
+{
+    struct
+    {
+        NvBool valid;
+        NvU32 displayType;
+    } cachedEntries[NV_MAX_DEVICES];
+} DispSpecificGetTypeCacheTable;
+
+NV_STATUS _dispSpecificGetTypeCacheHandler(void *cachedEntry, void *pProvidedParams, NvBool bSet);
 
 #endif

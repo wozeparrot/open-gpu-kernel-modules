@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2004-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2004-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -280,15 +280,24 @@ CSINFO chipsetInfo[] =
     {PCI_VENDOR_ID_MARVELL,     0xA02D, CS_MARVELL_OCTEON_CN98XX, "Marvell Octeon CN98xx", ARMV8_generic_setupFunc},
     {PCI_VENDOR_ID_SIFIVE,      0x0000, CS_SIFIVE_FU740_C000, "SiFive FU740-000", Riscv_generic_setupFunc},
     {PCI_VENDOR_ID_PLDA,        0x1111, CS_PLDA_XPRESSRICH_AXI_REF, "XpressRich-AXI Ref Design", PLDA_XpressRichAXI_setupFunc},
-    {PCI_VENDOR_ID_AMPERE,      0xE200, CS_AMPERE_AMPEREONE, "Ampere AmpereOne", Ampere_AmpereOne_setupFunc},
-    {PCI_VENDOR_ID_AMPERE,      0xE201, CS_AMPERE_AMPEREONE, "Ampere AmpereOne", Ampere_AmpereOne_setupFunc},
-    {PCI_VENDOR_ID_AMPERE,      0xE202, CS_AMPERE_AMPEREONE, "Ampere AmpereOne", Ampere_AmpereOne_setupFunc},
-    {PCI_VENDOR_ID_AMPERE,      0xE203, CS_AMPERE_AMPEREONE, "Ampere AmpereOne", Ampere_AmpereOne_setupFunc},
-    {PCI_VENDOR_ID_AMPERE,      0xE204, CS_AMPERE_AMPEREONE, "Ampere AmpereOne", Ampere_AmpereOne_setupFunc},
-    {PCI_VENDOR_ID_AMPERE,      0xE205, CS_AMPERE_AMPEREONE, "Ampere AmpereOne", Ampere_AmpereOne_setupFunc},
-    {PCI_VENDOR_ID_AMPERE,      0xE206, CS_AMPERE_AMPEREONE, "Ampere AmpereOne", Ampere_AmpereOne_setupFunc},
-    {PCI_VENDOR_ID_AMPERE,      0xE207, CS_AMPERE_AMPEREONE, "Ampere AmpereOne", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE200, CS_AMPERE_AMPEREONE160, "Ampere AmpereOne-160", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE201, CS_AMPERE_AMPEREONE160, "Ampere AmpereOne-160", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE202, CS_AMPERE_AMPEREONE160, "Ampere AmpereOne-160", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE203, CS_AMPERE_AMPEREONE160, "Ampere AmpereOne-160", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE204, CS_AMPERE_AMPEREONE160, "Ampere AmpereOne-160", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE205, CS_AMPERE_AMPEREONE160, "Ampere AmpereOne-160", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE206, CS_AMPERE_AMPEREONE160, "Ampere AmpereOne-160", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE207, CS_AMPERE_AMPEREONE160, "Ampere AmpereOne-160", Ampere_AmpereOne_setupFunc},
     {PCI_VENDOR_ID_PHYTIUM,     0x5C16, CS_PHYTIUM_S5000,    "Phytium S5000", NULL},
+    {PCI_VENDOR_ID_AMPERE,      0xE208, CS_AMPERE_AMPEREONE192, "Ampere AmpereOne-192", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE209, CS_AMPERE_AMPEREONE192, "Ampere AmpereOne-192", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE20A, CS_AMPERE_AMPEREONE192, "Ampere AmpereOne-192", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE20B, CS_AMPERE_AMPEREONE192, "Ampere AmpereOne-192", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE20C, CS_AMPERE_AMPEREONE192, "Ampere AmpereOne-192", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE20D, CS_AMPERE_AMPEREONE192, "Ampere AmpereOne-192", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE20E, CS_AMPERE_AMPEREONE192, "Ampere AmpereOne-192", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_AMPERE,      0xE20F, CS_AMPERE_AMPEREONE192, "Ampere AmpereOne-192", Ampere_AmpereOne_setupFunc},
+    {PCI_VENDOR_ID_NVIDIA,      0x22D1, CS_NVIDIA_T254,         "T254",                 Nvidia_T194_setupFunc},
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -395,15 +404,24 @@ ARMCSALLOWLISTINFO armChipsetAllowListInfo[] =
     {PCI_VENDOR_ID_MARVELL,     0xA02D, CS_MARVELL_OCTEON_CN96XX}, // Marvell OCTEON CN96xx
     {PCI_VENDOR_ID_MARVELL,     0xA02D, CS_MARVELL_OCTEON_CN98XX}, // Marvell OCTEON CN98xx
     {PCI_VENDOR_ID_ALIBABA,     0x8000, CS_ALIBABA_YITIAN},      // Alibaba Yitian
-    {PCI_VENDOR_ID_AMPERE,      0xE200, CS_AMPERE_AMPEREONE},   // Ampere AmpereOne
-    {PCI_VENDOR_ID_AMPERE,      0xE201, CS_AMPERE_AMPEREONE},   // Ampere AmpereOne
-    {PCI_VENDOR_ID_AMPERE,      0xE202, CS_AMPERE_AMPEREONE},   // Ampere AmpereOne
-    {PCI_VENDOR_ID_AMPERE,      0xE203, CS_AMPERE_AMPEREONE},   // Ampere AmpereOne
-    {PCI_VENDOR_ID_AMPERE,      0xE204, CS_AMPERE_AMPEREONE},   // Ampere AmpereOne
-    {PCI_VENDOR_ID_AMPERE,      0xE205, CS_AMPERE_AMPEREONE},   // Ampere AmpereOne
-    {PCI_VENDOR_ID_AMPERE,      0xE206, CS_AMPERE_AMPEREONE},   // Ampere AmpereOne
-    {PCI_VENDOR_ID_AMPERE,      0xE207, CS_AMPERE_AMPEREONE},   // Ampere AmpereOne
-    {PCI_VENDOR_ID_PHYTIUM,     0x5C16, CS_PHYTIUM_S5000},      // Phytium S5000
+    {PCI_VENDOR_ID_AMPERE,      0xE200, CS_AMPERE_AMPEREONE160},   // Ampere AmpereOne-160
+    {PCI_VENDOR_ID_AMPERE,      0xE201, CS_AMPERE_AMPEREONE160},   // Ampere AmpereOne-160
+    {PCI_VENDOR_ID_AMPERE,      0xE202, CS_AMPERE_AMPEREONE160},   // Ampere AmpereOne-160
+    {PCI_VENDOR_ID_AMPERE,      0xE203, CS_AMPERE_AMPEREONE160},   // Ampere AmpereOne-160
+    {PCI_VENDOR_ID_AMPERE,      0xE204, CS_AMPERE_AMPEREONE160},   // Ampere AmpereOne-160
+    {PCI_VENDOR_ID_AMPERE,      0xE205, CS_AMPERE_AMPEREONE160},   // Ampere AmpereOne-160
+    {PCI_VENDOR_ID_AMPERE,      0xE206, CS_AMPERE_AMPEREONE160},   // Ampere AmpereOne-160
+    {PCI_VENDOR_ID_AMPERE,      0xE207, CS_AMPERE_AMPEREONE160},   // Ampere AmpereOne-160
+    {PCI_VENDOR_ID_PHYTIUM,     0x5C16, CS_PHYTIUM_S5000},         // Phytium S5000
+    {PCI_VENDOR_ID_AMPERE,      0xE208, CS_AMPERE_AMPEREONE192},   // Ampere AmpereOne-192
+    {PCI_VENDOR_ID_AMPERE,      0xE209, CS_AMPERE_AMPEREONE192},   // Ampere AmpereOne-192
+    {PCI_VENDOR_ID_AMPERE,      0xE20A, CS_AMPERE_AMPEREONE192},   // Ampere AmpereOne-192
+    {PCI_VENDOR_ID_AMPERE,      0xE20B, CS_AMPERE_AMPEREONE192},   // Ampere AmpereOne-192
+    {PCI_VENDOR_ID_AMPERE,      0xE20C, CS_AMPERE_AMPEREONE192},   // Ampere AmpereOne-192
+    {PCI_VENDOR_ID_AMPERE,      0xE20D, CS_AMPERE_AMPEREONE192},   // Ampere AmpereOne-192
+    {PCI_VENDOR_ID_AMPERE,      0xE20E, CS_AMPERE_AMPEREONE192},   // Ampere AmpereOne-192
+    {PCI_VENDOR_ID_AMPERE,      0xE20F, CS_AMPERE_AMPEREONE192},   // Ampere AmpereOne-192
+    {PCI_VENDOR_ID_NVIDIA,      0x22D1, CS_NVIDIA_T254},
 
     // last element must have chipset CS_UNKNOWN (zero)
     {0,                         0,      CS_UNKNOWN}

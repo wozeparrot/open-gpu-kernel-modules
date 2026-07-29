@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -141,7 +141,7 @@ clInitMappingPciBusDevice_IMPL
         return NV0000_CTRL_GPU_INVALID_ID;
 
     // do we already know our domain/bus/device?
-    if (gpuGetDBDF(pGpu) == 0)
+    if (!gpuIsDBDFValid(pGpu))
     {
         // we're checking all the device/funcs for the first 10 buses!
         // Note that we give up the enumeration once we find our first
@@ -165,24 +165,16 @@ clInitMappingPciBusDevice_IMPL
                         continue;
 
                     // if the BAR0 matches our PhysAddr, it's the correct device
-                    if ((osPciReadDword(handle, PCI_BASE_ADDRESS_0)) !=
+                    if (((osPciReadDword(handle, PCI_BASE_ADDRESS_0) & PCI_BASE_ADDRESS_0_VALID_MASK)) !=
                         pGpu->busInfo.gpuPhysAddr)
                         continue;
 
                     // save our domain/bus/device/function
                     pGpu->busInfo.nvDomainBusDeviceFunc = gpuEncodeDomainBusDevice(domain, (NvU8)bus, device);
+                    pGpu->busInfo.bNvDomainBusDeviceFuncValid = NV_TRUE;
 
                     bFoundDevice = NV_TRUE;
 
-                    if (!(IS_SIMULATION(pGpu) || IS_SIM_MODS(GPU_GET_OS(pGpu))))
-                    {
-                        NV_ASSERT(gpuGetDBDF(pGpu) != 0);
-                    }
-                                                        // On the HP "Wilson's Peak"/McKinley system
-                                                        // the graphics is located at
-                                                        // domain==0, bus==0, device==0.
-                                                        // Why should this be invalid?
-                    // In simulation, the fmodel can put this at bus==0, device==0
                     break;
                 }
             }
@@ -193,10 +185,8 @@ clInitMappingPciBusDevice_IMPL
     bus = gpuGetBus(pGpu);
     device = gpuGetDevice(pGpu);
 
-    if (gpuGetDBDF(pGpu) == 0)
+    if (!gpuIsDBDFValid(pGpu))
     {
-        if (!(IS_SIMULATION(pGpu)|| IS_SIM_MODS(GPU_GET_OS(pGpu)))
-               || (bFoundDevice == NV_FALSE))
         {
             NV_PRINTF(LEVEL_ERROR,
                     "NVRM initMappingPciBusDevice: can't find a device!\n");
@@ -685,8 +675,7 @@ clInit_IMPL(
     //
     (void)clInitMappingPciBusDevice(pGpu, pCl);
 
-    if (kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu)) ==
-        NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS)
+    if (gpuGetBusIntfType_HAL(pGpu) == NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS)
     {
         return clInitPcie(pGpu, pCl);
     }
@@ -704,8 +693,7 @@ clUpdateConfig_IMPL
     // Common code for all buses
     clInitMappingPciBusDevice(pGpu, pCl);
 
-    if (kbifGetBusIntfType_HAL(GPU_GET_KERNEL_BIF(pGpu)) ==
-        NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS)
+    if (gpuGetBusIntfType_HAL(pGpu) == NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS)
     {
         clUpdatePcieConfig(pGpu, pCl);
         return;
@@ -720,16 +708,9 @@ clTeardown_IMPL(
     OBJCL  *pCl
 )
 {
-    KernelBif *pKernelBif = GPU_GET_KERNEL_BIF(pGpu);
-
-    if (pKernelBif == NULL)
-    {
-        return NV_ERR_NOT_SUPPORTED;
-    }
-
     clFreeBusTopologyCache(pCl);
 
-    switch (kbifGetBusIntfType_HAL(pKernelBif))
+    switch (gpuGetBusIntfType_HAL(pGpu))
     {
         case NV2080_CTRL_BUS_INFO_TYPE_PCI_EXPRESS:
             return clTeardownPcie(pGpu, pCl);
@@ -822,6 +803,7 @@ void clSyncWithGsp_IMPL(OBJCL *pCl, GspSystemInfo *pGSI)
     CL_SYNC_PDB(PDB_PROP_CL_HAS_RESIZABLE_BAR_ISSUE);
     CL_SYNC_PDB(PDB_PROP_CL_BUG_3751839_GEN_SPEED_WAR);
     CL_SYNC_PDB(PDB_PROP_CL_BUG_3562968_WAR_ALLOW_PCIE_ATOMICS);
+    CL_SYNC_PDB(PDB_PROP_CL_WAR_AMD_5107271);
 
 #undef CL_SYNC_PDB
 

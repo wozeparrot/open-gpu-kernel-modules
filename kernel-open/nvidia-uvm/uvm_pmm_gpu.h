@@ -1,5 +1,5 @@
 /*******************************************************************************
-    Copyright (c) 2015-2024 NVIDIA Corporation
+    Copyright (c) 2015-2025 NVIDIA Corporation
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to
@@ -58,7 +58,7 @@
 #include "uvm_va_block_types.h"
 #include "uvm_linux.h"
 #include "uvm_types.h"
-#include "nv_uvm_types.h"
+#include "nv_uvm_user_types.h"
 #if UVM_IS_CONFIG_HMM() || defined(CONFIG_PCI_P2PDMA)
 #include <linux/memremap.h>
 #endif
@@ -190,8 +190,7 @@ typedef uvm_chunk_size_t uvm_chunk_sizes_mask_t;
 
 typedef struct uvm_pmm_gpu_chunk_suballoc_struct uvm_pmm_gpu_chunk_suballoc_t;
 
-#if UVM_IS_CONFIG_HMM()
-
+#if UVM_IS_CONFIG_HMM() || defined(NV_MEMORY_DEVICE_COHERENT_PRESENT)
 typedef struct
 {
     // For g_uvm_global.devmem_ranges
@@ -205,7 +204,9 @@ typedef struct
 
     struct dev_pagemap pagemap;
 } uvm_pmm_gpu_devmem_t;
+#endif
 
+#if UVM_IS_CONFIG_HMM()
 typedef struct uvm_pmm_gpu_struct uvm_pmm_gpu_t;
 
 // Return the GPU chunk for a given device private struct page.
@@ -219,25 +220,17 @@ uvm_gpu_id_t uvm_pmm_devmem_page_to_gpu_id(struct page *page);
 
 // Return the PFN of the device private struct page for the given GPU chunk.
 unsigned long uvm_pmm_gpu_devmem_get_pfn(uvm_pmm_gpu_t *pmm, uvm_gpu_chunk_t *chunk);
+#endif
+
+// Allocate and initialise struct page data in the kernel to support HMM.
+NV_STATUS uvm_pmm_devmem_init(uvm_parent_gpu_t *gpu);
+void uvm_pmm_devmem_deinit(uvm_parent_gpu_t *parent_gpu);
+
+void uvm_pmm_gpu_device_p2p_init(uvm_parent_gpu_t *gpu);
+void uvm_pmm_gpu_device_p2p_deinit(uvm_parent_gpu_t *gpu);
 
 // Free unused ZONE_DEVICE pages.
 void uvm_pmm_devmem_exit(void);
-
-#else
-static inline void uvm_pmm_devmem_exit(void)
-{
-}
-#endif
-
-#if defined(CONFIG_PCI_P2PDMA) && defined(NV_STRUCT_PAGE_HAS_ZONE_DEVICE_DATA)
-#include <linux/pci-p2pdma.h>
-
-void uvm_pmm_gpu_device_p2p_init(uvm_gpu_t *gpu);
-void uvm_pmm_gpu_device_p2p_deinit(uvm_gpu_t *gpu);
-#else
-static inline void uvm_pmm_gpu_device_p2p_init(uvm_gpu_t *gpu) {}
-static inline void uvm_pmm_gpu_device_p2p_deinit(uvm_gpu_t *gpu) {}
-#endif
 
 struct uvm_gpu_chunk_struct
 {
@@ -366,6 +359,13 @@ typedef struct uvm_pmm_gpu_struct
         // uvm_pmm_gpu_mark_root_chunk_(un)used().
         struct list_head va_block_unused;
 
+        // List of discarded root GPU chunks, which are still mapped on the GPU.
+        // Chunks on this list are evicted with a lower priority than unused chunks.
+        //
+        // Updated by the VA block code with
+        // uvm_pmm_gpu_mark_root_chunk_discarded().
+        struct list_head va_block_discarded;
+
         // List of root chunks used by VA blocks
         struct list_head va_block_used;
 
@@ -374,6 +374,21 @@ typedef struct uvm_pmm_gpu_struct
         // or workqueue.
         struct list_head va_block_lazy_free;
         nv_kthread_q_item_t va_block_lazy_free_q_item;
+
+        // Count of the number of root chunks "in_eviction". Incremented for
+        // each root chunks that starts the eviction process, and decremented
+        // on eviction success or failure.
+        // Updates are protected by 'list_lock', but it can be queried outside
+        // of the critical section.
+        long in_eviction_count;
+
+        // Count of the number of root chunks that are temporarily pinned.
+        // Incremented each time a root chunk is explicitly pinned or when
+        // merging of a split root chunk results in pinned status.
+        // Decremented on explict chunk unpin or split.
+        // Updates are protected by 'list_lock', but it can be queried outside
+        // of the critical section.
+        long pinned_count;
     } root_chunks;
 
     // Lock protecting PMA allocation, freeing and eviction
@@ -439,6 +454,10 @@ static bool uvm_gpu_chunk_is_user(const uvm_gpu_chunk_t *chunk)
 // - For chunks smaller than a system page, this function returns the struct
 // page containing the chunk's starting address.
 struct page *uvm_gpu_chunk_to_page(uvm_pmm_gpu_t *pmm, uvm_gpu_chunk_t *chunk);
+
+// Return the physical address of the given chunk. The GPU must support
+// coherence, (uvm_parent_gpu_is_coherent() should return true).
+NvU64 uvm_gpu_chunk_to_sys_addr(uvm_pmm_gpu_t *pmm, uvm_gpu_chunk_t *chunk);
 
 // User memory allocator.
 //
@@ -564,6 +583,9 @@ void uvm_pmm_gpu_mark_root_chunk_used(uvm_pmm_gpu_t *pmm, uvm_gpu_chunk_t *chunk
 // Mark an allocated user chunk as unused
 void uvm_pmm_gpu_mark_root_chunk_unused(uvm_pmm_gpu_t *pmm, uvm_gpu_chunk_t *chunk);
 
+// Mark an allocated chunk as discarded
+void uvm_pmm_gpu_mark_root_chunk_discarded(uvm_pmm_gpu_t *pmm, uvm_gpu_chunk_t *chunk);
+
 static bool uvm_gpu_chunk_same_root(uvm_gpu_chunk_t *chunk1, uvm_gpu_chunk_t *chunk2)
 {
     return UVM_ALIGN_DOWN(chunk1->address, UVM_CHUNK_SIZE_MAX) == UVM_ALIGN_DOWN(chunk2->address, UVM_CHUNK_SIZE_MAX);
@@ -619,10 +641,6 @@ static uvm_chunk_size_t uvm_chunk_find_prev_size(uvm_chunk_sizes_mask_t chunk_si
 // checking that the chunks are still there. Also, the VA block(s) are
 // retained, and it's up to the caller to release them.
 NvU32 uvm_pmm_gpu_phys_to_virt(uvm_pmm_gpu_t *pmm, NvU64 phys_addr, NvU64 region_size, uvm_reverse_map_t *out_mappings);
-
-// Allocate and initialise struct page data in the kernel to support HMM.
-NV_STATUS uvm_pmm_devmem_init(uvm_parent_gpu_t *gpu);
-void uvm_pmm_devmem_deinit(uvm_parent_gpu_t *parent_gpu);
 
 // Iterates over every size in the input mask from smallest to largest
 #define for_each_chunk_size(__size, __chunk_sizes)                                  \

@@ -30,14 +30,10 @@
 #if defined(NV_DRM_DRMP_H_PRESENT)
 #include <drm/drmP.h>
 #endif
+#include <drm/drm_print.h>
 
-#if defined(NV_DRM_DRM_DEVICE_H_PRESENT)
 #include <drm/drm_device.h>
-#endif
-
-#if defined(NV_DRM_DRM_GEM_H_PRESENT)
 #include <drm/drm_gem.h>
-#endif
 
 #include "nvidia-drm-os-interface.h"
 
@@ -85,14 +81,20 @@
     DRM_DEBUG_DRIVER("[GPU ID 0x%08x] " __fmt,     \
                      __dev->gpu_info.gpu_id, ##__VA_ARGS__)
 
+enum nv_drm_input_color_space {
+    NV_DRM_INPUT_COLOR_SPACE_NONE,
+    NV_DRM_INPUT_COLOR_SPACE_SCRGB_LINEAR,
+    NV_DRM_INPUT_COLOR_SPACE_BT2100_PQ
+};
+
 struct nv_drm_device {
     nv_gpu_info_t gpu_info;
+    MIGDeviceId gpu_mig_device;
 
     struct drm_device *dev;
 
     struct NvKmsKapiDevice *pDevice;
 
-#if defined(NV_DRM_ATOMIC_MODESET_AVAILABLE)
     /*
      * Lock to protect drm-subsystem and fields of this structure
      * from concurrent access.
@@ -122,9 +124,7 @@ struct nv_drm_device {
     NvU8 genericPageKind;
     NvU8 pageKindGeneration;
     NvU8 sectorLayout;
-#if defined(NV_DRM_FORMAT_MODIFIERS_PRESENT)
     NvU64 modifiers[6 /* block linear */ + 1 /* linear */ + 1 /* terminator */];
-#endif
 
     struct delayed_work hotplug_event_work;
     atomic_t enable_event_handling;
@@ -137,12 +137,8 @@ struct nv_drm_device {
      */
     wait_queue_head_t flip_event_wq;
 
-#endif
-
-#if defined(NV_DRM_FENCE_AVAILABLE)
     NvU64 semsurf_stride;
     NvU64 semsurf_max_submitted_offset;
-#endif
 
     NvBool hasVideoMemory;
 
@@ -182,6 +178,9 @@ struct nv_drm_device {
     struct drm_property *nv_crtc_regamma_divisor_property;
 
     struct nv_drm_device *next;
+
+    NvU64 vtFbBaseAddress;
+    NvU64 vtFbSize;
 };
 
 static inline NvU32 nv_drm_next_display_semaphore(

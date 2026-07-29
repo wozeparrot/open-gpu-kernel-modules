@@ -26,7 +26,7 @@
 
 #include "uvm_types.h"
 #include "uvm_ioctl.h"
-#include "nv_uvm_types.h"
+#include "nv_uvm_user_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -943,7 +943,7 @@ typedef struct
 {
     NvProcessorUuid                 gpu_uuid;                                           // In
 
-    // Type UVM_ACCESS_COUNTER_GRANULARITY from nv_uvm_types.h
+    // Type UVM_ACCESS_COUNTER_GRANULARITY from nv_uvm_user_types.h
     NvU32                           granularity;                                        // In
 
     NvU32                           threshold;                                          // In
@@ -1522,6 +1522,26 @@ typedef struct
     NV_STATUS       rmStatus;                           // Out
 } UVM_TEST_INJECT_NVLINK_ERROR_PARAMS;
 
+#define UVM_TEST_FILE_INITIALIZE                         UVM_TEST_IOCTL_BASE(107)
+typedef struct
+{
+    NV_STATUS               rmStatus;                    // Out
+} UVM_TEST_FILE_INITIALIZE_PARAMS;
+
+#define UVM_TEST_FILE_UNMAP                              UVM_TEST_IOCTL_BASE(108)
+typedef struct
+{
+    // File offset at which to start unmapping. Note that this will unmap file
+    // offsets, not virtual addresses, so all virtual addresses mapping these
+    // offsets will be unmapped.
+    NvU64 offset        NV_ALIGN_BYTES(8);  // In
+
+    // Bytes to unmap
+    NvU64 length        NV_ALIGN_BYTES(8);  // In
+
+    NV_STATUS rmStatus;                     // Out
+} UVM_TEST_FILE_UNMAP_PARAMS;
+
 #define UVM_TEST_QUERY_ACCESS_COUNTERS                   UVM_TEST_IOCTL_BASE(109)
 typedef struct
 {
@@ -1531,6 +1551,32 @@ typedef struct
 
     NV_STATUS rmStatus;                     // Out
 } UVM_TEST_QUERY_ACCESS_COUNTERS_PARAMS;
+
+#define UVM_TEST_VA_BLOCK_DISCARD_STATUS                 UVM_TEST_IOCTL_BASE(110)
+typedef struct
+{
+    NvU64 lookup_address;                                // In
+    NvBool discarded;                                    // Out
+    NV_STATUS rmStatus;                                  // Out
+} UVM_TEST_VA_BLOCK_DISCARD_STATUS_PARAMS;
+
+typedef enum
+{
+    UVM_TEST_VA_BLOCK_DISCARD_PMM_STATE_INVALID = 0,
+    UVM_TEST_VA_BLOCK_DISCARD_PMM_STATE_UNUSED,
+    UVM_TEST_VA_BLOCK_DISCARD_PMM_STATE_DISCARDED,
+    UVM_TEST_VA_BLOCK_DISCARD_PMM_STATE_USED,
+    UVM_TEST_VA_BLOCK_DISCARD_PMM_STATE_COUNT
+} UVM_TEST_VA_BLOCK_DISCARD_PMM_STATE;
+
+#define UVM_TEST_VA_BLOCK_DISCARD_CHECK_PMM_STATE        UVM_TEST_IOCTL_BASE(111)
+typedef struct
+{
+    NvU64 address;                                       // In
+    NvProcessorUuid gpu_uuid;                            // In
+    UVM_TEST_VA_BLOCK_DISCARD_PMM_STATE state;           // Out
+    NV_STATUS rmStatus;                                  // Out
+} UVM_TEST_VA_BLOCK_DISCARD_CHECK_PMM_STATE_PARAMS;
 
 #ifdef __cplusplus
 }

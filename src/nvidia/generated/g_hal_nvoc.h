@@ -1,20 +1,22 @@
 
 #ifndef _G_HAL_NVOC_H_
 #define _G_HAL_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -50,6 +52,7 @@ extern "C" {
 \***************************************************************************/
 
 #include "core/core.h"
+#include "nvoc/object.h"
 
 //
 // HAL Info Block Id:
@@ -96,10 +99,18 @@ typedef struct OBJHAL OBJHAL;
 #endif
 
 
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__OBJHAL;
+struct NVOC_METADATA__Object;
+
+
 struct OBJHAL {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__OBJHAL *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct Object __nvoc_base_Object;
@@ -110,6 +121,13 @@ struct OBJHAL {
 
     // Data members
     struct MODULEDESCRIPTOR moduleDescriptor;
+};
+
+
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__OBJHAL {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__Object metadata__Object;
 };
 
 #ifndef __NVOC_CLASS_OBJHAL_TYPEDEF__
@@ -128,10 +146,10 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_OBJHAL;
     ((pThis)->__nvoc_pbase_OBJHAL)
 
 #ifdef __nvoc_hal_h_disabled
-#define __dynamicCast_OBJHAL(pThis) ((OBJHAL*)NULL)
+#define __dynamicCast_OBJHAL(pThis) ((OBJHAL*) NULL)
 #else //__nvoc_hal_h_disabled
 #define __dynamicCast_OBJHAL(pThis) \
-    ((OBJHAL*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJHAL)))
+    ((OBJHAL*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(OBJHAL)))
 #endif //__nvoc_hal_h_disabled
 
 NV_STATUS __nvoc_objCreateDynamic_OBJHAL(OBJHAL**, Dynamic*, NvU32, va_list);
@@ -141,20 +159,21 @@ NV_STATUS __nvoc_objCreate_OBJHAL(OBJHAL**, Dynamic*, NvU32);
     __nvoc_objCreate_OBJHAL((ppNewObj), staticCast((pParent), Dynamic), (createFlags))
 
 
-// Wrapper macros
-
-// Dispatch functions
+// Wrapper macros for implementation functions
 PMODULEDESCRIPTOR objhalGetModuleDescriptor_IMPL(struct OBJHAL *pHal);
-
 #ifdef __nvoc_hal_h_disabled
 static inline PMODULEDESCRIPTOR objhalGetModuleDescriptor(struct OBJHAL *pHal) {
     NV_ASSERT_FAILED_PRECOMP("OBJHAL was disabled!");
     return NULL;
 }
-#else //__nvoc_hal_h_disabled
+#else // __nvoc_hal_h_disabled
 #define objhalGetModuleDescriptor(pHal) objhalGetModuleDescriptor_IMPL(pHal)
-#endif //__nvoc_hal_h_disabled
+#endif // __nvoc_hal_h_disabled
 
+
+// Wrapper macros for halified functions
+
+// Dispatch functions
 #undef PRIVATE_FIELD
 
 

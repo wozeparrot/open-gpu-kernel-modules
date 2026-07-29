@@ -1,4 +1,4 @@
-/*
+ /*
  * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
@@ -125,7 +125,7 @@ void ConnectorImpl2x::applyOuiWARs()
                 bStuffDummySymbolsFor8b10b = true;
             }
             break;
-        
+
     }
 }
 
@@ -513,16 +513,25 @@ void Edid::applyEdidWorkArounds(NvU32 warFlag, const DpMonitorDenylistData *pDen
 
         // LG
         case 0xE430:
-            if (ProductID == 0x0469)
+            switch (ProductID)
             {
-                //
-                // The LG display can't be driven at FHD with 2*RBR.
-                // Force max link config
-                //
-                this->WARFlags.forceMaxLinkConfig = true;
-                DP_PRINTF(DP_NOTICE, "DP-WAR> Force maximum link config WAR required on LG panel.");
-                DP_PRINTF(DP_NOTICE, "DP-WAR>   bug 1649626");
-                break;
+                case 0x0469:
+                {
+                    //
+                    // The LG display can't be driven at FHD with 2*RBR.
+                    // Force max link config
+                    //
+                    this->WARFlags.forceMaxLinkConfig = true;
+                    DP_PRINTF(DP_NOTICE, "DP-WAR> Force maximum link config WAR required on LG panel.");
+                    DP_PRINTF(DP_NOTICE, "DP-WAR>   bug 1649626");
+                    break;
+                }
+                case 0x06DB:
+                {
+                    this->WARFlags.useLegacyAddress = true;
+                    DP_PRINTF(DP_NOTICE, "DP-WAR> LG eDP implements only Legacy interrupt address range");
+                    break;
+                }
             }
             break;
         case 0x8F34:
@@ -615,6 +624,13 @@ void Edid::applyEdidWorkArounds(NvU32 warFlag, const DpMonitorDenylistData *pDen
                 this->WARFlags.bDisableDscMaxBppLimit = true;
                 DP_PRINTF(DP_NOTICE, "DP-WAR> Disable DSC max BPP limit of 16 for DSC.");
             }
+            else if (ProductID == 0x5CA7 || ProductID == 0x9E9D || ProductID == 0x9EA0 || ProductID == 0x9EA5 || ProductID == 0x5CB7 ||
+                     ProductID == 0x9EA8 || ProductID == 0x9EAF || ProductID == 0x7846 || ProductID == 0x7849 || ProductID == 0x5CB5 ||
+                     ProductID == 0x77E0 || ProductID == 0x9EB9)
+            {
+                this->WARFlags.bForceHeadShutdownOnModeTransition = true;
+                DP_PRINTF(DP_NOTICE, "DP-WAR> Force head shutdown on Mode transition.");
+            }
             break;
         case 0xB306:
             if (ProductID == 0x3228)
@@ -623,12 +639,13 @@ void Edid::applyEdidWorkArounds(NvU32 warFlag, const DpMonitorDenylistData *pDen
                 this->WARFlags.bSkipCableIdCheck = true;
                 DP_PRINTF(DP_NOTICE, "DP-WAR> Panel does not expose cable capability. Ignoring it. Bug 4968411");
             }
-            else if(ProductID == 0x24b5 || ProductID == 0x32f2)
+            else if(ProductID == 0x24b5 || ProductID == 0x32f2 || ProductID == 0x27BC)
             {
                 //
                 // Asus ROG PG248QP  (0x24b5) Bug 5100062
                 // Asus ROG PG32UCDM (0x32f2) Bug 5088957
-                //
+                // Asus ROG PG27AQN  (0x27BC) Bug 5300665
+
                 this->WARFlags.bForceHeadShutdown = true;
                 DP_PRINTF(DP_NOTICE, "DP-WAR> Force head shutdown.");
             }
@@ -643,6 +660,7 @@ void Edid::applyEdidWorkArounds(NvU32 warFlag, const DpMonitorDenylistData *pDen
                 // Do not allocate manual timeslot when under a separate branch. This is checked with branch OUI.
                 //
                 this->WARFlags.bAllocateManualTimeslots = true;
+                this->WARFlags.bDP2XPreferNonDSCForLowPClk = true;
                 DP_PRINTF(DP_NOTICE, "DP-WAR> Panel needs allocation of manual timeslot. Bug 4958974");
             }
             if (ProductID == 0x7256)
@@ -650,13 +668,34 @@ void Edid::applyEdidWorkArounds(NvU32 warFlag, const DpMonitorDenylistData *pDen
                 this->WARFlags.bDisableDownspread = true;
             }
             break;
-
-        case 0xAC10:
-            if (ProductID == 0x42AD || ProductID == 0x42AC)
+        case 0x545A: // VRT Varjo XR3
+            if (ProductID == 0x5841 || ProductID == 0x5842 || ProductID == 0x5843)
             {
-                this->WARFlags.bApplyStuffDummySymbolsWAR   = true;
-                this->WARData.bStuffDummySymbolsFor128b132b = true;
-                this->WARData.bStuffDummySymbolsFor8b10b    = false;
+                this->WARFlags.bDisableDownspread = true;
+                DP_PRINTF(DP_NOTICE, "DP-WAR> VRT monitor does not work with GB20x when downspread is enabled. Disabling downspread.");
+            }
+            break;
+
+        case 0xD94D: // Sony
+            if (ProductID == 0x07EE) // Sony SDM27Q10S
+            {
+                this->WARFlags.bSkipResetMSTMBeforeLt = true;
+                DP_PRINTF(DP_NOTICE, "DP-WAR> Sony SDM27Q10S needs to skip reset MST_EN before LT");
+            }
+            break;
+        case 0xAC10:
+            switch (ProductID)
+            {
+                case 0x42AD:
+                case 0x42AC:
+                    this->WARFlags.bApplyStuffDummySymbolsWAR   = true;
+                    this->WARData.bStuffDummySymbolsFor128b132b = true;
+                    this->WARData.bStuffDummySymbolsFor8b10b    = false;
+                    break;
+                case 0xA21F:
+                    this->WARFlags.bForceHeadShutdown = true;
+                    DP_PRINTF(DP_NOTICE, "DP-WAR> Force head shutdown for Dell AW2524H.");
+                    break;
             }
             break;
         default:

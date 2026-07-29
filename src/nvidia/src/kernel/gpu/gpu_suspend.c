@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2000-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2000-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -41,7 +41,7 @@
 #include "core/thread_state.h"
 #include "vgpu/rpc.h"
 #include "gpu/mem_sys/kern_mem_sys.h"
-#include <gpu/fsp/kern_fsp.h>
+#include "gpu/timer/objtmr.h"
 
 //
 // Helper functions
@@ -49,6 +49,21 @@
 static NV_STATUS gpuPowerManagementEnter(OBJGPU *, NvU32 newLevel, NvU32 flags);
 static NV_STATUS gpuPowerManagementResume(OBJGPU *, NvU32 oldLevel, NvU32 flags);
 static NV_STATUS _gpuPollCFGAndCheckD3Hot(OBJGPU *);
+
+static void _gpuWaitForGfwBootOkFailureStore(
+    OBJGPU *pGpu, NV_STATUS status);
+static void _gpuInitLibosLoggingStructuresFailureStore(
+    OBJGPU *pGpu, NV_STATUS status);
+static void _gpuGspPrepareForBootstrapFailureStore(
+    OBJGPU *pGpu, NV_STATUS status);
+static void _gpuGspBootstrapFailureStore(
+    OBJGPU *pGpu, NV_STATUS status);
+static void _gpuBootGspRmProxyFailureStore(
+    OBJGPU *pGpu, NV_STATUS status);
+static void _gpuGspPrepareSuspendResumeDataFailureStore(
+    OBJGPU *pGpu, NV_STATUS status);
+static void _gpuGspUnloadRmFailureStore(
+    OBJGPU *pGpu, NV_STATUS status);
 
 // XXX Needs to be further cleaned up. No new code should be placed in this
 // routine. Please use the per-engine StateLoad() and StateUnload() routines
@@ -78,6 +93,8 @@ gpuPowerManagementEnter(OBJGPU *pGpu, NvU32 newLevel, NvU32 flags)
             status = kgspPrepareSuspendResumeData_HAL(pGpu, pKernelGsp);
             if (status != NV_OK)
             {
+                _gpuGspPrepareSuspendResumeDataFailureStore(
+                    pGpu, status);
                 return status;
             }
         }
@@ -106,6 +123,8 @@ gpuPowerManagementEnter(OBJGPU *pGpu, NvU32 newLevel, NvU32 flags)
         {
             NV_PRINTF(LEVEL_ERROR, "GSP unload failed at suspend (bootMode 0x%x, newLevel 0x%x): 0x%x\n",
                       unloadMode, newLevel, status);
+            _gpuGspUnloadRmFailureStore(
+                pGpu, status);
             goto done;
         }
 
@@ -172,6 +191,7 @@ gpuPowerManagementResume(OBJGPU *pGpu, NvU32 oldLevel, NvU32 flags)
         //
         kmemsysProgramSysmemFlushBuffer_HAL(pGpu, GPU_GET_KERNEL_MEMORY_SYSTEM(pGpu));
 
+        OBJTMR    *pTmr = GPU_GET_TIMER(pGpu);
         KernelGsp *pKernelGsp = GPU_GET_KERNEL_GSP(pGpu);
         KernelGspBootMode bootMode;
 
@@ -187,6 +207,8 @@ gpuPowerManagementResume(OBJGPU *pGpu, NvU32 oldLevel, NvU32 flags)
         status = kgspWaitForGfwBootOk_HAL(pGpu, pKernelGsp);
         if (status != NV_OK)
         {
+            _gpuWaitForGfwBootOkFailureStore(
+                pGpu, status);
             goto done;
         }
 
@@ -202,14 +224,27 @@ gpuPowerManagementResume(OBJGPU *pGpu, NvU32 oldLevel, NvU32 flags)
             if (status != NV_OK)
             {
                 NV_PRINTF(LEVEL_ERROR, "cannot init libOS PMU logging structures: 0x%x\n", status);
+                _gpuInitLibosLoggingStructuresFailureStore(
+                    pGpu, status);
                 goto done;
             }
+
+            //
+            // In suspend/resume case, update the GPU time after GFW boot is complete
+            // (to avoid PLM collisions) but before loading GSP-RM ucode (which
+            // consumes the updated GPU time).
+            //
+            tmrSetCurrentTime_HAL(pGpu, pTmr);
+
+            libosLogUpdateTimerDelta(&pKernelGsp->logDecode, pTmr->sysTimerOffsetNs);
         }
 
         status = kgspPrepareForBootstrap_HAL(pGpu, pKernelGsp, bootMode);
         if (status != NV_OK)
         {
             NV_PRINTF(LEVEL_ERROR, "GSP boot preparation failed at resume (bootMode 0x%x): 0x%x\n", bootMode, status);
+            _gpuGspPrepareForBootstrapFailureStore(
+                pGpu, status);
             goto done;
         }
 
@@ -217,24 +252,22 @@ gpuPowerManagementResume(OBJGPU *pGpu, NvU32 oldLevel, NvU32 flags)
         if (status != NV_OK)
         {
             NV_PRINTF(LEVEL_ERROR, "GSP boot failed at resume (bootMode 0x%x): 0x%x\n", bootMode, status);
+            _gpuGspBootstrapFailureStore(
+                pGpu, status);
             goto done;
         }
     }
     else
     {
-        // Boot GSP-FMC for monolithic RM
-        KernelFsp *pKernelFsp = GPU_GET_KERNEL_FSP(pGpu);
-        if ((pKernelFsp != NULL) && !IS_VIRTUAL(pGpu))
+        // Boot GSP-RM proxy through COT command either via FSP or SEC2
+        if (!IS_VIRTUAL(pGpu))
         {
-            pKernelFsp->setProperty(pKernelFsp, PDB_PROP_KFSP_BOOT_COMMAND_OK, NV_FALSE);
-
-            // This is a no-op in CPU-RM
-            NV_ASSERT_OK_OR_GOTO(status, kfspPrepareKeepWPRAcrossGc6Physical(pGpu, pKernelFsp), done);
-
-            status = kfspPrepareAndSendBootCommands_HAL(pGpu, pKernelFsp);
+            status = gpuBootGspRmProxy(pGpu);
             if (status != NV_OK)
             {
-                NV_PRINTF(LEVEL_ERROR, "FSP boot command failed during resume.\n");
+                NV_PRINTF(LEVEL_ERROR, "GSP-RM proxy boot command failed during resume.\n");
+                _gpuBootGspRmProxyFailureStore(
+                    pGpu, status);
                 goto done;
             }
         }
@@ -310,6 +343,167 @@ _gpuPollCFGAndCheckD3Hot(OBJGPU *pGpu)
         gpuCheckGc6inD3Hot(pGpu);
     }
     return NV_OK;
+}
+
+static void
+_gpuWaitForGfwBootOkFailureStore
+(
+    OBJGPU *pGpu,
+    NV_STATUS status
+)
+{
+    NVPOWERSTATE_FAILURE *const pFailure =
+        &pGpu->powerStateFailure;
+    NVPOWERSTATE_FAILURE_WAIT_FOR_GFW_BOOT_OK *const pFailureData =
+        &pFailure->data.waitForGfwBootOk;
+
+    if (nvPowerStateFailureIsPopulated(pFailure))
+    {
+        return;
+    }
+
+    pFailure->stage = NVPOWERSTATE_STAGE_WAIT_FOR_GFW_BOOT_OK;
+    pFailure->status = status;
+
+    PORT_UNREFERENCED_VARIABLE(pFailureData);
+}
+
+static void
+_gpuInitLibosLoggingStructuresFailureStore
+(
+    OBJGPU *pGpu,
+    NV_STATUS status
+)
+{
+    NVPOWERSTATE_FAILURE *const pFailure =
+        &pGpu->powerStateFailure;
+    NVPOWERSTATE_FAILURE_INIT_LIBOS_LOGGING_STRUCTURES *const pFailureData =
+        &pFailure->data.initLibosLoggingStructures;
+
+    if (nvPowerStateFailureIsPopulated(pFailure))
+    {
+        return;
+    }
+
+    pFailure->stage = NVPOWERSTATE_STAGE_INIT_LIBOS_LOGGING_STRUCTURES;
+    pFailure->status = status;
+
+    PORT_UNREFERENCED_VARIABLE(pFailureData);
+}
+
+static void
+_gpuGspPrepareForBootstrapFailureStore
+(
+    OBJGPU *pGpu,
+    NV_STATUS status
+)
+{
+    NVPOWERSTATE_FAILURE *const pFailure =
+        &pGpu->powerStateFailure;
+    NVPOWERSTATE_FAILURE_GSP_PREPARE_FOR_BOOTSTRAP *const pFailureData =
+        &pFailure->data.gspPrepareForBootstrap;
+
+    if (nvPowerStateFailureIsPopulated(pFailure))
+    {
+        return;
+    }
+
+    pFailure->stage = NVPOWERSTATE_STAGE_GSP_PREPARE_FOR_BOOTSTRAP;
+    pFailure->status = status;
+
+    PORT_UNREFERENCED_VARIABLE(pFailureData);
+}
+
+static void
+_gpuGspBootstrapFailureStore
+(
+    OBJGPU *pGpu,
+    NV_STATUS status
+)
+{
+    NVPOWERSTATE_FAILURE *const pFailure =
+        &pGpu->powerStateFailure;
+    NVPOWERSTATE_FAILURE_GSP_BOOTSTRAP *const pFailureData =
+        &pFailure->data.gspBootstrap;
+
+    if (nvPowerStateFailureIsPopulated(pFailure))
+    {
+        return;
+    }
+
+    pFailure->stage = NVPOWERSTATE_STAGE_GSP_BOOTSTRAP;
+    pFailure->status = status;
+
+    PORT_UNREFERENCED_VARIABLE(pFailureData);
+}
+
+static void
+_gpuBootGspRmProxyFailureStore
+(
+    OBJGPU *pGpu,
+    NV_STATUS status
+)
+{
+    NVPOWERSTATE_FAILURE *const pFailure =
+        &pGpu->powerStateFailure;
+    NVPOWERSTATE_FAILURE_BOOT_GSP_RM_PROXY *const pFailureData =
+        &pFailure->data.bootGspRmProxy;
+
+    if (nvPowerStateFailureIsPopulated(pFailure))
+    {
+        return;
+    }
+
+    pFailure->stage = NVPOWERSTATE_STAGE_BOOT_GSP_RM_PROXY;
+    pFailure->status = status;
+
+    PORT_UNREFERENCED_VARIABLE(pFailureData);
+}
+
+static void
+_gpuGspPrepareSuspendResumeDataFailureStore
+(
+    OBJGPU *pGpu,
+    NV_STATUS status
+)
+{
+    NVPOWERSTATE_FAILURE *const pFailure =
+        &pGpu->powerStateFailure;
+    NVPOWERSTATE_FAILURE_GSP_PREPARE_SUSPEND_RESUME_DATA *const pFailureData =
+        &pFailure->data.gspPrepareSuspendResumeData;
+
+    if (nvPowerStateFailureIsPopulated(pFailure))
+    {
+        return;
+    }
+
+    pFailure->stage = NVPOWERSTATE_STAGE_GSP_PREPARE_SUSPEND_RESUME_DATA;
+    pFailure->status = status;
+
+    PORT_UNREFERENCED_VARIABLE(pFailureData);
+}
+
+static void
+_gpuGspUnloadRmFailureStore
+(
+    OBJGPU *pGpu,
+    NV_STATUS status
+)
+{
+    NVPOWERSTATE_FAILURE *const pFailure =
+        &pGpu->powerStateFailure;
+    NVPOWERSTATE_FAILURE_GSP_UNLOAD_RM *const pFailureData =
+        &pFailure->data.gspUnloadRm;
+
+    if (nvPowerStateFailureIsPopulated(pFailure))
+    {
+        return;
+    }
+
+    pFailure->stage = NVPOWERSTATE_STAGE_GSP_UNLOAD_RM;
+    pFailure->status = status;
+
+    PORT_UNREFERENCED_VARIABLE(pFailureData);
 }
 
 NV_STATUS

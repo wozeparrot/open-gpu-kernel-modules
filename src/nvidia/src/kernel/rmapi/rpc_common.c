@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2020-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2020-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -64,6 +64,13 @@ static void rpcRmApiSetup(OBJGPU *pGpu)
     {
         // none for now
     }
+    else if (IS_DCE_CLIENT(pGpu))
+    {
+        pRmApi->Control         = rpcRmApiControl_dce;
+        pRmApi->AllocWithHandle = rpcRmApiAlloc_dce;
+        pRmApi->Free            = rpcRmApiFree_dce;
+        pRmApi->DupObject       = rpcRmApiDupObject_dce;
+    }
     else if (IS_GSP_CLIENT(pGpu))
     {
         pRmApi->Control         = rpcRmApiControl_GSP;
@@ -89,16 +96,19 @@ OBJRPC *initRpcObject(OBJGPU *pGpu)
     pRpc->bQuietPrints = NV_FALSE;
 
     pRpc->sequence = 0;
+    if (!IS_DCE_CLIENT(pGpu))
+    {
         // VIRTUALIZATION is disabled on DCE. Only run the below code on VGPU and GSP.
-    rpcSetIpVersion(pGpu, pRpc,
-                    RPC_VERSION_FROM_VGX_VERSION(VGX_MAJOR_VERSION_NUMBER,
-                                                 VGX_MINOR_VERSION_NUMBER));
-    rpcObjIfacesSetup(pRpc);
+        rpcSetIpVersion(pGpu, pRpc,
+                        RPC_VERSION_FROM_VGX_VERSION(VGX_MAJOR_VERSION_NUMBER,
+                                                     VGX_MINOR_VERSION_NUMBER));
+        rpcObjIfacesSetup(pRpc);
+    }
 
     rpcRmApiSetup(pGpu);
 
     if (
-        !IS_GSP_CLIENT(pGpu))
+        !IS_FW_CLIENT(pGpu))
     {
         if (NV_OK != rpcConstruct(pGpu, pRpc))
         {
@@ -117,6 +127,16 @@ NV_STATUS rpcWriteCommonHeader(OBJGPU *pGpu, OBJRPC *pRpc, NvU32 func, NvU32 par
 
     NV_ASSERT_OR_RETURN(pGpu != NULL, NV_ERR_INVALID_ARGUMENT);
     NV_ASSERT(rmDeviceGpuLockIsOwner(pGpu->gpuInstance));
+
+    if (IS_VIRTUAL(pGpu) && IS_VGPU_GSP_PLUGIN_OFFLOAD_ENABLED(pGpu))
+    {
+        OBJVGPU  *pVGpu = GPU_GET_VGPU(pGpu);
+        if (!pVGpu->bGspBuffersInitialized)
+        {
+            NV_PRINTF(LEVEL_ERROR, "NVRM_RPC: RPC buffer not initialized. Function %d\n", func);
+            return NV_ERR_INVALID_STATE;
+        }
+    }
 
     if (!pRpc)
     {

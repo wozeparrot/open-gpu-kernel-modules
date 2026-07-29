@@ -1,20 +1,22 @@
 
 #ifndef _G_PLATFORM_REQUEST_HANDLER_NVOC_H_
 #define _G_PLATFORM_REQUEST_HANDLER_NVOC_H_
-#include "nvoc/runtime.h"
 
 // Version of generated metadata structures
 #ifdef NVOC_METADATA_VERSION
 #undef NVOC_METADATA_VERSION
 #endif
-#define NVOC_METADATA_VERSION 1
+#define NVOC_METADATA_VERSION 2
+
+#include "nvoc/runtime.h"
+#include "nvoc/rtti.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2015-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2015-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -53,6 +55,7 @@ extern "C" {
 
 /* ------------------------ Includes --------------------------------------- */
 #include "core/core.h"
+#include "nvoc/object.h"
 #include "platform/platform_request_handler_utils.h"
 #include "ctrl/ctrl0000/ctrl0000system.h"
 #include "ctrl/ctrl2080/ctrl2080internal.h"
@@ -286,10 +289,18 @@ typedef struct
 #endif
 
 
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__PlatformRequestHandler;
+struct NVOC_METADATA__Object;
+
+
 struct PlatformRequestHandler {
 
-    // Metadata
-    const struct NVOC_RTTI *__nvoc_rtti;
+    // Metadata starts with RTTI structure.
+    union {
+         const struct NVOC_METADATA__PlatformRequestHandler *__nvoc_metadata_ptr;
+         const struct NVOC_RTTI *__nvoc_rtti;
+    };
 
     // Parent (i.e. superclass or base class) objects
     struct Object __nvoc_base_Object;
@@ -314,6 +325,13 @@ struct PlatformRequestHandler {
     NvU32 dsmVersion;
 };
 
+
+// Metadata with per-class RTTI with ancestor(s)
+struct NVOC_METADATA__PlatformRequestHandler {
+    const struct NVOC_RTTI rtti;
+    const struct NVOC_METADATA__Object metadata__Object;
+};
+
 #ifndef __NVOC_CLASS_PlatformRequestHandler_TYPEDEF__
 #define __NVOC_CLASS_PlatformRequestHandler_TYPEDEF__
 typedef struct PlatformRequestHandler PlatformRequestHandler;
@@ -330,19 +348,20 @@ extern const struct NVOC_CLASS_DEF __nvoc_class_def_PlatformRequestHandler;
     ((pThis)->__nvoc_pbase_PlatformRequestHandler)
 
 #ifdef __nvoc_platform_request_handler_h_disabled
-#define __dynamicCast_PlatformRequestHandler(pThis) ((PlatformRequestHandler*)NULL)
+#define __dynamicCast_PlatformRequestHandler(pThis) ((PlatformRequestHandler*) NULL)
 #else //__nvoc_platform_request_handler_h_disabled
 #define __dynamicCast_PlatformRequestHandler(pThis) \
-    ((PlatformRequestHandler*)__nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(PlatformRequestHandler)))
+    ((PlatformRequestHandler*) __nvoc_dynamicCast(staticCast((pThis), Dynamic), classInfo(PlatformRequestHandler)))
 #endif //__nvoc_platform_request_handler_h_disabled
 
 // Property macros
+#define PDB_PROP_PFMREQHNDLR_SUPPORTED_BASE_CAST
+#define PDB_PROP_PFMREQHNDLR_SUPPORTED_BASE_NAME PDB_PROP_PFMREQHNDLR_SUPPORTED
 #define PDB_PROP_PFMREQHNDLR_SYS_CONTROL_SUPPORTED_BASE_CAST
 #define PDB_PROP_PFMREQHNDLR_SYS_CONTROL_SUPPORTED_BASE_NAME PDB_PROP_PFMREQHNDLR_SYS_CONTROL_SUPPORTED
 #define PDB_PROP_PFMREQHNDLR_IS_PLATFORM_LEGACY_BASE_CAST
 #define PDB_PROP_PFMREQHNDLR_IS_PLATFORM_LEGACY_BASE_NAME PDB_PROP_PFMREQHNDLR_IS_PLATFORM_LEGACY
-#define PDB_PROP_PFMREQHNDLR_SUPPORTED_BASE_CAST
-#define PDB_PROP_PFMREQHNDLR_SUPPORTED_BASE_NAME PDB_PROP_PFMREQHNDLR_SUPPORTED
+
 
 NV_STATUS __nvoc_objCreateDynamic_PlatformRequestHandler(PlatformRequestHandler**, Dynamic*, NvU32, va_list);
 
@@ -351,187 +370,173 @@ NV_STATUS __nvoc_objCreate_PlatformRequestHandler(PlatformRequestHandler**, Dyna
     __nvoc_objCreate_PlatformRequestHandler((ppNewObj), staticCast((pParent), Dynamic), (createFlags))
 
 
-// Wrapper macros
-
-// Dispatch functions
+// Wrapper macros for implementation functions
 NV_STATUS pfmreqhndlrConstruct_IMPL(struct PlatformRequestHandler *arg_pPlatformRequestHandler);
-
 #define __nvoc_pfmreqhndlrConstruct(arg_pPlatformRequestHandler) pfmreqhndlrConstruct_IMPL(arg_pPlatformRequestHandler)
-NV_STATUS pfmreqhndlrStateInit_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler);
 
+NV_STATUS pfmreqhndlrStateInit_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler);
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrStateInit(struct PlatformRequestHandler *pPlatformRequestHandler) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrStateInit(pPlatformRequestHandler) pfmreqhndlrStateInit_IMPL(pPlatformRequestHandler)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 void pfmreqhndlrStateDestroy_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline void pfmreqhndlrStateDestroy(struct PlatformRequestHandler *pPlatformRequestHandler) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrStateDestroy(pPlatformRequestHandler) pfmreqhndlrStateDestroy_IMPL(pPlatformRequestHandler)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrStateLoad_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrStateLoad(struct PlatformRequestHandler *pPlatformRequestHandler) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrStateLoad(pPlatformRequestHandler) pfmreqhndlrStateLoad_IMPL(pPlatformRequestHandler)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrStateUnload_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrStateUnload(struct PlatformRequestHandler *pPlatformRequestHandler) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrStateUnload(pPlatformRequestHandler) pfmreqhndlrStateUnload_IMPL(pPlatformRequestHandler)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NvBool pfmreqhndlrIsInitialized_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NvBool pfmreqhndlrIsInitialized(struct PlatformRequestHandler *pPlatformRequestHandler) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_FALSE;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrIsInitialized(pPlatformRequestHandler) pfmreqhndlrIsInitialized_IMPL(pPlatformRequestHandler)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrControl_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, NvU16 arg2, NvU16 arg3, NvU32 *arg4);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrControl(struct PlatformRequestHandler *pPlatformRequestHandler, NvU16 arg2, NvU16 arg3, NvU32 *arg4) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrControl(pPlatformRequestHandler, arg2, arg3, arg4) pfmreqhndlrControl_IMPL(pPlatformRequestHandler, arg2, arg3, arg4)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrPcontrol_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, NvU32 input, NvBool bSbiosCall);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrPcontrol(struct PlatformRequestHandler *pPlatformRequestHandler, NvU32 input, NvBool bSbiosCall) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrPcontrol(pPlatformRequestHandler, input, bSbiosCall) pfmreqhndlrPcontrol_IMPL(pPlatformRequestHandler, input, bSbiosCall)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrOperatingLimitUpdate_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, NvU32 id, NvU32 limit, NvBool bSet);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrOperatingLimitUpdate(struct PlatformRequestHandler *pPlatformRequestHandler, NvU32 id, NvU32 limit, NvBool bSet) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrOperatingLimitUpdate(pPlatformRequestHandler, id, limit, bSet) pfmreqhndlrOperatingLimitUpdate_IMPL(pPlatformRequestHandler, id, limit, bSet)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrHandleCheckPM1Available_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvBool *pbPM1Available);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrHandleCheckPM1Available(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvBool *pbPM1Available) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrHandleCheckPM1Available(pPlatformRequestHandler, pGpu, pbPM1Available) pfmreqhndlrHandleCheckPM1Available_IMPL(pPlatformRequestHandler, pGpu, pbPM1Available)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrGetPerfSensorCounterById_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, NvU16 counterId, NvU32 *pCounterVal);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrGetPerfSensorCounterById(struct PlatformRequestHandler *pPlatformRequestHandler, NvU16 counterId, NvU32 *pCounterVal) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrGetPerfSensorCounterById(pPlatformRequestHandler, counterId, pCounterVal) pfmreqhndlrGetPerfSensorCounterById_IMPL(pPlatformRequestHandler, counterId, pCounterVal)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrHandleEdppeakLimitUpdate_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvBool bEnable);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrHandleEdppeakLimitUpdate(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvBool bEnable) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrHandleEdppeakLimitUpdate(pPlatformRequestHandler, pGpu, bEnable) pfmreqhndlrHandleEdppeakLimitUpdate_IMPL(pPlatformRequestHandler, pGpu, bEnable)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrHandlePlatformEdppLimitUpdate_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvU32 platformEdppLimit);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrHandlePlatformEdppLimitUpdate(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvU32 platformEdppLimit) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrHandlePlatformEdppLimitUpdate(pPlatformRequestHandler, pGpu, platformEdppLimit) pfmreqhndlrHandlePlatformEdppLimitUpdate_IMPL(pPlatformRequestHandler, pGpu, platformEdppLimit)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrHandlePlatformGetEdppLimit_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvU32 *pPlatformEdppLimit);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrHandlePlatformGetEdppLimit(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvU32 *pPlatformEdppLimit) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrHandlePlatformGetEdppLimit(pPlatformRequestHandler, pGpu, pPlatformEdppLimit) pfmreqhndlrHandlePlatformGetEdppLimit_IMPL(pPlatformRequestHandler, pGpu, pPlatformEdppLimit)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrHandlePlatformSetEdppLimitInfo_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrHandlePlatformSetEdppLimitInfo(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrHandlePlatformSetEdppLimitInfo(pPlatformRequestHandler, pGpu) pfmreqhndlrHandlePlatformSetEdppLimitInfo_IMPL(pPlatformRequestHandler, pGpu)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrHandleUserConfigurableTgpMode_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvBool bEnable);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrHandleUserConfigurableTgpMode(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NvBool bEnable) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrHandleUserConfigurableTgpMode(pPlatformRequestHandler, pGpu, bEnable) pfmreqhndlrHandleUserConfigurableTgpMode_IMPL(pPlatformRequestHandler, pGpu, bEnable)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
 NV_STATUS pfmreqhndlrStateSync_IMPL(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NV2080_CTRL_INTERNAL_PFM_REQ_HNDLR_STATE_SYNC_PARAMS *pParams);
-
 #ifdef __nvoc_platform_request_handler_h_disabled
 static inline NV_STATUS pfmreqhndlrStateSync(struct PlatformRequestHandler *pPlatformRequestHandler, OBJGPU *pGpu, NV2080_CTRL_INTERNAL_PFM_REQ_HNDLR_STATE_SYNC_PARAMS *pParams) {
     NV_ASSERT_FAILED_PRECOMP("PlatformRequestHandler was disabled!");
     return NV_ERR_NOT_SUPPORTED;
 }
-#else //__nvoc_platform_request_handler_h_disabled
+#else // __nvoc_platform_request_handler_h_disabled
 #define pfmreqhndlrStateSync(pPlatformRequestHandler, pGpu, pParams) pfmreqhndlrStateSync_IMPL(pPlatformRequestHandler, pGpu, pParams)
-#endif //__nvoc_platform_request_handler_h_disabled
+#endif // __nvoc_platform_request_handler_h_disabled
 
+
+// Wrapper macros for halified functions
+
+// Dispatch functions
 #undef PRIVATE_FIELD
 
 

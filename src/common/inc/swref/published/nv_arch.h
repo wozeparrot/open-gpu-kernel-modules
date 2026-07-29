@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2004-2024 NVIDIA CORPORATION & AFFILIATES
+ * SPDX-FileCopyrightText: Copyright (c) 2004-2025 NVIDIA CORPORATION & AFFILIATES
  * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -59,6 +59,8 @@
 #define GPU_ARCHITECTURE_T19X            GPU_ARCHITECTURE(_TEGRA,   0x0019)
 #define GPU_ARCHITECTURE_T23X            GPU_ARCHITECTURE(_TEGRA,   0x0023)
 
+#define GPU_ARCHITECTURE_T26X            GPU_ARCHITECTURE(_TEGRA, 0x0026)
+
 #define GPU_ARCHITECTURE_SIMS            GPU_ARCHITECTURE(_SIMULATION, 0x01f0)  // eg: AMODEL
 
 //
@@ -108,17 +110,23 @@
 
 #define GPU_IMPLEMENTATION_GB10B         0x0B
 
+#define GPU_IMPLEMENTATION_GB110         0x03
+
+#define GPU_IMPLEMENTATION_GB112         0x04
+
 #define GPU_IMPLEMENTATION_GB202         0x02
 
 #define GPU_IMPLEMENTATION_GB203         0x03
-
-#define GPU_IMPLEMENTATION_GB204         0x04
 
 #define GPU_IMPLEMENTATION_GB205         0x05
 
 #define GPU_IMPLEMENTATION_GB206         0x06
 
 #define GPU_IMPLEMENTATION_GB207         0x07
+
+#define GPU_IMPLEMENTATION_GB20B         0x0B
+
+#define GPU_IMPLEMENTATION_GB20C         0x0C
 
 #define GPU_IMPLEMENTATION_T124          0x00
 #define GPU_IMPLEMENTATION_T132          0x00
@@ -127,6 +135,8 @@
 #define GPU_IMPLEMENTATION_T194          0x00
 #define GPU_IMPLEMENTATION_T234          0x04
 #define GPU_IMPLEMENTATION_T234D         0x05
+
+#define GPU_IMPLEMENTATION_T264D         0x05
 
 /* SIMS gpus */
 #define GPU_IMPLEMENTATION_AMODEL        0x00
